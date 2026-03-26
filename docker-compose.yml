@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: v0-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: v0-by-kimi
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - v0-network
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: v0-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLIENT_URL=${CLIENT_URL:-http://localhost:5173}
+      - NODE_ENV=production
+    depends_on:
+      - mongodb
+    networks:
+      - v0-network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: v0-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:3001}
+    depends_on:
+      - server
+    networks:
+      - v0-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  v0-network:
+    driver: bridge
