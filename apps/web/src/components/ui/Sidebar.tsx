@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/utils/cn"
 import { Button } from "./Button"
-import { Plus, MessageSquare, Folder, Settings, LogOut, Menu, X } from "lucide-react"
+import { Plus, Settings, LogOut, Menu, X } from "lucide-react"
 
 interface SidebarProps {
   isOpen: boolean

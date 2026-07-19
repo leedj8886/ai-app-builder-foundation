@@ -26,7 +26,7 @@ export function Chat() {
   })
 
   // Fetch current chat
-  const { data: chatData, isLoading: isChatLoading } = useQuery({
+  const { data: chatData } = useQuery({
     queryKey: ['chat', chatId],
     queryFn: async () => {
       if (!chatId) return null
