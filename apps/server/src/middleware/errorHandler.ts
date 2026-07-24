@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 
 export interface ApiError extends Error {
   statusCode?: number;
@@ -18,6 +19,15 @@ export const errorHandler = (
     res.status(400).json({
       error: 'Validation Error',
       details: err.message
+    });
+    return;
+  }
+
+  // Request schema validation error
+  if (err instanceof ZodError) {
+    res.status(400).json({
+      error: 'Validation Error',
+      details: err.issues
     });
     return;
   }
