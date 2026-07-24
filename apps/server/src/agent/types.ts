@@ -46,3 +46,46 @@ export interface AgentErrorPayload {
   message: string;
   details?: unknown;
 }
+
+export const projectFileLanguages = ['ts', 'tsx', 'css', 'json', 'html', 'md'] as const;
+
+export type ProjectFileLanguage = (typeof projectFileLanguages)[number];
+
+export interface ProjectFile {
+  path: string;
+  content: string;
+  language: ProjectFileLanguage;
+  generatedByRunId?: import('mongoose').Types.ObjectId;
+}
+
+export interface ProjectSnapshotPackageJson {
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+  scripts: Record<string, string>;
+}
+
+export interface ValidationCheckResult {
+  name: 'type-check' | 'build';
+  command: string;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}
+
+export interface ValidationResult {
+  status: 'passed' | 'failed' | 'skipped';
+  checks: ValidationCheckResult[];
+}
+
+export type FileOperation =
+  | { type: 'create'; path: string; content: string }
+  | { type: 'update'; path: string; content: string }
+  | { type: 'delete'; path: string };
+
+export interface GenerationResult {
+  message: string;
+  operations: FileOperation[];
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+}

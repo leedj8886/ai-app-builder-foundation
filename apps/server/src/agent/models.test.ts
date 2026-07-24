@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AgentRun } from '../models/AgentRun';
 import { AgentEvent } from '../models/AgentEvent';
+import { ProjectSnapshot } from '../models/ProjectSnapshot';
 
 test('AgentRun model exposes required paths and indexes', () => {
   assert.ok(AgentRun.schema.path('userId'));
@@ -23,4 +24,20 @@ test('AgentEvent model stores sequence per run', () => {
   const indexes = AgentEvent.schema.indexes().map(([fields]) => fields);
   assert.deepEqual(indexes[0], { runId: 1, sequence: 1 });
   assert.deepEqual(indexes[1], { userId: 1, createdAt: -1 });
+});
+
+test('ProjectSnapshot model stores full file tree snapshots', () => {
+  assert.ok(ProjectSnapshot.schema.path('userId'));
+  assert.ok(ProjectSnapshot.schema.path('projectId'));
+  assert.ok(ProjectSnapshot.schema.path('sourceRunId'));
+  assert.ok(ProjectSnapshot.schema.path('parentSnapshotId'));
+  assert.ok(ProjectSnapshot.schema.path('files'));
+  assert.ok(ProjectSnapshot.schema.path('packageJson'));
+  assert.ok(ProjectSnapshot.schema.path('validation'));
+  assert.ok(ProjectSnapshot.schema.path('summary'));
+
+  const indexes = ProjectSnapshot.schema.indexes().map(([fields]) => fields);
+  assert.deepEqual(indexes[0], { projectId: 1, createdAt: -1 });
+  assert.deepEqual(indexes[1], { userId: 1, createdAt: -1 });
+  assert.deepEqual(indexes[2], { sourceRunId: 1 });
 });
