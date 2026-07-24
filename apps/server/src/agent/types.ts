@@ -89,3 +89,64 @@ export interface GenerationResult {
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
 }
+
+export interface AgentPlanStep {
+  title: string;
+  intent: string;
+  filesLikelyTouched: string[];
+}
+
+export interface AgentPlan {
+  summary: string;
+  steps: AgentPlanStep[];
+  assumptions: string[];
+}
+
+export interface AgentContextMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface AgentContextFile {
+  path: string;
+  content?: string;
+}
+
+export interface AgentContext {
+  prompt: string;
+  mode: AgentRunMode;
+  project: {
+    name: string;
+    description?: string;
+    framework: 'react';
+    styling: 'tailwind';
+    uiLibrary: string;
+  };
+  messages: AgentContextMessage[];
+  files: AgentContextFile[];
+}
+
+export interface PlanInput {
+  context: AgentContext;
+}
+
+export interface GenerateInput {
+  context: AgentContext;
+  plan: AgentPlan;
+}
+
+export interface ModelUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface ModelResult<T> {
+  value: T;
+  usage?: ModelUsage;
+}
+
+export interface ModelClient {
+  generatePlan(input: PlanInput): Promise<ModelResult<AgentPlan>>;
+  generateFiles(input: GenerateInput): Promise<ModelResult<GenerationResult>>;
+}

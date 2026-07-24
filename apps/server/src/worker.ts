@@ -5,6 +5,7 @@ import { getAgentConfig } from './agent/config';
 import { agentRunJobName } from './agent/queue';
 import { createRedisConnection } from './agent/redis';
 import { processAgentRun } from './agent/orchestrator';
+import { createProductionModelClient } from './agent/modelClient';
 import { AgentRunJobData } from './agent/types';
 
 dotenv.config();
@@ -14,6 +15,10 @@ const startWorker = async () => {
 
   const config = getAgentConfig();
   const connection = createRedisConnection();
+  const modelClient = createProductionModelClient(
+    process.env.OPENAI_API_KEY,
+    config.model
+  );
   const worker = new Worker<AgentRunJobData>(
     config.queueName,
     async job => {
@@ -21,7 +26,7 @@ const startWorker = async () => {
         throw new Error(`Unsupported job name: ${job.name}`);
       }
 
-      await processAgentRun(job.data);
+      await processAgentRun(job.data, modelClient);
     },
     {
       connection,

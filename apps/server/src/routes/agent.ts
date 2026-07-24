@@ -43,7 +43,8 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
     if (body.chatId) {
       const chat = await Chat.findOne({
         _id: body.chatId,
-        userId
+        userId,
+        projectId: body.projectId
       });
 
       if (!chat) {

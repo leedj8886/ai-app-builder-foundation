@@ -1,6 +1,52 @@
 import { z } from 'zod';
 import { agentRunModes } from './types';
 
+const safeProjectPathSchema = z.string().trim().min(1).refine(value => {
+  const normalized = value.replace(/\\/g, '/');
+  return !normalized.startsWith('/') &&
+    !/^[a-zA-Z]:\//.test(normalized) &&
+    normalized !== '..' &&
+    !normalized.startsWith('../') &&
+    !normalized.includes('/../') &&
+    /\.(ts|tsx|css|json|html|md)$/.test(normalized);
+}, 'File path must be a safe supported project path');
+
+const dependencyMapSchema = z.record(z.string().trim().min(1));
+
+export const agentPlanSchema = z.object({
+  summary: z.string().trim().min(1),
+  steps: z.array(z.object({
+    title: z.string().trim().min(1),
+    intent: z.string().trim().min(1),
+    filesLikelyTouched: z.array(safeProjectPathSchema)
+  }).strict()).min(1),
+  assumptions: z.array(z.string().trim().min(1))
+}).strict();
+
+const fileOperationSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('create'),
+    path: safeProjectPathSchema,
+    content: z.string().refine(value => !value.includes('\0'), 'File content must be text')
+  }).strict(),
+  z.object({
+    type: z.literal('update'),
+    path: safeProjectPathSchema,
+    content: z.string().refine(value => !value.includes('\0'), 'File content must be text')
+  }).strict(),
+  z.object({
+    type: z.literal('delete'),
+    path: safeProjectPathSchema
+  }).strict()
+]);
+
+export const generationResultSchema = z.object({
+  message: z.string().trim().min(1),
+  operations: z.array(fileOperationSchema),
+  dependencies: dependencyMapSchema,
+  devDependencies: dependencyMapSchema
+}).strict();
+
 export const objectIdStringSchema = z
   .string()
   .regex(/^[a-f\d]{24}$/i, 'Invalid ObjectId');
