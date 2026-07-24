@@ -16,6 +16,15 @@ services:
     networks:
       - v0-network
 
+  redis:
+    image: redis:7
+    container_name: v0-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - v0-network
+
   server:
     build:
       context: .
@@ -27,12 +36,43 @@ services:
     environment:
       - PORT=3001
       - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
+      - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CLIENT_URL=${CLIENT_URL:-http://localhost:5173}
+      - AGENT_QUEUE_NAME=${AGENT_QUEUE_NAME:-v0-agent-runs}
+      - AGENT_MODEL=${AGENT_MODEL:-gpt-4.1}
+      - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
+      - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
+      - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
       - NODE_ENV=production
     depends_on:
       - mongodb
+      - redis
+    networks:
+      - v0-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: v0-worker
+    restart: unless-stopped
+    command: npm run start:worker --workspace @v0/server
+    environment:
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AGENT_QUEUE_NAME=${AGENT_QUEUE_NAME:-v0-agent-runs}
+      - AGENT_MODEL=${AGENT_MODEL:-gpt-4.1}
+      - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
+      - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
+      - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
+      - NODE_ENV=production
+    depends_on:
+      - mongodb
+      - redis
     networks:
       - v0-network
 
