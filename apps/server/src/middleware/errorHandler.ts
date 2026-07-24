@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 
 export interface ApiError extends Error {
   statusCode?: number;
-  code?: string;
+  code?: string | number;
 }
 
 export const errorHandler = (
