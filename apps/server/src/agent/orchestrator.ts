@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { AgentRun } from '../models/AgentRun';
+import { AgentEvent } from '../models/AgentEvent';
 import { Chat } from '../models/Chat';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { getAgentConfig } from './config';
@@ -11,6 +12,7 @@ import { applyFileOperations } from './fileOperations';
 import { assertAgentRunTransition } from './stateMachine';
 import {
   AgentContext,
+  AgentPlan,
   AgentEventType,
   AgentRunJobData,
   ModelClient,
@@ -18,6 +20,7 @@ import {
   ProjectFile,
   ProjectSnapshotPackageJson
 } from './types';
+import { ProjectValidator } from './validator';
 
 interface WorkerEvent {
   type: AgentEventType;
@@ -39,6 +42,18 @@ interface RunAgentGenerationResult {
   packageJson: ProjectSnapshotPackageJson;
   summary: string;
   usage?: ModelUsage;
+  plan: AgentPlan;
+}
+
+interface RunAgentGenerationWithValidationInput extends RunAgentGenerationInput {
+  validator: ProjectValidator;
+  runId: string;
+  maxRepairAttempts: number;
+}
+
+interface ValidatedAgentGenerationResult extends RunAgentGenerationResult {
+  validation: import('./types').ValidationResult;
+  repairAttempts: number;
 }
 
 export const buildPhaseOneWorkerEvents = (): WorkerEvent[] => [
@@ -125,20 +140,133 @@ export const runAgentGeneration = async (
     files,
     packageJson,
     summary: generated.value.message,
-    usage: combineUsage(planned.usage, generated.usage)
+    usage: combineUsage(planned.usage, generated.usage),
+    plan: planned.value
   };
+};
+
+const writeServerPackageJson = (
+  files: ProjectFile[],
+  packageJson: ProjectSnapshotPackageJson,
+  generatedByRunId?: Types.ObjectId
+): ProjectFile[] => applyFileOperations(files, [{
+  type: files.some(file => file.path === 'package.json') ? 'update' : 'create',
+  path: 'package.json',
+  content: `${JSON.stringify(packageJson, null, 2)}\n`
+}], generatedByRunId);
+
+export const runAgentGenerationWithValidation = async (
+  input: RunAgentGenerationWithValidationInput
+): Promise<ValidatedAgentGenerationResult> => {
+  const generated = await runAgentGeneration(input);
+  let files = generated.files;
+  let packageJson = generated.packageJson;
+  let summary = generated.summary;
+  let usage = generated.usage;
+  let repairAttempts = 0;
+
+  while (true) {
+    await input.onEvent({
+      type: 'validation.started',
+      message: 'Validating generated project',
+      payload: { phase: 'validating', attempt: repairAttempts }
+    });
+    const validation = await input.validator.validate({
+      runId: `${input.runId}-${repairAttempts}`,
+      files
+    });
+
+    if (validation.status === 'passed') {
+      await input.onEvent({
+        type: 'validation.passed',
+        message: 'Project validation passed',
+        payload: validation
+      });
+      return {
+        files,
+        packageJson,
+        summary,
+        usage,
+        plan: generated.plan,
+        validation,
+        repairAttempts
+      };
+    }
+
+    await input.onEvent({
+      type: 'validation.failed',
+      message: 'Project validation failed',
+      payload: validation
+    });
+
+    if (repairAttempts >= input.maxRepairAttempts) {
+      throw Object.assign(new Error('Generated project failed validation'), {
+        code: 'VALIDATION_FAILED',
+        details: validation
+      });
+    }
+
+    repairAttempts += 1;
+    await input.onEvent({
+      type: 'repair.started',
+      message: `Repair attempt ${repairAttempts} started`,
+      payload: { phase: 'repairing', attempt: repairAttempts }
+    });
+    const repaired = await input.modelClient.repairFiles({
+      context: input.context,
+      plan: generated.plan,
+      attempt: repairAttempts,
+      files,
+      validation
+    });
+    packageJson = mergeProjectPackageJson(packageJson, repaired.value);
+    files = applyFileOperations(
+      files,
+      repaired.value.operations,
+      input.generatedByRunId
+    );
+    files = writeServerPackageJson(
+      files,
+      packageJson,
+      input.generatedByRunId
+    );
+    summary = repaired.value.message;
+    usage = combineUsage(usage, repaired.usage);
+
+    await input.onEvent({
+      type: 'agent.step',
+      message: `Applied repair attempt ${repairAttempts}`,
+      payload: { phase: 'generating', attempt: repairAttempts }
+    });
+    for (const operation of repaired.value.operations) {
+      await input.onEvent({
+        type: 'file.changed',
+        message: `${operation.type} ${operation.path}`,
+        payload: {
+          operation: operation.type,
+          path: operation.path,
+          repairAttempt: repairAttempts
+        }
+      });
+    }
+  }
 };
 
 const publicAgentError = (
   error: unknown
-): { code: string; message: string } => {
-  const candidate = error as { code?: unknown; message?: unknown };
+): { code: string; message: string; details?: unknown } => {
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    details?: unknown;
+  };
   const knownCodes = new Set([
     'PROJECT_NOT_FOUND',
     'INVALID_BASE_SNAPSHOT',
     'INVALID_MODEL_OUTPUT',
     'MODEL_REQUEST_FAILED',
-    'MODEL_CONFIGURATION_ERROR'
+    'MODEL_CONFIGURATION_ERROR',
+    'VALIDATION_FAILED'
   ]);
   const code = typeof candidate.code === 'string' && knownCodes.has(candidate.code)
     ? candidate.code
@@ -150,7 +278,8 @@ const publicAgentError = (
       ? 'Agent run failed'
       : typeof candidate.message === 'string'
         ? candidate.message
-        : 'Agent run failed'
+        : 'Agent run failed',
+    ...(candidate.details !== undefined && { details: candidate.details })
   };
 };
 
@@ -186,12 +315,79 @@ const transitionRun = async (
 
 export const processAgentRun = async (
   job: AgentRunJobData,
-  modelClient: ModelClient
+  modelClient: ModelClient,
+  validator: ProjectValidator
 ): Promise<void> => {
   const run = await AgentRun.findById(job.runId);
 
   if (!run) {
     throw new Error(`AgentRun not found: ${job.runId}`);
+  }
+
+  if (run.status === 'persisting') {
+    const pendingSnapshot = await ProjectSnapshot.findOne({
+      sourceRunId: run._id,
+      userId: run.userId,
+      projectId: run.projectId
+    });
+
+    if (!pendingSnapshot) {
+      await AgentRun.updateOne(
+        { _id: run._id, status: 'persisting' },
+        {
+          $set: {
+            status: 'failed',
+            error: {
+              code: 'WORKSPACE_ERROR',
+              message: 'Agent worker stopped before snapshot persistence completed'
+            },
+            completedAt: new Date()
+          }
+        }
+      );
+      return;
+    }
+
+    await transitionRun(run, 'persisting', 'completed', {
+      resultSnapshotId: pendingSnapshot._id,
+      completedAt: new Date()
+    });
+    await emitAgentEvent({
+      runId: run._id,
+      userId: run.userId,
+      projectId: run.projectId,
+      type: 'run.completed',
+      message: 'Agent run completed with a project snapshot',
+      payload: {
+        snapshotId: pendingSnapshot._id.toString(),
+        fileCount: pendingSnapshot.files.length
+      }
+    });
+    return;
+  }
+
+  if (run.status === 'completed') {
+    const completedEvent = await AgentEvent.exists({
+      runId: run._id,
+      type: 'run.completed'
+    });
+
+    if (!completedEvent && run.resultSnapshotId) {
+      const snapshot = await ProjectSnapshot.findById(run.resultSnapshotId)
+        .select('files');
+      await emitAgentEvent({
+        runId: run._id,
+        userId: run.userId,
+        projectId: run.projectId,
+        type: 'run.completed',
+        message: 'Agent run completed with a project snapshot',
+        payload: {
+          snapshotId: run.resultSnapshotId.toString(),
+          fileCount: snapshot?.files.length ?? 0
+        }
+      });
+    }
+    return;
   }
 
   try {
@@ -220,19 +416,31 @@ export const processAgentRun = async (
       ? baseSnapshot.toObject().packageJson
       : undefined;
 
-    const generation = await runAgentGeneration({
+    const generation = await runAgentGenerationWithValidation({
       context,
       baseFiles: baseSnapshot?.files ?? [],
       basePackageJson,
       generatedByRunId: run._id,
       modelClient,
+      validator,
+      runId: run._id.toString(),
+      maxRepairAttempts: run.maxRepairAttempts,
       onEvent: async event => {
         const phase = (event.payload as { phase?: string } | undefined)?.phase;
 
         if (phase === 'planning') {
           await transitionRun(run, 'running', 'planning');
         } else if (phase === 'generating') {
-          await transitionRun(run, 'planning', 'generating');
+          await transitionRun(
+            run,
+            run.status === 'planning' ? 'planning' : 'repairing',
+            'generating'
+          );
+        } else if (phase === 'validating') {
+          await transitionRun(run, 'generating', 'validating');
+        } else if (phase === 'repairing') {
+          const attempt = (event.payload as { attempt?: number }).attempt ?? 0;
+          await transitionRun(run, 'validating', 'repairing', { attempt });
         }
 
         await emitAgentEvent({
@@ -246,40 +454,20 @@ export const processAgentRun = async (
       }
     });
 
-    await transitionRun(run, 'generating', 'validating');
-
+    await transitionRun(run, 'validating', 'persisting');
     const snapshot = await ProjectSnapshot.create({
-      userId: run.userId,
-      projectId: run.projectId,
-      sourceRunId: run._id,
-      parentSnapshotId: baseSnapshot?._id,
-      files: generation.files,
-      packageJson: generation.packageJson,
-      validation: {
-        status: 'skipped',
-        checks: []
-      },
-      summary: generation.summary
-    });
-
-    if (run.chatId) {
-      await Chat.updateOne(
-        { _id: run.chatId, userId: run.userId, projectId: run.projectId },
-        {
-          $push: {
-            messages: {
-              id: randomUUID(),
-              role: 'assistant',
-              content: `${generation.summary}\n\nSnapshot: ${snapshot._id.toString()}`,
-              createdAt: new Date()
-            }
-          }
-        }
-      );
-    }
+        userId: run.userId,
+        projectId: run.projectId,
+        sourceRunId: run._id,
+        parentSnapshotId: baseSnapshot?._id,
+        files: generation.files,
+        packageJson: generation.packageJson,
+        validation: generation.validation,
+        summary: generation.summary
+      });
 
     try {
-      await transitionRun(run, 'validating', 'completed', {
+      await transitionRun(run, 'persisting', 'completed', {
         resultSnapshotId: snapshot._id,
         usage: generation.usage,
         completedAt: new Date()
@@ -289,20 +477,51 @@ export const processAgentRun = async (
       throw error;
     }
 
-    await emitAgentEvent({
-      runId: run._id,
-      userId: run.userId,
-      projectId: run.projectId,
-      type: 'run.completed',
-      message: 'Agent run completed with a project snapshot',
-      payload: {
-        snapshotId: snapshot._id.toString(),
-        fileCount: generation.files.length
+    if (run.chatId) {
+      try {
+        await Chat.updateOne(
+          { _id: run.chatId, userId: run.userId, projectId: run.projectId },
+          {
+            $push: {
+              messages: {
+                id: randomUUID(),
+                role: 'assistant',
+                content: `${generation.summary}\n\nSnapshot: ${snapshot._id.toString()}`,
+                createdAt: new Date()
+              }
+            }
+          }
+        );
+      } catch (error) {
+        console.error(`Failed to append AgentRun ${run._id.toString()} to chat`, error);
       }
-    });
+    }
+
+    try {
+      await emitAgentEvent({
+        runId: run._id,
+        userId: run.userId,
+        projectId: run.projectId,
+        type: 'run.completed',
+        message: 'Agent run completed with a project snapshot',
+        payload: {
+          snapshotId: snapshot._id.toString(),
+          fileCount: generation.files.length
+        }
+      });
+    } catch (error) {
+      throw Object.assign(new Error('Failed to persist run completion event'), {
+        code: 'COMPLETION_EVENT_FAILED',
+        cause: error
+      });
+    }
   } catch (error) {
     if ((error as { code?: string }).code === 'RUN_CANCELLED') {
       return;
+    }
+
+    if ((error as { code?: string }).code === 'COMPLETION_EVENT_FAILED') {
+      throw error;
     }
 
     const publicError = publicAgentError(error);

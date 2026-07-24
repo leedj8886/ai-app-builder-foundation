@@ -8,8 +8,9 @@ const allowedTransitions: Record<AgentRunStatus, AgentRunStatus[]> = {
   running: ['planning', 'cancelled', 'failed'],
   planning: ['generating', 'cancelled', 'failed'],
   generating: ['validating', 'cancelled', 'failed'],
-  validating: ['completed', 'repairing', 'failed', 'cancelled'],
+  validating: ['repairing', 'persisting', 'failed', 'cancelled'],
   repairing: ['generating', 'failed', 'cancelled'],
+  persisting: ['completed', 'failed'],
   completed: [],
   failed: [],
   cancelled: []

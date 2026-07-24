@@ -26,5 +26,6 @@ test('assertAgentRunTransition requires validation before completion', () => {
     /Invalid AgentRun status transition/
   );
   assert.doesNotThrow(() => assertAgentRunTransition('generating', 'validating'));
-  assert.doesNotThrow(() => assertAgentRunTransition('validating', 'completed'));
+  assert.doesNotThrow(() => assertAgentRunTransition('validating', 'persisting'));
+  assert.doesNotThrow(() => assertAgentRunTransition('persisting', 'completed'));
 });

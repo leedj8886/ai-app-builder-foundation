@@ -190,17 +190,46 @@ router.post('/runs/:runId/cancel', async (req: AuthRequest, res, next) => {
   try {
     const userId = requireUserId(req);
     const { runId } = objectIdParamSchema('runId').parse(req.params);
-    const run = await AgentRun.findOne({ _id: runId, userId });
+    let run = await AgentRun.findOne({ _id: runId, userId });
 
     if (!run) {
       res.status(404).json({ error: 'Run not found' });
       return;
     }
 
+    if (run.status === 'persisting') {
+      res.status(409).json({ error: 'Run is finalizing and can no longer be cancelled' });
+      return;
+    }
+
     if (!isTerminalAgentRunStatus(run.status)) {
-      run.status = 'cancelled';
-      run.completedAt = new Date();
-      await run.save();
+      const cancelled = await AgentRun.findOneAndUpdate(
+        {
+          _id: runId,
+          userId,
+          status: {
+            $in: ['queued', 'running', 'planning', 'generating', 'validating', 'repairing']
+          }
+        },
+        {
+          $set: {
+            status: 'cancelled',
+            completedAt: new Date()
+          }
+        },
+        { new: true }
+      );
+
+      if (!cancelled) {
+        run = await AgentRun.findOne({ _id: runId, userId });
+        if (run?.status === 'persisting') {
+          res.status(409).json({ error: 'Run is finalizing and can no longer be cancelled' });
+          return;
+        }
+        res.json({ run });
+        return;
+      }
+      run = cancelled;
 
       await emitAgentEvent({
         runId,

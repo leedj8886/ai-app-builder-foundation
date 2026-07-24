@@ -52,7 +52,7 @@ export interface WorkspaceState {
 
 export interface AgentRunSummary {
   _id: string
-  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'failed' | 'cancelled'
   resultSnapshotId?: string
 }
 

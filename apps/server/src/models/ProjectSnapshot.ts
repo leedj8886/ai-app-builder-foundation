@@ -58,7 +58,11 @@ const ValidationSchema = new Schema<ValidationResult>(
     checks: {
       type: [
         {
-          name: { type: String, enum: ['type-check', 'build'], required: true },
+          name: {
+            type: String,
+            enum: ['install', 'type-check', 'build'],
+            required: true
+          },
           command: { type: String, required: true },
           exitCode: { type: Number, required: true },
           stdout: { type: String, required: true, default: '' },

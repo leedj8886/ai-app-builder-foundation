@@ -125,3 +125,67 @@ test('OpenAI model client maps provider failures without exposing details', asyn
       error.message === 'Model request failed'
   );
 });
+
+test('OpenAI model client sends structured validation diagnostics for repair', async () => {
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  const client = createOpenAIModelClient({
+    model: 'test-model',
+    createCompletion: async request => {
+      requests.push(request);
+      return {
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              message: 'Fixed type error',
+              operations: [{
+                type: 'update',
+                path: 'src/App.tsx',
+                content: 'export default function App() { return <main />; }'
+              }],
+              dependencies: {},
+              devDependencies: {}
+            })
+          }
+        }]
+      };
+    }
+  });
+  const plan = {
+    summary: 'Build the dashboard',
+    steps: [{
+      title: 'Create UI',
+      intent: 'Render tasks',
+      filesLikelyTouched: ['src/App.tsx']
+    }],
+    assumptions: []
+  };
+
+  const result = await client.repairFiles({
+    context,
+    plan,
+    attempt: 1,
+    files: [{
+      path: 'src/App.tsx',
+      content: 'const broken: string = 1;',
+      language: 'tsx'
+    }],
+    validation: {
+      status: 'failed',
+      checks: [{
+        name: 'type-check',
+        command: 'npm run type-check',
+        exitCode: 2,
+        stdout: '',
+        stderr: 'Type number is not assignable to string',
+        durationMs: 10
+      }]
+    }
+  });
+
+  assert.equal(result.value.message, 'Fixed type error');
+  assert.match(requests[0].messages[0].content, /repair/i);
+  const userInput = JSON.parse(requests[0].messages[1].content);
+  assert.equal(userInput.attempt, 1);
+  assert.equal(userInput.validation.checks[0].name, 'type-check');
+  assert.equal(userInput.files[0].path, 'src/App.tsx');
+});

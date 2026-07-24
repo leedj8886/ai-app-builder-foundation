@@ -7,7 +7,8 @@ import {
   ModelClient,
   ModelResult,
   ModelUsage,
-  PlanInput
+  PlanInput,
+  RepairInput
 } from './types';
 import { agentPlanSchema, generationResultSchema } from './schemas';
 
@@ -52,6 +53,11 @@ const generationSystemInstruction = `${sharedSystemInstruction}
 Generate complete file contents using relative project paths with extensions ts, tsx, css, json, html, or md.
 Do not return scripts or shell commands. Return:
 {"message":"...","operations":[{"type":"create|update","path":"src/App.tsx","content":"..."}],"dependencies":{},"devDependencies":{}}`;
+
+const repairSystemInstruction = `${sharedSystemInstruction}
+Repair the provided validation failures with the smallest set of complete-file operations.
+Use the diagnostics as evidence. Do not return commands or change server-owned scripts. Return:
+{"message":"...","operations":[{"type":"update","path":"src/App.tsx","content":"..."}],"dependencies":{},"devDependencies":{}}`;
 
 const modelError = (code: string, message: string): Error & { code: string } =>
   Object.assign(new Error(message), { code });
@@ -124,7 +130,9 @@ export const createOpenAIModelClient = (
     generatePlan: (input: PlanInput): Promise<ModelResult<AgentPlan>> =>
       request(planSystemInstruction, input, agentPlanSchema),
     generateFiles: (input: GenerateInput): Promise<ModelResult<GenerationResult>> =>
-      request(generationSystemInstruction, input, generationResultSchema)
+      request(generationSystemInstruction, input, generationResultSchema),
+    repairFiles: (input: RepairInput): Promise<ModelResult<GenerationResult>> =>
+      request(repairSystemInstruction, input, generationResultSchema)
   };
 };
 

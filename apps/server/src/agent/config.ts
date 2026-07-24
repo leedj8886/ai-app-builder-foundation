@@ -5,6 +5,8 @@ export interface AgentConfig {
   maxRepairAttempts: number;
   workspaceRoot: string;
   contextCharLimit: number;
+  commandTimeoutMs: number;
+  maxValidationOutputChars: number;
 }
 
 type EnvLike = Record<string, string | undefined>;
@@ -24,5 +26,10 @@ export const getAgentConfig = (env: EnvLike = process.env): AgentConfig => ({
   model: env.AGENT_MODEL || 'gpt-4.1',
   maxRepairAttempts: numberFromEnv(env.AGENT_MAX_REPAIR_ATTEMPTS, 2),
   workspaceRoot: env.AGENT_WORKSPACE_ROOT || '/tmp/v0-agent-runs',
-  contextCharLimit: numberFromEnv(env.AGENT_CONTEXT_CHAR_LIMIT, 120000)
+  contextCharLimit: numberFromEnv(env.AGENT_CONTEXT_CHAR_LIMIT, 120000),
+  commandTimeoutMs: numberFromEnv(env.AGENT_COMMAND_TIMEOUT_MS, 120000),
+  maxValidationOutputChars: numberFromEnv(
+    env.AGENT_MAX_VALIDATION_OUTPUT_CHARS,
+    12000
+  )
 });

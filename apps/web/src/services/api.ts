@@ -43,7 +43,7 @@ export interface AgentRun {
   _id: string;
   projectId: string;
   prompt: string;
-  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'failed' | 'cancelled';
   mode: 'create' | 'edit';
   baseSnapshotId?: string;
   resultSnapshotId?: string;

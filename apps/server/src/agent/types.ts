@@ -5,6 +5,7 @@ export const agentRunStatuses = [
   'generating',
   'validating',
   'repairing',
+  'persisting',
   'completed',
   'failed',
   'cancelled'
@@ -65,7 +66,7 @@ export interface ProjectSnapshotPackageJson {
 }
 
 export interface ValidationCheckResult {
-  name: 'type-check' | 'build';
+  name: 'install' | 'type-check' | 'build';
   command: string;
   exitCode: number;
   stdout: string;
@@ -135,6 +136,14 @@ export interface GenerateInput {
   plan: AgentPlan;
 }
 
+export interface RepairInput {
+  context: AgentContext;
+  plan: AgentPlan;
+  attempt: number;
+  files: ProjectFile[];
+  validation: ValidationResult;
+}
+
 export interface ModelUsage {
   inputTokens?: number;
   outputTokens?: number;
@@ -149,4 +158,5 @@ export interface ModelResult<T> {
 export interface ModelClient {
   generatePlan(input: PlanInput): Promise<ModelResult<AgentPlan>>;
   generateFiles(input: GenerateInput): Promise<ModelResult<GenerationResult>>;
+  repairFiles(input: RepairInput): Promise<ModelResult<GenerationResult>>;
 }

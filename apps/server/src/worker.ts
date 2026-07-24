@@ -6,6 +6,7 @@ import { agentRunJobName } from './agent/queue';
 import { createRedisConnection } from './agent/redis';
 import { processAgentRun } from './agent/orchestrator';
 import { createProductionModelClient } from './agent/modelClient';
+import { createProjectValidator } from './agent/validator';
 import { AgentRunJobData } from './agent/types';
 
 dotenv.config();
@@ -19,6 +20,11 @@ const startWorker = async () => {
     process.env.OPENAI_API_KEY,
     config.model
   );
+  const validator = createProjectValidator({
+    workspaceRoot: config.workspaceRoot,
+    commandTimeoutMs: config.commandTimeoutMs,
+    maxOutputChars: config.maxValidationOutputChars
+  });
   const worker = new Worker<AgentRunJobData>(
     config.queueName,
     async job => {
@@ -26,7 +32,7 @@ const startWorker = async () => {
         throw new Error(`Unsupported job name: ${job.name}`);
       }
 
-      await processAgentRun(job.data, modelClient);
+      await processAgentRun(job.data, modelClient, validator);
     },
     {
       connection,
