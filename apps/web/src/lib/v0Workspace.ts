@@ -2,7 +2,7 @@ export type Screen = 'home' | 'workspace'
 
 export type Panel = 'preview' | 'code' | 'design' | 'deploy'
 
-export type GenerationStatus = 'idle' | 'ready'
+export type GenerationStatus = 'idle' | 'running' | 'ready' | 'failed'
 
 export type StepStatus = 'done' | 'active' | 'pending'
 
@@ -23,6 +23,19 @@ export interface GenerationStep {
   status: StepStatus
 }
 
+export interface SnapshotFile {
+  path: string
+  content: string
+  language: 'ts' | 'tsx' | 'css' | 'json' | 'html' | 'md'
+}
+
+export interface WorkspaceSnapshot {
+  id: string
+  summary: string
+  files: SnapshotFile[]
+  selectedFilePath: string | null
+}
+
 export interface WorkspaceState {
   screen: Screen
   prompt: string
@@ -30,8 +43,37 @@ export interface WorkspaceState {
   activePanel: Panel
   generation: {
     status: GenerationStatus
+    runId?: string
+    error?: string
     steps: GenerationStep[]
   }
+  snapshot?: WorkspaceSnapshot
+}
+
+export interface AgentRunSummary {
+  _id: string
+  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'completed' | 'failed' | 'cancelled'
+  resultSnapshotId?: string
+}
+
+export interface AgentEventSummary {
+  type: string
+  message: string
+  sequence: number
+  payload?: {
+    path?: string
+    [key: string]: unknown
+  }
+}
+
+export interface AgentRunDetail {
+  run: AgentRunSummary
+  events: AgentEventSummary[]
+  resultSnapshot?: {
+    _id: string
+    summary: string
+    files: SnapshotFile[]
+  } | null
 }
 
 export const suggestionPrompts = [
@@ -136,6 +178,122 @@ export const submitPrompt = (
       status: 'ready',
       steps: buildGenerationSteps(prompt),
     },
+  }
+}
+
+export const startApiGeneration = (
+  state: WorkspaceState,
+  rawPrompt: string,
+  runId?: string,
+): WorkspaceState => {
+  const prompt = rawPrompt.trim()
+
+  if (!prompt) {
+    return state
+  }
+
+  return {
+    ...state,
+    screen: 'workspace',
+    prompt,
+    activePanel: 'preview',
+    generation: {
+      status: 'running',
+      runId,
+      steps: [
+        {
+          id: 'run.created',
+          label: 'Run queued',
+          detail: 'Waiting for the TypeScript agent worker.',
+          status: 'active',
+        },
+      ],
+    },
+    snapshot: undefined,
+  }
+}
+
+export const failApiGeneration = (
+  state: WorkspaceState,
+  error: string,
+): WorkspaceState => ({
+  ...state,
+  generation: {
+    ...state.generation,
+    status: 'failed',
+    error,
+    steps: [
+      ...state.generation.steps.map((step) => ({
+        ...step,
+        status: step.status === 'active' ? 'pending' as const : step.status,
+      })),
+      {
+        id: 'run.failed',
+        label: 'Generation failed',
+        detail: error,
+        status: 'active',
+      },
+    ],
+  },
+})
+
+const eventTypeLabels: Record<string, string> = {
+  'run.created': 'Run queued',
+  'run.started': 'Worker started',
+  'agent.step': 'Agent step',
+  'file.changed': 'File changed',
+  'run.completed': 'Snapshot ready',
+  'run.failed': 'Generation failed',
+  'run.cancelled': 'Generation cancelled',
+}
+
+const mapEventToStep = (event: AgentEventSummary): GenerationStep => {
+  const label = event.type === 'file.changed'
+    ? event.message
+    : eventTypeLabels[event.type] ?? event.message
+  const isTerminalEvent = ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)
+
+  return {
+    id: `${event.sequence}:${event.type}`,
+    label,
+    detail: event.payload?.path ? String(event.payload.path) : event.message,
+    status: isTerminalEvent ? 'active' : 'done',
+  }
+}
+
+export const applyAgentRunDetail = (
+  state: WorkspaceState,
+  detail: AgentRunDetail,
+): WorkspaceState => {
+  const terminal = ['completed', 'failed', 'cancelled'].includes(detail.run.status)
+  const snapshot = detail.resultSnapshot
+    ? {
+        id: detail.resultSnapshot._id,
+        summary: detail.resultSnapshot.summary,
+        files: detail.resultSnapshot.files,
+        selectedFilePath:
+          detail.resultSnapshot.files.find((file) => file.path === 'src/App.tsx')?.path ??
+          detail.resultSnapshot.files[0]?.path ??
+          null,
+      }
+    : state.snapshot
+
+  return {
+    ...state,
+    generation: {
+      ...state.generation,
+      status: detail.run.status === 'completed'
+        ? 'ready'
+        : terminal
+          ? 'failed'
+          : 'running',
+      runId: detail.run._id,
+      error: terminal && detail.run.status !== 'completed' ? detail.run.status : undefined,
+      steps: detail.events.length > 0
+        ? detail.events.map(mapEventToStep)
+        : state.generation.steps,
+    },
+    snapshot,
   }
 }
 

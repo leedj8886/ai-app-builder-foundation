@@ -38,14 +38,18 @@ import {
 import row01 from '@/assets/v0/template-row01.png'
 import row02 from '@/assets/v0/template-row02.png'
 import iosLight from '@/assets/v0/ios-light.png'
+import { agentApi, authApi, projectApi } from '@/services/api'
 import {
+  applyAgentRunDetail,
   createInitialWorkspaceState,
+  failApiGeneration,
   selectTemplate,
-  submitPrompt,
+  startApiGeneration,
   switchPanel,
   suggestionPrompts,
   templates,
   type Panel,
+  type SnapshotFile,
   type Template,
 } from '@/lib/v0Workspace'
 
@@ -118,12 +122,49 @@ export default function GeneratedApp() {
   )
 }`
 
+const wait = (durationMs: number) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, durationMs)
+  })
+
+const getErrorMessage = (error: unknown) => {
+  const apiError = error as {
+    response?: { data?: { error?: string; message?: string } }
+    message?: string
+  }
+
+  return apiError.response?.data?.error ?? apiError.response?.data?.message ?? apiError.message ?? 'Agent request failed'
+}
+
+const createDemoProject = async (prompt: string) => {
+  const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const authResponse = await authApi.register(
+    `phase2-${unique}@v0.local`,
+    'password123',
+    'Phase Two Demo',
+  )
+
+  localStorage.setItem('token', authResponse.data.token)
+
+  const projectResponse = await projectApi.create({
+    name: `v0 Snapshot ${new Date().toLocaleTimeString()}`,
+    description: prompt,
+    settings: {
+      framework: 'react',
+      styling: 'tailwind',
+      uiLibrary: 'shadcn',
+    },
+  })
+
+  return projectResponse.data.project._id as string
+}
+
 export function V0Clone() {
   const [workspace, setWorkspace] = useState(createInitialWorkspaceState)
   const [draftPrompt, setDraftPrompt] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
-  const [model, setModel] = useState('Fable 5')
+  const [model, setModel] = useState('Mock provider')
   const [category, setCategory] = useState<'all' | Template['category']>('all')
   const [designMode, setDesignMode] = useState(true)
   const [deployOpen, setDeployOpen] = useState(false)
@@ -140,12 +181,56 @@ export function V0Clone() {
   )
 
   const currentPrompt = workspace.prompt || draftPrompt || selectedTemplate.prompt
+  const selectedSnapshotFile = workspace.snapshot?.files.find(
+    (file) => file.path === workspace.snapshot?.selectedFilePath,
+  ) ?? workspace.snapshot?.files[0]
+  const currentCode = selectedSnapshotFile?.content ?? sampleCode
+  const currentFileName = selectedSnapshotFile?.path ?? 'generated-app.tsx'
+
+  const pollRunUntilTerminal = async (runId: string) => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const detailResponse = await agentApi.getRun(runId)
+      const detail = detailResponse.data
+      setWorkspace((state) => applyAgentRunDetail(state, detail))
+
+      if (['completed', 'failed', 'cancelled'].includes(detail.run.status)) {
+        return detail
+      }
+
+      await wait(500)
+    }
+
+    throw new Error('Timed out waiting for agent run')
+  }
+
+  const submitPromptToAgent = async (rawPrompt: string) => {
+    const prompt = rawPrompt.trim()
+
+    if (!prompt || workspace.generation.status === 'running') {
+      return
+    }
+
+    setDraftPrompt(prompt)
+    setWorkspace((state) => startApiGeneration(state, prompt))
+
+    try {
+      const projectId = await createDemoProject(prompt)
+      const runResponse = await agentApi.createRun({
+        projectId,
+        prompt,
+        mode: 'create',
+      })
+
+      setWorkspace((state) => startApiGeneration(state, prompt, runResponse.data.run._id))
+      await pollRunUntilTerminal(runResponse.data.run._id)
+    } catch (error) {
+      setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
+    }
+  }
 
   const handlePromptSubmit = (event?: FormEvent) => {
     event?.preventDefault()
-    const next = submitPrompt(workspace, draftPrompt || selectedTemplate.prompt)
-    setWorkspace(next)
-    setDraftPrompt(next.prompt)
+    void submitPromptToAgent(draftPrompt || selectedTemplate.prompt)
   }
 
   const handleTemplateSelect = (templateId: string) => {
@@ -160,17 +245,17 @@ export function V0Clone() {
   }
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(sampleCode)
+    await navigator.clipboard.writeText(currentCode)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1600)
   }
 
   const handleDownload = () => {
-    const blob = new Blob([sampleCode], { type: 'text/plain;charset=utf-8' })
+    const blob = new Blob([currentCode], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = 'generated-app.tsx'
+    anchor.download = currentFileName.split('/').pop() ?? 'generated-app.tsx'
     anchor.click()
     URL.revokeObjectURL(url)
   }
@@ -199,7 +284,7 @@ export function V0Clone() {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
-                    handlePromptSubmit()
+                    void submitPromptToAgent(draftPrompt || selectedTemplate.prompt)
                   }
                 }}
                 placeholder="让 v0 构建..."
@@ -218,7 +303,7 @@ export function V0Clone() {
                   </button>
                   {modelOpen ? (
                     <div className="absolute left-0 top-10 z-20 w-44 rounded-lg border border-neutral-200 bg-white p-1 text-left text-sm shadow-xl">
-                      {['Fable 5', 'Opus 4.5', 'Fast Build'].map((item) => (
+                      {['Mock provider', 'Fable 5', 'Opus 4.5', 'Fast Build'].map((item) => (
                         <button
                           type="button"
                           key={item}
@@ -254,10 +339,11 @@ export function V0Clone() {
                   {draftPrompt.trim() ? (
                     <button
                       type="submit"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-neutral-950 text-white hover:bg-neutral-800"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-neutral-950 text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
                       aria-label="Build prompt"
+                      disabled={workspace.generation.status === 'running'}
                     >
-                      <ArrowRight className="h-4 w-4" />
+                      {workspace.generation.status === 'running' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
                     </button>
                   ) : null}
                 </div>
@@ -330,8 +416,9 @@ export function V0Clone() {
                   onSelect={() => handleTemplateSelect(template.id)}
                   onBuild={() => {
                     const next = selectTemplate(workspace, template.id)
-                    setWorkspace(submitPrompt(next, next.prompt))
+                    setWorkspace(next)
                     setDraftPrompt(next.prompt)
+                    void submitPromptToAgent(next.prompt)
                   }}
                 />
               ))}
@@ -348,10 +435,25 @@ export function V0Clone() {
           copied={copied}
           onBackHome={() => setWorkspace(createInitialWorkspaceState())}
           onSwitchPanel={(panel) => setWorkspace((state) => switchPanel(state, panel))}
+          onSelectSnapshotFile={(filePath) =>
+            setWorkspace((state) =>
+              state.snapshot
+                ? {
+                    ...state,
+                    snapshot: {
+                      ...state.snapshot,
+                      selectedFilePath: filePath,
+                    },
+                  }
+                : state,
+            )
+          }
           onToggleDesignMode={() => setDesignMode((enabled) => !enabled)}
           onToggleDeploy={() => setDeployOpen((open) => !open)}
           onCopy={handleCopy}
           onDownload={handleDownload}
+          currentCode={currentCode}
+          currentFileName={currentFileName}
         />
       )}
     </div>
@@ -513,10 +615,13 @@ function WorkspaceScreen({
   copied,
   onBackHome,
   onSwitchPanel,
+  onSelectSnapshotFile,
   onToggleDesignMode,
   onToggleDeploy,
   onCopy,
   onDownload,
+  currentCode,
+  currentFileName,
 }: {
   prompt: string
   selectedTemplate: Template
@@ -526,11 +631,25 @@ function WorkspaceScreen({
   copied: boolean
   onBackHome: () => void
   onSwitchPanel: (panel: Panel) => void
+  onSelectSnapshotFile: (filePath: string) => void
   onToggleDesignMode: () => void
   onToggleDeploy: () => void
   onCopy: () => void
   onDownload: () => void
+  currentCode: string
+  currentFileName: string
 }) {
+  const assistantTitle = state.generation.status === 'running'
+    ? 'I am creating a project snapshot.'
+    : state.generation.status === 'failed'
+      ? 'The agent run needs attention.'
+      : 'I built a snapshot-backed preview.'
+  const assistantDescription = state.generation.status === 'running'
+    ? 'The prompt is running through the local API, Redis queue, worker, and MongoDB snapshot store.'
+    : state.generation.status === 'failed'
+      ? state.generation.error ?? 'The run did not complete.'
+      : state.snapshot?.summary ?? 'The app includes responsive layout, structured files, code export, repo sync, and a publish flow.'
+
   return (
     <main className="grid min-h-[calc(100vh-48px)] grid-cols-1 bg-white lg:grid-cols-[272px_1fr]">
       <aside className="hidden border-r border-neutral-200 bg-[#fafafa] lg:flex lg:flex-col">
@@ -613,11 +732,8 @@ function WorkspaceScreen({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-medium">I built a production-ready preview.</p>
-                    <p className="mt-2 text-sm leading-6 text-neutral-600">
-                      The app includes responsive layout, realistic data, design controls,
-                      code export, repo sync, and a publish flow.
-                    </p>
+                    <p className="text-sm font-medium">{assistantTitle}</p>
+                    <p className="mt-2 text-sm leading-6 text-neutral-600">{assistantDescription}</p>
                   </div>
                 </div>
               </div>
@@ -646,6 +762,40 @@ function WorkspaceScreen({
                   ))}
                 </div>
               </div>
+
+              {state.generation.error ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+                  {state.generation.error}
+                </div>
+              ) : null}
+
+              {state.snapshot ? (
+                <div className="rounded-lg border border-neutral-200 bg-white">
+                  <div className="border-b border-neutral-200 px-4 py-3">
+                    <p className="text-sm font-medium">Project snapshot</p>
+                    <p className="mt-1 text-xs text-neutral-500">{state.snapshot.files.length} files saved in MongoDB</p>
+                  </div>
+                  <div className="space-y-1 p-2">
+                    {state.snapshot.files.map((file) => (
+                      <button
+                        key={file.path}
+                        className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
+                          state.snapshot?.selectedFilePath === file.path
+                            ? 'bg-neutral-950 text-white'
+                            : 'text-neutral-700 hover:bg-neutral-100'
+                        }`}
+                        onClick={() => {
+                          onSelectSnapshotFile(file.path)
+                          onSwitchPanel('code')
+                        }}
+                      >
+                        <FileCode2 className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{file.path}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="rounded-lg border border-neutral-200 bg-[#fafafa] p-3">
                 <p className="text-xs font-medium uppercase text-neutral-400">Integrations</p>
@@ -703,7 +853,18 @@ function WorkspaceScreen({
 
             <div className="flex-1 overflow-y-auto p-3 sm:p-5">
               {state.activePanel === 'preview' ? <PreviewPanel selectedTemplate={selectedTemplate} designMode={designMode} /> : null}
-              {state.activePanel === 'code' ? <CodePanel onCopy={onCopy} onDownload={onDownload} copied={copied} /> : null}
+              {state.activePanel === 'code' ? (
+                <CodePanel
+                  files={state.snapshot?.files ?? []}
+                  selectedFilePath={state.snapshot?.selectedFilePath ?? null}
+                  code={currentCode}
+                  fileName={currentFileName}
+                  copied={copied}
+                  onCopy={onCopy}
+                  onDownload={onDownload}
+                  onSelectFile={onSelectSnapshotFile}
+                />
+              ) : null}
               {state.activePanel === 'design' ? <DesignPanel enabled={designMode} onToggle={onToggleDesignMode} /> : null}
               {state.activePanel === 'deploy' ? <DeployPanel open={deployOpen} onToggle={onToggleDeploy} /> : null}
             </div>
@@ -824,20 +985,30 @@ function PreviewPanel({
 }
 
 function CodePanel({
+  files,
+  selectedFilePath,
+  code,
+  fileName,
+  copied,
   onCopy,
   onDownload,
-  copied,
+  onSelectFile,
 }: {
+  files: SnapshotFile[]
+  selectedFilePath: string | null
+  code: string
+  fileName: string
+  copied: boolean
   onCopy: () => void
   onDownload: () => void
-  copied: boolean
+  onSelectFile: (filePath: string) => void
 }) {
   return (
     <div className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 text-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
         <div className="flex items-center gap-2 text-sm">
           <FileCode2 className="h-4 w-4 text-neutral-400" />
-          app/generated-app.tsx
+          {fileName}
         </div>
         <div className="flex gap-2">
           <button className="inline-flex h-8 items-center gap-2 rounded-md bg-white/10 px-3 text-sm hover:bg-white/15" onClick={onCopy}>
@@ -850,9 +1021,29 @@ function CodePanel({
           </button>
         </div>
       </div>
-      <pre className="overflow-x-auto p-5 text-sm leading-6 text-neutral-200">
-        <code>{sampleCode}</code>
-      </pre>
+      <div className={files.length > 0 ? 'grid min-h-[520px] md:grid-cols-[220px_1fr]' : ''}>
+        {files.length > 0 ? (
+          <aside className="border-b border-white/10 bg-white/[0.03] p-2 md:border-b-0 md:border-r">
+            {files.map((file) => (
+              <button
+                key={file.path}
+                className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-xs ${
+                  selectedFilePath === file.path
+                    ? 'bg-white text-neutral-950'
+                    : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                }`}
+                onClick={() => onSelectFile(file.path)}
+              >
+                <FileCode2 className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{file.path}</span>
+              </button>
+            ))}
+          </aside>
+        ) : null}
+        <pre className="overflow-x-auto p-5 text-sm leading-6 text-neutral-200">
+          <code>{code}</code>
+        </pre>
+      </div>
     </div>
   )
 }

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  applyAgentRunDetail,
   createInitialWorkspaceState,
+  failApiGeneration,
   selectTemplate,
+  startApiGeneration,
   submitPrompt,
 } from './v0Workspace'
 
@@ -35,5 +38,65 @@ describe('v0 workspace state', () => {
     assert.equal(state.generation.status, 'ready')
     assert.equal(state.generation.steps.length, 5)
     assert.equal(state.generation.steps[state.generation.steps.length - 1]?.label, 'Ready to publish')
+  })
+
+  it('starts an API-backed generation without marking it ready', () => {
+    const state = startApiGeneration(
+      createInitialWorkspaceState(),
+      'Build a snapshot-backed app',
+      'run_123',
+    )
+
+    assert.equal(state.screen, 'workspace')
+    assert.equal(state.prompt, 'Build a snapshot-backed app')
+    assert.equal(state.generation.status, 'running')
+    assert.equal(state.generation.runId, 'run_123')
+    assert.equal(state.generation.steps[0]?.label, 'Run queued')
+  })
+
+  it('applies agent events and completed snapshot files', () => {
+    const state = applyAgentRunDetail(
+      startApiGeneration(createInitialWorkspaceState(), 'Build a dashboard', 'run_123'),
+      {
+        run: {
+          _id: 'run_123',
+          status: 'completed',
+          resultSnapshotId: 'snapshot_123',
+        },
+        events: [
+          { type: 'run.created', message: 'Agent run queued', sequence: 1 },
+          { type: 'run.started', message: 'Agent run started', sequence: 2 },
+          { type: 'file.changed', message: 'create src/App.tsx', sequence: 3, payload: { path: 'src/App.tsx' } },
+          { type: 'run.completed', message: 'Agent run completed', sequence: 4 },
+        ],
+        resultSnapshot: {
+          _id: 'snapshot_123',
+          summary: 'Generated files',
+          files: [
+            {
+              path: 'src/App.tsx',
+              content: 'export default function App() { return null }',
+              language: 'tsx',
+            },
+          ],
+        },
+      },
+    )
+
+    assert.equal(state.generation.status, 'ready')
+    assert.equal(state.snapshot?.id, 'snapshot_123')
+    assert.equal(state.snapshot?.files[0]?.path, 'src/App.tsx')
+    assert.equal(state.snapshot?.selectedFilePath, 'src/App.tsx')
+    assert.equal(state.generation.steps.some((step) => step.label === 'create src/App.tsx'), true)
+  })
+
+  it('records API generation failures', () => {
+    const state = failApiGeneration(
+      startApiGeneration(createInitialWorkspaceState(), 'Build a dashboard'),
+      'Worker is not running',
+    )
+
+    assert.equal(state.generation.status, 'failed')
+    assert.equal(state.generation.error, 'Worker is not running')
   })
 })

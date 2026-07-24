@@ -39,6 +39,52 @@ export const authApi = {
   me: () => api.get('/api/auth/me'),
 };
 
+export interface AgentRun {
+  _id: string;
+  projectId: string;
+  prompt: string;
+  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'completed' | 'failed' | 'cancelled';
+  mode: 'create' | 'edit';
+  baseSnapshotId?: string;
+  resultSnapshotId?: string;
+}
+
+export interface AgentEvent {
+  type: string;
+  message: string;
+  sequence: number;
+  payload?: Record<string, unknown>;
+}
+
+export interface ProjectSnapshotFile {
+  path: string;
+  content: string;
+  language: 'ts' | 'tsx' | 'css' | 'json' | 'html' | 'md';
+}
+
+export interface ProjectSnapshot {
+  _id: string;
+  summary: string;
+  files: ProjectSnapshotFile[];
+}
+
+export interface AgentRunDetailResponse {
+  run: AgentRun;
+  events: AgentEvent[];
+  resultSnapshot?: ProjectSnapshot | null;
+}
+
+export const agentApi = {
+  createRun: (data: {
+    projectId: string;
+    chatId?: string;
+    prompt: string;
+    mode?: 'create' | 'edit';
+  }) => api.post<{ run: AgentRun }>('/api/agent/runs', data),
+  getRun: (runId: string) =>
+    api.get<AgentRunDetailResponse>(`/api/agent/runs/${runId}`),
+};
+
 // Chat API
 export const chatApi = {
   getAll: () => api.get('/api/chat'),
@@ -78,5 +124,14 @@ export const projectApi = {
     api.post(`/api/projects/${id}/chats`, { chatId }),
   removeChat: (id: string, chatId: string) =>
     api.delete(`/api/projects/${id}/chats/${chatId}`),
+  getSnapshots: (id: string) =>
+    api.get<{ snapshots: Array<{
+      id: string;
+      summary: string;
+      fileCount: number;
+      createdAt: string;
+    }> }>(`/api/projects/${id}/snapshots`),
+  getSnapshot: (id: string, snapshotId: string) =>
+    api.get<{ snapshot: ProjectSnapshot }>(`/api/projects/${id}/snapshots/${snapshotId}`),
   delete: (id: string) => api.delete(`/api/projects/${id}`),
 };
