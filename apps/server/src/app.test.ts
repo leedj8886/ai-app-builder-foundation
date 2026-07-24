@@ -21,3 +21,19 @@ test('POST /api/agent/runs requires authentication', async () => {
 
   assert.equal(response.body.error, 'No token provided');
 });
+
+test('GET /api/projects/:projectId/snapshots requires authentication', async () => {
+  const response = await request(createApp())
+    .get('/api/projects/64b7f5086f1f8e9f0f000001/snapshots')
+    .expect(401);
+
+  assert.equal(response.body.error, 'No token provided');
+});
+
+test('GET /api/projects/:projectId/snapshots/:snapshotId requires authentication', async () => {
+  const response = await request(createApp())
+    .get('/api/projects/64b7f5086f1f8e9f0f000001/snapshots/64b7f5086f1f8e9f0f000002')
+    .expect(401);
+
+  assert.equal(response.body.error, 'No token provided');
+});

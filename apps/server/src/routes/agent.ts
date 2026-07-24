@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AgentRun } from '../models/AgentRun';
 import { AgentEvent } from '../models/AgentEvent';
+import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
@@ -51,6 +52,17 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       }
     }
 
+    const baseSnapshot = await ProjectSnapshot.findOne({
+      projectId: body.projectId,
+      userId,
+      'validation.status': { $ne: 'failed' }
+    }).sort({ createdAt: -1 });
+
+    if (body.mode === 'edit' && !baseSnapshot) {
+      res.status(400).json({ error: 'Edit mode requires an existing project snapshot' });
+      return;
+    }
+
     const config = getAgentConfig();
     const run = await AgentRun.create({
       userId,
@@ -58,6 +70,7 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       chatId: body.chatId,
       prompt: body.prompt,
       mode: body.mode,
+      baseSnapshotId: baseSnapshot?._id,
       status: 'queued',
       model: config.model,
       maxRepairAttempts: config.maxRepairAttempts
@@ -95,7 +108,15 @@ router.get('/runs/:runId', async (req: AuthRequest, res, next) => {
       .sort({ sequence: 1 })
       .limit(100);
 
-    res.json({ run, events });
+    const resultSnapshot = run.resultSnapshotId
+      ? await ProjectSnapshot.findOne({
+          _id: run.resultSnapshotId,
+          userId,
+          projectId: run.projectId
+        })
+      : null;
+
+    res.json({ run, events, resultSnapshot });
   } catch (error) {
     next(error);
   }

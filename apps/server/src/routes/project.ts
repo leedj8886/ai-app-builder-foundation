@@ -2,12 +2,22 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Project } from '../models/Project';
 import { Chat } from '../models/Chat';
+import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { objectIdParamSchema } from '../agent/schemas';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authMiddleware);
+
+const requireUserId = (req: AuthRequest): string => {
+  if (!req.userId) {
+    throw Object.assign(new Error('Missing authenticated user'), { statusCode: 401 });
+  }
+
+  return req.userId;
+};
 
 // Get all projects for user
 router.get('/', async (req: AuthRequest, res, next) => {
@@ -36,6 +46,71 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
     }
 
     res.json({ project });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// List project snapshots
+router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
+  try {
+    const userId = requireUserId(req);
+    const { id } = objectIdParamSchema('id').parse(req.params);
+    const project = await Project.findOne({ _id: id, userId });
+
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const snapshots = await ProjectSnapshot.find({ projectId: id, userId })
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    res.json({
+      snapshots: snapshots.map(snapshot => ({
+        id: snapshot._id,
+        projectId: snapshot.projectId,
+        sourceRunId: snapshot.sourceRunId,
+        parentSnapshotId: snapshot.parentSnapshotId,
+        summary: snapshot.summary,
+        validation: snapshot.validation,
+        fileCount: snapshot.files.length,
+        createdAt: snapshot.createdAt
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get a full project snapshot
+router.get('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => {
+  try {
+    const userId = requireUserId(req);
+    const { id, snapshotId } = z.object({
+      id: objectIdParamSchema('id').shape.id,
+      snapshotId: objectIdParamSchema('snapshotId').shape.snapshotId
+    }).parse(req.params);
+    const project = await Project.findOne({ _id: id, userId });
+
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const snapshot = await ProjectSnapshot.findOne({
+      _id: snapshotId,
+      projectId: id,
+      userId
+    });
+
+    if (!snapshot) {
+      res.status(404).json({ error: 'Snapshot not found' });
+      return;
+    }
+
+    res.json({ snapshot });
   } catch (error) {
     next(error);
   }
