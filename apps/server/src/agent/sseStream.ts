@@ -18,6 +18,7 @@ export interface StreamRequest {
 
 export interface StreamResponse {
   write(chunk: string): boolean;
+  end(): unknown;
   on?(event: 'error', listener: () => void): unknown;
 }
 
@@ -122,8 +123,21 @@ export const streamAgentRunEvents = async ({
 
     closed = true;
     if (heartbeat) clearInterval(heartbeat);
-    subscriber.off('message', messageHandler);
-    void subscriber.quit().catch(() => undefined);
+    try {
+      subscriber.off('message', messageHandler);
+    } catch {
+      // Cleanup must still close the response and Redis subscriber.
+    }
+    try {
+      res.end();
+    } catch {
+      // The client may already have disconnected.
+    }
+    try {
+      void subscriber.quit().catch(() => undefined);
+    } catch {
+      // Redis can already be disconnected.
+    }
   };
 
   const writeEvent = (event: PublicAgentEvent): void => {

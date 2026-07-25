@@ -30,21 +30,33 @@ class FakeRequest {
 
 class FakeResponse {
   readonly writes: string[] = [];
+  endCalls = 0;
+  throwOnWrite?: (chunk: string) => boolean;
 
   write(chunk: string): boolean {
+    if (this.throwOnWrite?.(chunk)) throw new Error('write failed');
     this.writes.push(chunk);
     return true;
+  }
+
+  end(): void {
+    this.endCalls += 1;
   }
 }
 
 class FakeSubscriber {
   readonly subscriptions: string[] = [];
+  readonly calls: string[] = [];
   quitCalls = 0;
   private listeners = new Set<(channel: string, message: string) => void>();
   onSubscribe?: () => void;
+  subscribeGate?: Promise<void>;
 
   on(eventName: string, listener: (channel: string, message: string) => void): this {
-    if (eventName === 'message') this.listeners.add(listener);
+    if (eventName === 'message') {
+      this.calls.push('listener-attached');
+      this.listeners.add(listener);
+    }
     return this;
   }
 
@@ -54,8 +66,11 @@ class FakeSubscriber {
   }
 
   async subscribe(...channels: Array<string | Buffer>): Promise<number> {
+    this.calls.push('subscribe-started');
     this.subscriptions.push(String(channels[0]));
     this.onSubscribe?.();
+    await this.subscribeGate;
+    this.calls.push('subscribe-resolved');
     return 1;
   }
 
@@ -97,11 +112,22 @@ const stream = async (
 };
 
 test('buffers a live event received while the durable backlog is loading', async () => {
+  let releaseSubscribe!: () => void;
+  let loadStarted = false;
+  let notifyLoadStarted!: () => void;
   let releaseBacklog!: (events: PublicAgentEvent[]) => void;
+  const subscribeGate = new Promise<void>((resolve) => {
+    releaseSubscribe = resolve;
+  });
   const backlog = new Promise<PublicAgentEvent[]>((resolve) => {
     releaseBacklog = resolve;
   });
+  const loadStartedPromise = new Promise<void>((resolve) => {
+    notifyLoadStarted = resolve;
+  });
   const subscriber = new FakeSubscriber();
+  subscriber.subscribeGate = subscribeGate;
+  subscriber.onSubscribe = () => subscriber.publish(event(3));
   const req = new FakeRequest();
   const res = new FakeResponse();
 
@@ -111,18 +137,36 @@ test('buffers a live event received while the durable backlog is loading', async
     req,
     res,
     subscriber,
-    loadEvents: async () => backlog,
+    loadEvents: async () => {
+      loadStarted = true;
+      notifyLoadStarted();
+      return backlog;
+    },
     heartbeatMs: 60_000
   });
 
-  await Promise.resolve();
-  assert.deepEqual(subscriber.subscriptions, ['agent-run:run-1']);
-  subscriber.publish(event(3));
-  releaseBacklog([event(1), event(2)]);
-  await streaming;
+  try {
+    await Promise.resolve();
+    assert.deepEqual(subscriber.calls, ['listener-attached', 'subscribe-started']);
+    assert.equal(loadStarted, false);
+    releaseSubscribe();
+    await loadStartedPromise;
+    assert.deepEqual(subscriber.calls, [
+      'listener-attached',
+      'subscribe-started',
+      'subscribe-resolved'
+    ]);
+    assert.equal(loadStarted, true);
+    releaseBacklog([event(1), event(2)]);
+    await streaming;
 
-  assert.deepEqual(streamedSequences(res), [1, 2, 3]);
-  req.close();
+    assert.deepEqual(streamedSequences(res), [1, 2, 3]);
+  } finally {
+    releaseSubscribe();
+    releaseBacklog([]);
+    req.close();
+    await streaming;
+  }
 });
 
 test('loads only durable events strictly after Last-Event-ID', async () => {
@@ -178,5 +222,34 @@ test('ignores malformed live messages and still cleans up', async () => {
   assert.deepEqual(streamedSequences(res), [3]);
   req.close();
   await Promise.resolve();
+  assert.equal(subscriber.quitCalls, 1);
+});
+
+test('ends the stream exactly once when a live event write fails', async () => {
+  const { req, res, subscriber } = await stream();
+  res.throwOnWrite = (chunk) => chunk.startsWith('id: ');
+
+  subscriber.publish(event(1));
+  await Promise.resolve();
+
+  assert.equal(res.endCalls, 1);
+  assert.equal(subscriber.quitCalls, 1);
+  req.close();
+  assert.equal(res.endCalls, 1);
+  assert.equal(subscriber.quitCalls, 1);
+});
+
+test('ends the stream exactly once when a heartbeat write fails', async () => {
+  const { req, res, subscriber } = await stream({ heartbeatMs: 5 });
+  res.throwOnWrite = (chunk) => chunk === ': heartbeat\n\n';
+
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  const endCallsBeforeClose = res.endCalls;
+  const quitCallsBeforeClose = subscriber.quitCalls;
+  req.close();
+
+  assert.equal(endCallsBeforeClose, 1);
+  assert.equal(quitCallsBeforeClose, 1);
+  assert.equal(res.endCalls, 1);
   assert.equal(subscriber.quitCalls, 1);
 });

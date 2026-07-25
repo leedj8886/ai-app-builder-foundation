@@ -191,7 +191,7 @@ router.get('/runs/:runId/events', async (req: AuthRequest, res, next) => {
     });
   } catch (error) {
     if (res.headersSent) {
-      res.end();
+      if (!res.writableEnded) res.end();
       return;
     }
     next(error);
