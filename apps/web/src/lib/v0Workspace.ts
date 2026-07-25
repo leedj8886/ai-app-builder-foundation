@@ -355,6 +355,39 @@ const mapEventToStep = (event: AgentEventSummary): GenerationStep => {
   }
 }
 
+const conciseEventMessage = (message: string): string =>
+  message.split('\n').map((line) => line.trim()).find(Boolean) ?? 'Generation failed'
+
+export const applyAgentEvent = (
+  state: WorkspaceState,
+  runId: string,
+  event: AgentEventSummary,
+): WorkspaceState => {
+  if (state.generation.runId !== runId) return state
+
+  const step = mapEventToStep(event)
+  if (state.generation.steps.some((existing) => existing.id === step.id)) return state
+
+  const isFailed = event.type === 'run.failed'
+  const status: GenerationStatus = event.type === 'run.completed'
+    ? 'ready'
+    : event.type === 'run.cancelled'
+      ? 'cancelled'
+      : isFailed
+        ? 'failed'
+        : 'running'
+
+  return {
+    ...state,
+    generation: {
+      ...state.generation,
+      status,
+      error: isFailed ? conciseEventMessage(event.message) : undefined,
+      steps: [...state.generation.steps, step],
+    },
+  }
+}
+
 export const applyAgentRunDetail = (
   state: WorkspaceState,
   detail: AgentRunDetail,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  applyAgentEvent,
   applyAgentRunDetail,
   applySnapshotList,
   applyRunHistory,
@@ -254,6 +255,85 @@ describe('v0 workspace state', () => {
     })
 
     assert.equal(state.generation.runId, 'run_new')
+    assert.equal(state.generation.status, 'running')
+  })
+
+  it('ignores streamed events for a different run id', () => {
+    const state = startApiGeneration(createInitialWorkspaceState(), 'Build a dashboard', 'run_current')
+
+    assert.equal(
+      applyAgentEvent(state, 'run_other', { type: 'run.started', message: 'started', sequence: 1 }),
+      state,
+    )
+  })
+
+  it('deduplicates stream events and appends new mapped steps without replacing workspace data', () => {
+    const initial = applyRunHistory(
+      applySnapshotList(
+        applyWorkspaceSnapshot(createInitialWorkspaceState(), {
+          _id: 'snapshot_current',
+          summary: 'Current',
+          files: [{ path: 'src/App.tsx', content: 'base', language: 'tsx' }],
+          packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+          validation: { status: 'passed', checks: [] },
+        }),
+        [{
+          id: 'snapshot_current', summary: 'Current', fileCount: 1, isActive: true,
+          packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+          validation: { status: 'passed', checks: [] }, createdAt: '2026-07-25T00:00:00.000Z',
+        }],
+      ),
+      [{ _id: 'old_run', status: 'completed', createdAt: '2026-07-24T00:00:00.000Z' }],
+    )
+    const running = startApiGeneration(initial, 'Edit the dashboard', 'run_current')
+    const appended = applyAgentEvent(running, 'run_current', {
+      type: 'file.changed', message: 'create src/Card.tsx', sequence: 3, payload: { path: 'src/Card.tsx' },
+    })
+    const duplicate = applyAgentEvent(appended, 'run_current', {
+      type: 'file.changed', message: 'create src/Card.tsx', sequence: 3, payload: { path: 'src/Card.tsx' },
+    })
+
+    assert.equal(appended.generation.steps[appended.generation.steps.length - 1]?.id, '3:file.changed')
+    assert.equal(duplicate, appended)
+    assert.equal(appended.snapshot?.id, 'snapshot_current')
+    assert.equal(appended.snapshots[0]?.id, 'snapshot_current')
+    assert.equal(appended.runHistory[0]?._id, 'old_run')
+  })
+
+  it('applies terminal stream status immediately and only applies snapshots from run detail', () => {
+    const statuses = [
+      ['run.completed', 'ready'],
+      ['run.failed', 'failed'],
+      ['run.cancelled', 'cancelled'],
+      ['run.started', 'running'],
+    ] as const
+
+    for (const [type, expected] of statuses) {
+      const state = applyAgentEvent(
+        startApiGeneration(createInitialWorkspaceState(), 'Build a dashboard', 'run_current'),
+        'run_current',
+        { type, message: type === 'run.failed' ? 'brief failure' : 'event message', sequence: 2 },
+      )
+      assert.equal(state.generation.status, expected)
+      assert.equal(state.snapshot, undefined)
+    }
+
+    const failed = applyAgentEvent(
+      startApiGeneration(createInitialWorkspaceState(), 'Build a dashboard', 'run_current'),
+      'run_current',
+      { type: 'run.failed', message: 'brief failure', sequence: 2 },
+    )
+    assert.equal(failed.generation.error, 'brief failure')
+  })
+
+  it('does not let terminal events from stale runs replace the active generation', () => {
+    const state = applyAgentEvent(
+      startApiGeneration(createInitialWorkspaceState(), 'Build a dashboard', 'run_current'),
+      'run_stale',
+      { type: 'run.completed', message: 'done', sequence: 3 },
+    )
+
+    assert.equal(state.generation.runId, 'run_current')
     assert.equal(state.generation.status, 'running')
   })
 })

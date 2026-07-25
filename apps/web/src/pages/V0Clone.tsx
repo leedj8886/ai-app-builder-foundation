@@ -40,7 +40,9 @@ import row01 from '@/assets/v0/template-row01.png'
 import row02 from '@/assets/v0/template-row02.png'
 import iosLight from '@/assets/v0/ios-light.png'
 import { agentApi, authApi, projectApi } from '@/services/api'
+import { monitorAgentRun } from '@/services/agentRunMonitor'
 import {
+  applyAgentEvent,
   applyAgentRunDetail,
   applyRunHistory,
   applySnapshotList,
@@ -120,11 +122,6 @@ export default function GeneratedApp() {
   )
 }`
 
-const wait = (durationMs: number) =>
-  new Promise((resolve) => {
-    window.setTimeout(resolve, durationMs)
-  })
-
 const getErrorMessage = (error: unknown) => {
   const apiError = error as {
     response?: { data?: { error?: string; message?: string } }
@@ -133,6 +130,9 @@ const getErrorMessage = (error: unknown) => {
 
   return apiError.response?.data?.error ?? apiError.response?.data?.message ?? apiError.message ?? 'Agent request failed'
 }
+
+const isAbortError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'AbortError'
 
 const createDemoProject = async (prompt: string) => {
   if (!localStorage.getItem('token')) {
@@ -173,6 +173,9 @@ export function V0Clone() {
   )
   const refreshRequestRef = useRef(0)
   const rollbackInFlightRef = useRef(false)
+  const monitorControllerRef = useRef<AbortController | null>(null)
+  const submissionInFlightRef = useRef(false)
+  const submissionIdRef = useRef(0)
 
   const visibleTemplates = useMemo(
     () => templates.filter((template) => category === 'all' || template.category === category),
@@ -190,23 +193,6 @@ export function V0Clone() {
   ) ?? workspace.snapshot?.files[0]
   const currentCode = selectedSnapshotFile?.content ?? sampleCode
   const currentFileName = selectedSnapshotFile?.path ?? 'generated-app.tsx'
-
-  const pollRunUntilTerminal = async (runId: string, activeProjectId: string) => {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      const detailResponse = await agentApi.getRun(runId)
-      const detail = detailResponse.data
-      setWorkspace((state) => applyAgentRunDetail(state, detail))
-
-      if (['completed', 'failed', 'cancelled'].includes(detail.run.status)) {
-        await refreshProjectData(activeProjectId)
-        return detail
-      }
-
-      await wait(500)
-    }
-
-    throw new Error('Timed out waiting for agent run')
-  }
 
   const refreshProjectData = async (id: string) => {
     const requestId = ++refreshRequestRef.current
@@ -248,12 +234,19 @@ export function V0Clone() {
     })()
   }, [projectId])
 
+  useEffect(() => () => {
+    monitorControllerRef.current?.abort()
+  }, [])
+
   const submitPromptToAgent = async (rawPrompt: string) => {
     const prompt = rawPrompt.trim()
 
-    if (!prompt || workspace.generation.status === 'running') {
+    if (!prompt || workspace.generation.status === 'running' || submissionInFlightRef.current) {
       return
     }
+
+    submissionInFlightRef.current = true
+    const submissionId = ++submissionIdRef.current
 
     setDraftPrompt(prompt)
     setWorkspace((state) =>
@@ -278,23 +271,69 @@ export function V0Clone() {
         mode,
       })
 
-      setWorkspace((state) => startApiGeneration(state, prompt, runResponse.data.run._id))
-      await pollRunUntilTerminal(runResponse.data.run._id, activeProjectId)
+      if (submissionId !== submissionIdRef.current) return
+
+      monitorControllerRef.current?.abort()
+      const controller = new AbortController()
+      monitorControllerRef.current = controller
+      const token = localStorage.getItem('token')
+      if (!token) throw new Error('Authentication token is unavailable')
+
+      const runId = runResponse.data.run._id
+      setWorkspace((state) => startApiGeneration(state, prompt, runId))
+      const detail = await monitorAgentRun({
+        runId,
+        token,
+        signal: controller.signal,
+        onEvent: (event) => {
+          setWorkspace((state) => applyAgentEvent(state, runId, event))
+        },
+      })
+      setWorkspace((state) => applyAgentRunDetail(state, detail))
+      await refreshProjectData(activeProjectId)
     } catch (error) {
-      setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
+      if (!isAbortError(error) && submissionId === submissionIdRef.current) {
+        setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
+      }
+    } finally {
+      if (submissionId === submissionIdRef.current) {
+        submissionInFlightRef.current = false
+      }
     }
   }
 
   const handleCancelRun = async () => {
     const runId = workspace.generation.runId
     if (!isCancellableRunId(runId)) return
-    const response = await agentApi.cancelRun(runId)
-    setWorkspace((state) => applyAgentRunDetail(state, {
-      run: response.data.run,
-      events: [],
-      resultSnapshot: null,
+    monitorControllerRef.current?.abort()
+    monitorControllerRef.current = null
+    try {
+      const response = await agentApi.cancelRun(runId)
+      setWorkspace((state) => applyAgentRunDetail(state, {
+        run: response.data.run,
+        events: [],
+        resultSnapshot: null,
+      }))
+      if (projectId) await refreshProjectData(projectId)
+    } catch (error) {
+      setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
+    }
+  }
+
+  const handleBackHome = () => {
+    submissionIdRef.current += 1
+    submissionInFlightRef.current = false
+    monitorControllerRef.current?.abort()
+    monitorControllerRef.current = null
+    setWorkspace((state) => ({
+      ...state,
+      screen: 'home',
+      prompt: '',
+      generation: {
+        status: 'idle',
+        steps: [],
+      },
     }))
-    if (projectId) await refreshProjectData(projectId)
   }
 
   const handleRollback = async (snapshotId: string) => {
@@ -515,17 +554,7 @@ export function V0Clone() {
           designMode={designMode}
           deployOpen={deployOpen}
           copied={copied}
-          onBackHome={() =>
-            setWorkspace((state) => ({
-              ...state,
-              screen: 'home',
-              prompt: '',
-              generation: {
-                status: 'idle',
-                steps: [],
-              },
-            }))
-          }
+          onBackHome={handleBackHome}
           onSwitchPanel={(panel) => setWorkspace((state) => switchPanel(state, panel))}
           onSelectSnapshotFile={(filePath) =>
             setWorkspace((state) =>
@@ -834,7 +863,11 @@ function WorkspaceScreen({
                   v0
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+                  <div
+                    className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
+                    data-testid="agent-generation-status"
+                    data-status={state.generation.status}
+                  >
                     <p className="text-sm font-medium">{assistantTitle}</p>
                     <p className="mt-2 text-sm leading-6 text-neutral-600">{assistantDescription}</p>
                   </div>
@@ -851,7 +884,7 @@ function WorkspaceScreen({
                 </div>
               </div>
 
-              <div className="rounded-lg border border-neutral-200 bg-white">
+              <div className="rounded-lg border border-neutral-200 bg-white" data-testid="agent-timeline">
                 <div className="border-b border-neutral-200 px-4 py-3">
                   <p className="text-sm font-medium">Agent plan</p>
                 </div>
@@ -883,7 +916,7 @@ function WorkspaceScreen({
               ) : null}
 
               {state.snapshot ? (
-                <div className="rounded-lg border border-neutral-200 bg-white">
+                <div className="rounded-lg border border-neutral-200 bg-white" data-testid="snapshot-history">
                   <div className="border-b border-neutral-200 px-4 py-3">
                     <p className="text-sm font-medium">Project snapshot</p>
                     <p className="mt-1 text-xs text-neutral-500">{state.snapshot.files.length} files saved in MongoDB</p>
