@@ -10,6 +10,13 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page.getByTestId('agent-generation-status'))
     .toHaveAttribute('data-status', 'ready', { timeout: 30_000 });
 
+  const generatedPreview = page.frameLocator(
+    '[data-testid="snapshot-preview"] iframe',
+  );
+  await expect(
+    generatedPreview.getByTestId('generated-app'),
+  ).toContainText('Generated app', { timeout: 30_000 });
+
   await page.getByRole('button', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('button', { name: 'src/App.tsx', exact: true }).first()).toBeVisible();
   await expect(page.getByTestId('snapshot-history')).toContainText('active');
@@ -18,4 +25,10 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await page.reload();
   await expect(page.getByRole('button', { name: 'src/App.tsx', exact: true }).first()).toBeVisible();
   await expect(page.getByTestId('snapshot-history')).toContainText('active');
+
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect(
+    page.frameLocator('[data-testid="snapshot-preview"] iframe')
+      .getByTestId('generated-app'),
+  ).toContainText('Generated app', { timeout: 30_000 });
 });
