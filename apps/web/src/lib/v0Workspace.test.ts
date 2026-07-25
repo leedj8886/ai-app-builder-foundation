@@ -8,6 +8,7 @@ import {
   applyWorkspaceSnapshot,
   createInitialWorkspaceState,
   failApiGeneration,
+  resetWorkspaceForChat,
   selectTemplate,
   startApiGeneration,
   submitPrompt,
@@ -148,6 +149,26 @@ describe('v0 workspace state', () => {
 
     assert.equal(state.snapshot?.id, 'snapshot_old')
     assert.equal(state.snapshot?.selectedFilePath, 'src/App.tsx')
+  })
+
+  it('resets stale project state when a new Chat route loads', () => {
+    const previous = applyWorkspaceSnapshot(createInitialWorkspaceState(), {
+      _id: 'snapshot_old',
+      summary: 'Old snapshot',
+      files: [
+        { path: 'src/App.tsx', content: 'export default function App() {}', language: 'tsx' },
+      ],
+      packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+      validation: { status: 'passed', checks: [] },
+    })
+    const next = resetWorkspaceForChat(previous)
+
+    assert.equal(next.screen, 'workspace')
+    assert.equal(next.prompt, '')
+    assert.equal(next.snapshot, undefined)
+    assert.deepEqual(next.snapshots, [])
+    assert.deepEqual(next.runHistory, [])
+    assert.equal(next.generation.status, 'idle')
   })
 
   it('records API generation failures', () => {

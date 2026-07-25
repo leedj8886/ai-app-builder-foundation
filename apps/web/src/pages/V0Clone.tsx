@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowRight,
   CheckCircle2,
@@ -45,8 +46,13 @@ import {
 import row01 from '@/assets/v0/template-row01.png'
 import row02 from '@/assets/v0/template-row02.png'
 import iosLight from '@/assets/v0/ios-light.png'
-import { agentApi, authApi, projectApi } from '@/services/api'
+import { agentApi, authApi, chatApi, projectApi } from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
+import {
+  buildChatPath,
+  buildEditRunRequest,
+  resolveRoutedProjectId,
+} from '@/lib/chatWorkspace'
 import { getSnapshotPreviewState } from '@/lib/snapshotPreview'
 import {
   applyAgentEvent,
@@ -57,6 +63,7 @@ import {
   createInitialWorkspaceState,
   failApiGeneration,
   isCancellableRunId,
+  resetWorkspaceForChat,
   selectTemplate,
   startApiGeneration,
   switchPanel,
@@ -172,8 +179,11 @@ const createDemoProject = async (prompt: string) => {
 }
 
 export function V0Clone() {
+  const navigate = useNavigate()
+  const { chatId } = useParams<{ chatId: string }>()
   const [workspace, setWorkspace] = useState(createInitialWorkspaceState)
   const [draftPrompt, setDraftPrompt] = useState('')
+  const [routeError, setRouteError] = useState<string>()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
   const [model, setModel] = useState('Mock provider')
@@ -181,10 +191,10 @@ export function V0Clone() {
   const [designMode, setDesignMode] = useState(true)
   const [deployOpen, setDeployOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [projectId, setProjectId] = useState(
-    () => localStorage.getItem('v0.activeProjectId') ?? '',
-  )
+  const [projectId, setProjectId] = useState('')
   const refreshRequestRef = useRef(0)
+  const routeRequestRef = useRef(0)
+  const pendingNavigationChatRef = useRef<string | null>(null)
   const rollbackInFlightRef = useRef(false)
   const monitorControllerRef = useRef<AbortController | null>(null)
   const submissionInFlightRef = useRef(false)
@@ -226,26 +236,62 @@ export function V0Clone() {
   }
 
   useEffect(() => {
-    if (!projectId || !localStorage.getItem('token')) return
+    const requestId = ++routeRequestRef.current
+    setRouteError(undefined)
+
+    if (!chatId) {
+      monitorControllerRef.current?.abort()
+      monitorControllerRef.current = null
+      setProjectId('')
+      setWorkspace(createInitialWorkspaceState())
+      return
+    }
+
+    if (pendingNavigationChatRef.current === chatId) {
+      pendingNavigationChatRef.current = null
+      return
+    }
+
+    monitorControllerRef.current?.abort()
+    monitorControllerRef.current = null
+    setProjectId('')
+    setWorkspace((state) => resetWorkspaceForChat(state))
 
     void (async () => {
       try {
-        const snapshots = await refreshProjectData(projectId)
+        const chatResponse = await chatApi.getById(chatId)
+        const routedProjectId = resolveRoutedProjectId(chatResponse.data.chat)
+        if (requestId !== routeRequestRef.current) return
+
+        setProjectId(routedProjectId)
+        setWorkspace((state) => ({
+          ...state,
+          prompt:
+            [...chatResponse.data.chat.messages]
+              .reverse()
+              .find((message) => message.role === 'user')?.content ??
+            chatResponse.data.chat.title,
+        }))
+
+        const snapshots = await refreshProjectData(routedProjectId)
+        if (requestId !== routeRequestRef.current) return
         const activeSnapshotId = snapshots?.find((snapshot) => snapshot.isActive)?.id
-        if (activeSnapshotId) {
-          const snapshotResponse = await projectApi.getSnapshot(projectId, activeSnapshotId)
-          setWorkspace((state) =>
-            state.snapshots.find((snapshot) => snapshot.isActive)?.id === activeSnapshotId
-              ? applyWorkspaceSnapshot(state, snapshotResponse.data.snapshot)
-              : state,
-          )
-        }
-      } catch {
-        localStorage.removeItem('v0.activeProjectId')
-        setProjectId('')
+        if (!activeSnapshotId) return
+
+        const snapshotResponse = await projectApi.getSnapshot(
+          routedProjectId,
+          activeSnapshotId,
+        )
+        if (requestId !== routeRequestRef.current) return
+        setWorkspace((state) =>
+          applyWorkspaceSnapshot(state, snapshotResponse.data.snapshot),
+        )
+      } catch (error) {
+        if (requestId !== routeRequestRef.current) return
+        setRouteError(getErrorMessage(error))
       }
     })()
-  }, [projectId])
+  }, [chatId])
 
   useEffect(() => () => {
     monitorControllerRef.current?.abort()
@@ -261,30 +307,45 @@ export function V0Clone() {
     submissionInFlightRef.current = true
     const submissionId = ++submissionIdRef.current
 
-    setDraftPrompt(prompt)
+    if (!chatId) {
+      setDraftPrompt(prompt)
+    }
     setWorkspace((state) =>
       startApiGeneration(state, prompt, `pending:${crypto.randomUUID()}`),
     )
 
     try {
       let activeProjectId = projectId
-      if (!activeProjectId) {
+      let activeChatId = chatId
+      let runRequest: Parameters<typeof agentApi.createRun>[0]
+
+      if (!activeChatId) {
         activeProjectId = await createDemoProject(prompt)
-        setProjectId(activeProjectId)
-        localStorage.setItem('v0.activeProjectId', activeProjectId)
+        const chatResponse = await chatApi.create(prompt, activeProjectId)
+        activeChatId = chatResponse.data.chat._id
+        runRequest = {
+          projectId: activeProjectId,
+          chatId: activeChatId,
+          prompt,
+          mode: 'create',
+        }
+      } else {
+        runRequest = buildEditRunRequest({
+          chatId: activeChatId,
+          projectId: activeProjectId,
+          prompt,
+          activeSnapshotId: workspace.snapshot?.id,
+        })
       }
-      let mode: 'create' | 'edit' = workspace.snapshot ? 'edit' : 'create'
-      if (mode === 'create' && projectId) {
-        const projectResponse = await projectApi.getById(activeProjectId)
-        mode = projectResponse.data.project.activeSnapshotId ? 'edit' : 'create'
-      }
-      const runResponse = await agentApi.createRun({
-        projectId: activeProjectId,
-        prompt,
-        mode,
-      })
+
+      const runResponse = await agentApi.createRun(runRequest)
 
       if (submissionId !== submissionIdRef.current) return
+      if (!chatId) {
+        setProjectId(activeProjectId)
+        pendingNavigationChatRef.current = activeChatId
+        navigate(buildChatPath(activeChatId))
+      }
 
       monitorControllerRef.current?.abort()
       const controller = new AbortController()
@@ -338,15 +399,7 @@ export function V0Clone() {
     submissionInFlightRef.current = false
     monitorControllerRef.current?.abort()
     monitorControllerRef.current = null
-    setWorkspace((state) => ({
-      ...state,
-      screen: 'home',
-      prompt: '',
-      generation: {
-        status: 'idle',
-        steps: [],
-      },
-    }))
+    navigate('/')
   }
 
   const handleRollback = async (snapshotId: string) => {
@@ -401,7 +454,20 @@ export function V0Clone() {
         onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
       />
 
-      {workspace.screen === 'home' ? (
+      {routeError ? (
+        <main className="mx-auto flex min-h-[calc(100vh-48px)] max-w-xl items-center px-6 text-center">
+          <div className="w-full rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-950">
+            <p className="font-medium">Unable to load this conversation</p>
+            <p className="mt-2" data-testid="chat-route-error">{routeError}</p>
+            <button
+              className="mt-4 rounded-md bg-neutral-950 px-3 py-2 text-white"
+              onClick={handleBackHome}
+            >
+              Start a new chat
+            </button>
+          </div>
+        </main>
+      ) : workspace.screen === 'home' ? (
         <main className="mx-auto w-full max-w-[1240px] px-3 pb-16 pt-20 sm:px-6 lg:pt-32">
           <section className="mx-auto flex max-w-[720px] flex-col items-center text-center">
             <h1 className="text-[28px] font-semibold leading-tight sm:text-[30px]">

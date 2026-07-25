@@ -192,6 +192,14 @@ export const createInitialWorkspaceState = (): WorkspaceState => ({
   runHistory: [],
 })
 
+export const resetWorkspaceForChat = (
+  state: WorkspaceState,
+): WorkspaceState => ({
+  ...createInitialWorkspaceState(),
+  selectedTemplateId: state.selectedTemplateId,
+  screen: 'workspace',
+})
+
 const toWorkspaceSnapshot = (
   snapshot: NonNullable<AgentRunDetail['resultSnapshot']>,
 ): WorkspaceSnapshot => ({
