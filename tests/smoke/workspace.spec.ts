@@ -3,6 +3,11 @@ import { expect, test } from '@playwright/test';
 test('workspace completes a streamed run and restores its active snapshot', async ({ page }) => {
   const prompt = `Phase 6 browser smoke ${Date.now()}`;
   await page.goto('/');
+  await expect(page.getByRole('navigation')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Toggle navigation' })).toHaveCount(0);
+  await expect(page.getByText('Templates', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Resources', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Enterprise', { exact: true })).toHaveCount(0);
   await page.getByPlaceholder('让 v0 构建...').fill(prompt);
   await page.getByLabel('Build prompt').click();
 

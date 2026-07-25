@@ -25,7 +25,6 @@ import {
   Image,
   LineChart,
   Mail,
-  Menu,
   Mic,
   Monitor,
   Palette,
@@ -38,7 +37,6 @@ import {
   UploadCloud,
   Upload,
   Users,
-  X,
   Zap,
 } from 'lucide-react'
 import row01 from '@/assets/v0/template-row01.png'
@@ -185,7 +183,6 @@ export function V0Clone() {
   const [editDraft, setEditDraft] = useState('')
   const [submissionPending, setSubmissionPending] = useState(false)
   const [routeError, setRouteError] = useState<string>()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
   const [model, setModel] = useState('Mock provider')
   const [category, setCategory] = useState<'all' | Template['category']>('all')
@@ -457,10 +454,7 @@ export function V0Clone() {
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-neutral-950 antialiased">
-      <TopNav
-        mobileMenuOpen={mobileMenuOpen}
-        onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
-      />
+      <TopNav />
 
       {routeError ? (
         <main className="mx-auto flex min-h-[calc(100vh-48px)] max-w-xl items-center px-6 text-center">
@@ -674,29 +668,13 @@ export function V0Clone() {
   )
 }
 
-function TopNav({
-  mobileMenuOpen,
-  onToggleMobileMenu,
-}: {
-  mobileMenuOpen: boolean
-  onToggleMobileMenu: () => void
-}) {
+function TopNav() {
   return (
     <header className="sticky top-0 z-30 border-b border-neutral-200 bg-[#fafafa]/95 backdrop-blur">
       <div className="mx-auto flex h-12 max-w-[1440px] items-center justify-between px-3 sm:px-4">
         <button className="flex h-8 items-center gap-2 rounded-md text-left" aria-label="v0 home">
           <span className="text-[21px] font-black leading-none tracking-normal">v0</span>
         </button>
-
-        <nav className="hidden items-center gap-6 text-sm text-neutral-600 md:flex">
-          <NavMenu label="Templates" items={['Apps and Games', 'Landing Pages', 'Dashboards']} />
-          <NavMenu label="Resources" items={['Docs', 'Community', 'Enterprise Guide']} />
-          <a className="hover:text-neutral-950" href="#enterprise">Enterprise</a>
-          <a className="hover:text-neutral-950" href="#pricing">Pricing</a>
-          <a className="hover:text-neutral-950" href="#ios">iOS</a>
-          <a className="hover:text-neutral-950" href="#students">Students</a>
-          <a className="hover:text-neutral-950" href="#faq">FAQ</a>
-        </nav>
 
         <div className="hidden items-center gap-2 md:flex">
           <button className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-sm hover:bg-neutral-50">
@@ -707,59 +685,8 @@ function TopNav({
           </button>
         </div>
 
-        <button
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 bg-white md:hidden"
-          onClick={onToggleMobileMenu}
-          aria-label="Toggle navigation"
-        >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
       </div>
-
-      {mobileMenuOpen ? (
-        <div className="border-t border-neutral-200 bg-white p-3 md:hidden">
-          {['Templates', 'Resources', 'Enterprise', 'Pricing', 'iOS', 'Students', 'FAQ'].map((item) => (
-            <button
-              key={item}
-              className="flex h-10 w-full items-center justify-between rounded-md px-2 text-sm text-neutral-700 hover:bg-neutral-100"
-            >
-              {item}
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          ))}
-        </div>
-      ) : null}
     </header>
-  )
-}
-
-function NavMenu({ label, items }: { label: string; items: string[] }) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="relative">
-      <button
-        className="inline-flex items-center gap-1 hover:text-neutral-950"
-        onClick={() => setOpen((value) => !value)}
-      >
-        {label}
-        <ChevronDown className="h-3.5 w-3.5" />
-      </button>
-      {open ? (
-        <div className="absolute left-1/2 top-8 w-52 -translate-x-1/2 rounded-lg border border-neutral-200 bg-white p-1 shadow-xl">
-          {items.map((item) => (
-            <button
-              key={item}
-              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
-              onClick={() => setOpen(false)}
-            >
-              {item}
-              <ArrowRight className="h-4 w-4 text-neutral-400" />
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
   )
 }
 
