@@ -217,11 +217,51 @@ test('ignores malformed live messages and still cleans up', async () => {
 
   subscriber.publish('{not json');
   subscriber.publish({ ...event(2), sequence: 'not-a-number' });
+  subscriber.publish({ ...event(2), type: 'not-an-agent-event' });
+  subscriber.publish({ ...event(2), type: 'agent.step\nforged' });
   subscriber.publish(event(3));
 
-  assert.deepEqual(streamedSequences(res), [3]);
+  const sequences = streamedSequences(res);
   req.close();
   await Promise.resolve();
+  assert.deepEqual(sequences, [3]);
+  assert.equal(subscriber.quitCalls, 1);
+});
+
+test('times out a stalled subscription without loading durable events', async () => {
+  const req = new FakeRequest();
+  const res = new FakeResponse();
+  const subscriber = new FakeSubscriber();
+  subscriber.subscribeGate = new Promise<void>(() => undefined);
+  let loadStarted = false;
+  const streaming = streamAgentRunEvents({
+    runId: 'run-1',
+    userId: 'user-1',
+    req,
+    res,
+    subscriber,
+    loadEvents: async () => {
+      loadStarted = true;
+      return [];
+    },
+    heartbeatMs: 60_000,
+    subscribeTimeoutMs: 5
+  });
+
+  const result = await Promise.race([
+    streaming.then(
+      () => 'resolved',
+      () => 'rejected'
+    ),
+    new Promise<'still-waiting'>((resolve) => setTimeout(() => resolve('still-waiting'), 20))
+  ]);
+
+  assert.equal(result, 'rejected');
+  assert.equal(loadStarted, false);
+  assert.equal(res.endCalls, 1);
+  assert.equal(subscriber.quitCalls, 1);
+  req.close();
+  assert.equal(res.endCalls, 1);
   assert.equal(subscriber.quitCalls, 1);
 });
 

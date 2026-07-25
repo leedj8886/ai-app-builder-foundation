@@ -1,6 +1,6 @@
 import { AgentEvent } from '../models/AgentEvent';
 import { agentRunChannel, serializeAgentEvent } from './eventBus';
-import { AgentEventType } from './types';
+import { agentEventTypes, AgentEventType } from './types';
 
 export interface PublicAgentEvent {
   id: string;
@@ -42,9 +42,12 @@ export interface StreamAgentRunEventsInput {
     lastEventId?: number;
   }) => Promise<PublicAgentEvent[]>;
   heartbeatMs?: number;
+  subscribeTimeoutMs?: number;
 }
 
 const DEFAULT_HEARTBEAT_MS = 15_000;
+const DEFAULT_SUBSCRIBE_TIMEOUT_MS = 5_000;
+const publicAgentEventTypes = new Set<string>(agentEventTypes);
 
 const loadDurableEvents = async ({
   runId,
@@ -75,6 +78,7 @@ const isPublicAgentEvent = (value: unknown, runId: string): value is PublicAgent
     Number.isInteger(event.sequence) &&
     event.sequence >= 0 &&
     typeof event.type === 'string' &&
+    publicAgentEventTypes.has(event.type) &&
     typeof event.message === 'string' &&
     typeof event.createdAt === 'string'
   );
@@ -91,7 +95,8 @@ export const streamAgentRunEvents = async ({
   res,
   subscriber,
   loadEvents = loadDurableEvents,
-  heartbeatMs = DEFAULT_HEARTBEAT_MS
+  heartbeatMs = DEFAULT_HEARTBEAT_MS,
+  subscribeTimeoutMs = DEFAULT_SUBSCRIBE_TIMEOUT_MS
 }: StreamAgentRunEventsInput): Promise<void> => {
   let closed = false;
   let backlogLoaded = false;
@@ -166,7 +171,18 @@ export const streamAgentRunEvents = async ({
   res.on?.('error', cleanup);
 
   try {
-    await subscriber.subscribe(agentRunChannel(runId));
+    let subscribeTimeout: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_resolve, reject) => {
+      subscribeTimeout = setTimeout(() => {
+        reject(new Error('Timed out subscribing to agent event stream'));
+      }, subscribeTimeoutMs);
+    });
+
+    try {
+      await Promise.race([subscriber.subscribe(agentRunChannel(runId)), timedOut]);
+    } finally {
+      if (subscribeTimeout) clearTimeout(subscribeTimeout);
+    }
     if (closed) return;
 
     heartbeat = setInterval(writeHeartbeat, heartbeatMs);
