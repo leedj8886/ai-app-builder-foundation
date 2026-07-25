@@ -10,6 +10,7 @@ import { loadAgentContext } from './contextBuilder';
 import { mergeProjectPackageJson } from './dependencies';
 import { emitAgentEvent } from './eventBus';
 import { applyFileOperations } from './fileOperations';
+import { resolveProjectBaseFiles } from './projectTemplate';
 import { assertAgentRunTransition } from './stateMachine';
 import {
   AgentContext,
@@ -442,10 +443,20 @@ export const processAgentRun = async (
     const basePackageJson = baseSnapshot
       ? baseSnapshot.toObject().packageJson
       : undefined;
+    const baseFiles = resolveProjectBaseFiles(
+      baseSnapshot
+        ? baseSnapshot.files.map(file => ({
+            path: file.path,
+            content: file.content,
+            language: file.language,
+            generatedByRunId: file.generatedByRunId
+          }))
+        : undefined
+    );
 
     const generation = await runAgentGenerationWithValidation({
       context,
-      baseFiles: baseSnapshot?.files ?? [],
+      baseFiles,
       basePackageJson,
       generatedByRunId: run._id,
       modelClient,

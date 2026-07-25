@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildAgentContext } from './contextBuilder';
+import { createProjectTemplateFiles } from './projectTemplate';
 
 const input = {
   prompt: 'Add a task filter',
@@ -64,4 +65,25 @@ test('buildAgentContext applies the character limit to oversized chat content', 
   assert.ok(JSON.stringify(context).length < 500);
   assert.ok((context.messages[0]?.content.length ?? 0) < 200);
   assert.equal(context.files.every(file => file.content === undefined), true);
+});
+
+test('buildAgentContext includes the Create template file contents', () => {
+  const templateFiles = createProjectTemplateFiles();
+  const context = buildAgentContext({
+    ...input,
+    mode: 'create',
+    files: templateFiles.map(file => ({
+      path: file.path,
+      content: file.content
+    }))
+  }, 20_000);
+
+  assert.deepEqual(
+    context.files.map(file => file.path),
+    ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx']
+  );
+  assert.equal(
+    context.files.find(file => file.path === 'index.html')?.content?.includes('/src/main.tsx'),
+    true
+  );
 });

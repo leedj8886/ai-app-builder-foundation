@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import type { Worker } from 'bullmq';
+import type { ModelClient } from '../agent/types';
 import { createAgentWorker } from '../agent/createWorker';
 import { emitAgentEvent } from '../agent/eventBus';
 import { enqueueAgentRun } from '../agent/queue';
@@ -77,7 +78,7 @@ const waitForTerminalRun = async (runId: string) => {
 };
 
 const withWorker = async (
-  modelClient: ReturnType<typeof createFakeModelClient>,
+  modelClient: ModelClient,
   validator: ReturnType<typeof createPassingValidator> | ReturnType<typeof createFailOnceValidator>,
   action: (worker: Worker) => Promise<void>
 ) => {
@@ -95,6 +96,56 @@ const withWorker = async (
     await worker.close();
   }
 };
+
+test('BullMQ Create run seeds required files when the model only updates App', async () => {
+  const { run } = await createQueuedRun();
+  const modelClient: ModelClient = {
+    generatePlan: async input => {
+      assert.deepEqual(
+        input.context.files.map(file => file.path),
+        ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx']
+      );
+      return {
+        value: {
+          summary: 'Build app',
+          steps: [{
+            title: 'Update App',
+            intent: 'Render the app',
+            filesLikelyTouched: ['src/App.tsx']
+          }],
+          assumptions: []
+        }
+      };
+    },
+    generateFiles: async () => ({
+      value: {
+        message: 'Updated App',
+        operations: [{
+          type: 'update',
+          path: 'src/App.tsx',
+          content: 'export default function App() { return <main>Real app</main>; }'
+        }],
+        dependencies: {},
+        devDependencies: {}
+      }
+    }),
+    repairFiles: async () => {
+      throw new Error('repair should not run');
+    }
+  };
+
+  await enqueueAgentRun(run._id.toString());
+  await withWorker(modelClient, createPassingValidator(), async () => {
+    const completed = await waitForTerminalRun(run._id.toString());
+    assert.equal(completed.status, 'completed');
+  });
+
+  const snapshot = await ProjectSnapshot.findOne({ sourceRunId: run._id });
+  assert.deepEqual(
+    snapshot?.files.map(file => file.path),
+    ['index.html', 'package.json', 'src/App.tsx', 'src/index.css', 'src/main.tsx']
+  );
+});
 
 test('BullMQ worker completes a create run and activates one passing snapshot', async () => {
   const { project, run } = await createQueuedRun();

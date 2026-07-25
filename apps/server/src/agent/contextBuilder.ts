@@ -7,6 +7,7 @@ import {
   AgentContextMessage,
   AgentRunMode
 } from './types';
+import { resolveProjectBaseFiles } from './projectTemplate';
 
 interface ContextBuilderInput {
   prompt: string;
@@ -115,6 +116,16 @@ export const loadAgentContext = async (
     throw agentError('INVALID_BASE_SNAPSHOT', 'Edit mode requires a valid base snapshot');
   }
 
+  const contextFiles = resolveProjectBaseFiles(
+    baseSnapshot
+      ? baseSnapshot.files.map(file => ({
+          path: file.path,
+          content: file.content,
+          language: file.language
+        }))
+      : undefined
+  );
+
   return buildAgentContext({
     prompt: run.prompt,
     mode: run.mode,
@@ -127,9 +138,9 @@ export const loadAgentContext = async (
       role: message.role,
       content: message.content
     })) ?? [],
-    files: baseSnapshot?.files.map(file => ({
+    files: contextFiles.map(file => ({
       path: file.path,
       content: file.content
-    })) ?? []
+    }))
   }, contextCharLimit);
 };

@@ -6,6 +6,7 @@ import {
   runAgentGenerationWithValidation
 } from './orchestrator';
 import { AgentContext, ModelClient } from './types';
+import { createProjectTemplateFiles } from './projectTemplate';
 
 test('buildPhaseOneWorkerEvents returns fake processing steps', () => {
   const events = buildPhaseOneWorkerEvents();
@@ -101,6 +102,69 @@ test('runAgentGeneration plans before generating and applies file operations', a
     'file.changed'
   ]);
   assert.deepEqual(events[1].payload, plan);
+});
+
+test('Create generation keeps required template files when the model only updates App', async () => {
+  const templateFiles = createProjectTemplateFiles();
+  const context: AgentContext = {
+    prompt: 'Build a contact form',
+    mode: 'create',
+    project: {
+      name: 'Contact',
+      framework: 'react',
+      styling: 'tailwind',
+      uiLibrary: 'none'
+    },
+    messages: [],
+    files: templateFiles.map(file => ({
+      path: file.path,
+      content: file.content
+    }))
+  };
+  const modelClient: ModelClient = {
+    generatePlan: async () => ({
+      value: {
+        summary: 'Build contact form',
+        steps: [{
+          title: 'Update App',
+          intent: 'Render the form',
+          filesLikelyTouched: ['src/App.tsx']
+        }],
+        assumptions: []
+      }
+    }),
+    generateFiles: async () => ({
+      value: {
+        message: 'Created contact form',
+        operations: [{
+          type: 'update',
+          path: 'src/App.tsx',
+          content: 'export default function App() { return <main>Contact</main>; }'
+        }],
+        dependencies: {},
+        devDependencies: {}
+      }
+    }),
+    repairFiles: async () => {
+      throw new Error('repair should not run');
+    }
+  };
+
+  const result = await runAgentGeneration({
+    context,
+    baseFiles: templateFiles,
+    modelClient,
+    onEvent: async () => undefined
+  });
+
+  assert.deepEqual(
+    result.files.map(file => file.path),
+    ['index.html', 'package.json', 'src/App.tsx', 'src/index.css', 'src/main.tsx']
+  );
+  assert.match(
+    result.files.find(file => file.path === 'src/App.tsx')?.content ?? '',
+    /Contact/
+  );
 });
 
 test('runAgentGenerationWithValidation repairs once and then passes', async () => {
