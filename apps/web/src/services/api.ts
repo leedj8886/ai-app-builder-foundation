@@ -124,6 +124,67 @@ export interface RoutedChat {
   updatedAt: string;
 }
 
+export type ChatTimelineStatus = AgentRun['status'];
+
+export interface ChatTimelineEvent {
+  type: string;
+  sequence: number;
+  message: string;
+  payload?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ChatTimelinePlan {
+  summary: string;
+  steps: Array<{
+    title: string;
+    intent: string;
+    filesLikelyTouched: string[];
+  }>;
+  assumptions: string[];
+}
+
+export interface ChatTimelineTurn {
+  runId: string;
+  userMessage: {
+    content: string;
+    createdAt: string;
+  };
+  agent: {
+    status: ChatTimelineStatus;
+    model: string;
+    startedAt?: string;
+    completedAt?: string;
+    durationMs?: number;
+    planningDurationMs?: number;
+    summary?: string;
+    plan?: ChatTimelinePlan;
+    events: ChatTimelineEvent[];
+    error?: {
+      code?: string;
+      message: string;
+    };
+  };
+  snapshot?: {
+    id: string;
+    summary: string;
+    changedFiles: string[];
+  };
+}
+
+export interface ChatTimelineResponse {
+  chat: {
+    id: string;
+    title: string;
+    projectId: string;
+  };
+  turns: ChatTimelineTurn[];
+  pageInfo: {
+    hasMore: boolean;
+    nextBefore?: string;
+  };
+}
+
 export const agentApi = {
   createRun: (data: {
     projectId: string;
@@ -145,6 +206,12 @@ export const agentApi = {
 export const chatApi = {
   getAll: () => api.get<{ chats: RoutedChat[] }>('/api/chat'),
   getById: (id: string) => api.get<{ chat: RoutedChat }>(`/api/chat/${id}`),
+  getTimeline: (
+    id: string,
+    options: { limit?: number; before?: string } = {},
+  ) => api.get<ChatTimelineResponse>(`/api/chat/${id}/timeline`, {
+    params: options,
+  }),
   create: (titleSeed: string, projectId: string) =>
     api.post<{ chat: RoutedChat }>('/api/chat', { titleSeed, projectId }),
   sendMessage: (id: string, content: string) =>
