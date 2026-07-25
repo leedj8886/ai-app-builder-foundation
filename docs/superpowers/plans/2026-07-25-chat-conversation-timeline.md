@@ -1,6 +1,6 @@
 # Chat Conversation Timeline Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the workspace's flat Agent Plan panel with a persistent chronological timeline of user messages, structured Agent activity, results, and collapsible historical turns.
 
@@ -55,7 +55,7 @@ directory is also local-only and must not be committed.
 - Create: `apps/server/src/agent/chatTimeline.test.ts`
 - Modify: `apps/server/src/models/AgentRun.ts`
 
-- [ ] **Step 1: Write failing projection and cursor tests**
+- [x] **Step 1: Write failing projection and cursor tests**
 
 Create `apps/server/src/agent/chatTimeline.test.ts` with focused tests:
 
@@ -153,7 +153,7 @@ test('preserves failed and incomplete Runs without requiring a Snapshot', () => 
 });
 ```
 
-- [ ] **Step 2: Run the unit test and verify RED**
+- [x] **Step 2: Run the unit test and verify RED**
 
 Run:
 
@@ -163,7 +163,7 @@ npm test --workspace @v0/server -- --test-name-pattern="cursor|timeline turn|inc
 
 Expected: FAIL because `chatTimeline.ts` does not exist.
 
-- [ ] **Step 3: Implement the projection and cursor**
+- [x] **Step 3: Implement the projection and cursor**
 
 Create `apps/server/src/agent/chatTimeline.ts` with exported response types and:
 
@@ -205,7 +205,7 @@ Implement `buildChatTimelineTurn` so it:
 - uses the Snapshot summary as the completed Agent summary;
 - returns failed/cancelled Runs even without a Snapshot.
 
-- [ ] **Step 4: Add the query index**
+- [x] **Step 4: Add the query index**
 
 Add to `apps/server/src/models/AgentRun.ts`:
 
@@ -213,7 +213,7 @@ Add to `apps/server/src/models/AgentRun.ts`:
 AgentRunSchema.index({ userId: 1, chatId: 1, createdAt: -1 });
 ```
 
-- [ ] **Step 5: Run backend unit verification**
+- [x] **Step 5: Run backend unit verification**
 
 Run:
 
@@ -224,7 +224,7 @@ npm run type-check --workspace @v0/server
 
 Expected: all server unit tests pass and TypeScript exits with code 0.
 
-- [ ] **Step 6: Commit the backend projection**
+- [x] **Step 6: Commit the backend projection**
 
 ```bash
 git add \
@@ -240,7 +240,7 @@ git commit -m "feat: project agent runs into chat turns"
 - Modify: `apps/server/src/routes/chat.ts`
 - Modify: `apps/server/src/integration/agentRoutes.integration.ts`
 
-- [ ] **Step 1: Write failing integration coverage**
+- [x] **Step 1: Write failing integration coverage**
 
 Add an integration test that creates:
 
@@ -285,7 +285,7 @@ await request(app)
 Also assert that the completed turn contains its plan and one deduplicated
 changed path, while the failed turn contains its error.
 
-- [ ] **Step 2: Run the integration test and verify RED**
+- [x] **Step 2: Run the integration test and verify RED**
 
 Run:
 
@@ -296,7 +296,7 @@ npm run test:integration --workspace @v0/server -- \
 
 Expected: FAIL with HTTP 404 because the timeline route does not exist.
 
-- [ ] **Step 3: Implement the route**
+- [x] **Step 3: Implement the route**
 
 In `apps/server/src/routes/chat.ts`, register
 `GET /:id/timeline` before `GET /:id`.
@@ -328,7 +328,7 @@ page for chronological display.
 
 Return malformed cursors as HTTP 400 with `Invalid timeline cursor`.
 
-- [ ] **Step 4: Run backend verification**
+- [x] **Step 4: Run backend verification**
 
 Run:
 
@@ -340,7 +340,7 @@ npm run type-check --workspace @v0/server
 
 Expected: integration, unit, and type checks pass.
 
-- [ ] **Step 5: Commit the timeline endpoint**
+- [x] **Step 5: Commit the timeline endpoint**
 
 ```bash
 git add \
@@ -356,7 +356,7 @@ git commit -m "feat: expose chat conversation timeline"
 - Create: `apps/web/src/lib/chatTimeline.ts`
 - Create: `apps/web/src/lib/chatTimeline.test.ts`
 
-- [ ] **Step 1: Write failing frontend state tests**
+- [x] **Step 1: Write failing frontend state tests**
 
 Create `apps/web/src/lib/chatTimeline.test.ts` covering:
 
@@ -407,7 +407,7 @@ test('prepends older pages without duplicating turns', () => {
 Define local `turn`, `event`, and `page` fixture builders in the test file with
 complete required fields.
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -417,7 +417,7 @@ npm test --workspace @v0/web -- --test-name-pattern="turns by default|streamed e
 
 Expected: FAIL because `chatTimeline.ts` does not exist.
 
-- [ ] **Step 3: Add API types and client**
+- [x] **Step 3: Add API types and client**
 
 In `apps/web/src/services/api.ts`, add exact `ChatTimelineResponse`,
 `ChatTimelineTurn`, `ChatTimelineAgent`, and `ChatTimelineEvent` interfaces
@@ -434,7 +434,7 @@ getTimeline: (
 }),
 ```
 
-- [ ] **Step 4: Implement frontend timeline state**
+- [x] **Step 4: Implement frontend timeline state**
 
 Create `apps/web/src/lib/chatTimeline.ts` with:
 
@@ -470,7 +470,7 @@ Implement pure immutable transitions for:
 
 Do not put React hooks or network requests in this module.
 
-- [ ] **Step 5: Run frontend unit and type verification**
+- [x] **Step 5: Run frontend unit and type verification**
 
 Run:
 
@@ -481,7 +481,7 @@ npm run type-check --workspace @v0/web
 
 Expected: all web tests pass and TypeScript exits with code 0.
 
-- [ ] **Step 6: Commit timeline state**
+- [x] **Step 6: Commit timeline state**
 
 ```bash
 git add \
@@ -497,7 +497,7 @@ git commit -m "feat: model chat conversation timeline"
 - Create: `apps/web/src/components/ConversationTimeline.tsx`
 - Modify: `apps/web/src/lib/chatTimeline.test.ts`
 
-- [ ] **Step 1: Add presentation-helper tests**
+- [x] **Step 1: Add presentation-helper tests**
 
 Extend `chatTimeline.test.ts` to assert:
 
@@ -507,7 +507,7 @@ Extend `chatTimeline.test.ts` to assert:
 - `canToggleTurn` returns false for active statuses and true for terminal
   statuses.
 
-- [ ] **Step 2: Run helper tests and verify RED**
+- [x] **Step 2: Run helper tests and verify RED**
 
 Run:
 
@@ -518,7 +518,7 @@ npm test --workspace @v0/web -- \
 
 Expected: FAIL because the presentation helpers are not implemented.
 
-- [ ] **Step 3: Implement presentation helpers**
+- [x] **Step 3: Implement presentation helpers**
 
 Add pure helpers to `chatTimeline.ts`:
 
@@ -541,7 +541,7 @@ export const formatPlanningDuration = (durationMs?: number): string | undefined 
 Build the collapsed label from status, summary/error, unique changed-file count,
 and total duration.
 
-- [ ] **Step 4: Implement the component tree**
+- [x] **Step 4: Implement the component tree**
 
 Create `ConversationTimeline.tsx` exporting one public component:
 
@@ -581,7 +581,7 @@ Requirements:
   `agent-turn-summary-<runId>`, and `agent-turn-detail-<runId>`;
 - show `加载更早对话`, loading, empty, degraded, and retry states.
 
-- [ ] **Step 5: Add bottom-aware autoscroll**
+- [x] **Step 5: Add bottom-aware autoscroll**
 
 In `ConversationTimeline`, keep a scroll container ref and a bottom sentinel.
 Before an update, treat the reader as pinned when:
@@ -593,7 +593,7 @@ scrollHeight - scrollTop - clientHeight <= 80
 After a new event or turn, scroll the sentinel into view only if pinned. Loading
 older pages must preserve the previous scroll height offset.
 
-- [ ] **Step 6: Run component build verification**
+- [x] **Step 6: Run component build verification**
 
 Run:
 
@@ -606,7 +606,7 @@ npm run build --workspace @v0/web
 Expected: tests, type-check, and production build pass. The existing
 `SnapshotPreview` chunk warning may remain.
 
-- [ ] **Step 7: Commit the component**
+- [x] **Step 7: Commit the component**
 
 ```bash
 git add \
@@ -622,7 +622,7 @@ git commit -m "feat: render collapsible agent conversation turns"
 - Modify: `apps/web/src/pages/V0Clone.tsx`
 - Modify: `apps/web/src/lib/chatTimeline.test.ts`
 
-- [ ] **Step 1: Add state-transition regression tests**
+- [x] **Step 1: Add state-transition regression tests**
 
 Add tests for:
 
@@ -632,7 +632,7 @@ Add tests for:
 - ignoring events for a stale Run;
 - resetting all turns when `chatId` changes.
 
-- [ ] **Step 2: Run the regression tests and verify RED**
+- [x] **Step 2: Run the regression tests and verify RED**
 
 Run:
 
@@ -643,7 +643,7 @@ npm test --workspace @v0/web -- \
 
 Expected: FAIL until the missing transitions are implemented.
 
-- [ ] **Step 3: Add timeline state and loaders to `V0Clone`**
+- [x] **Step 3: Add timeline state and loaders to `V0Clone`**
 
 Add:
 
@@ -677,7 +677,7 @@ On a Chat route load, request Chat metadata, timeline, Runs/Snapshots, and the
 active Snapshot. Reset timeline state and invalidate the request counter when
 `chatId` changes.
 
-- [ ] **Step 4: Merge Run submission and SSE into the timeline**
+- [x] **Step 4: Merge Run submission and SSE into the timeline**
 
 After `agentApi.createRun` returns:
 
@@ -693,7 +693,7 @@ Do not remove `monitorAgentRun`; reuse its `onEvent` callback for both workspace
 progress and timeline progress. Retain `generation.steps` as internal Preview
 compatibility state, but stop rendering it in the left panel.
 
-- [ ] **Step 5: Replace the left-panel activity UI**
+- [x] **Step 5: Replace the left-panel activity UI**
 
 In `WorkspaceScreen`:
 
@@ -707,7 +707,7 @@ In `WorkspaceScreen`:
 
 Pass Timeline props and callbacks from `V0Clone` through `WorkspaceScreen`.
 
-- [ ] **Step 6: Run frontend verification**
+- [x] **Step 6: Run frontend verification**
 
 Run:
 
@@ -720,7 +720,7 @@ npm run build --workspace @v0/web
 Expected: all web tests pass, type-check/build exit with code 0, and only the
 existing large preview chunk warning remains.
 
-- [ ] **Step 7: Commit the integration**
+- [x] **Step 7: Commit the integration**
 
 ```bash
 git add \
@@ -737,7 +737,7 @@ git commit -m "feat: connect workspace to chat timeline"
 - Modify: `tests/smoke/workspace.spec.ts`
 - Modify: `docs/superpowers/plans/2026-07-25-chat-conversation-timeline.md`
 
-- [ ] **Step 1: Make deterministic Edit output effective**
+- [x] **Step 1: Make deterministic Edit output effective**
 
 In `createFakeModelClient`, make `generateFiles` inspect
 `input.context.mode`. Keep the existing Create result; for Edit, update
@@ -770,7 +770,7 @@ generateFiles: async input => {
 Add a fake-client unit test that calls Create and Edit and asserts their
 `src/App.tsx` contents differ.
 
-- [ ] **Step 2: Update the browser smoke assertions**
+- [x] **Step 2: Update the browser smoke assertions**
 
 Replace old `agent-timeline` assertions with:
 
@@ -799,7 +799,7 @@ await expect(turns.nth(1).locator('[data-testid^="agent-turn-summary-"]'))
 Click the first summary and verify its plan and changed file are restored.
 Reload the route and repeat the two-turn count and default expansion assertions.
 
-- [ ] **Step 3: Run deterministic smoke and verify GREEN**
+- [x] **Step 3: Run deterministic smoke and verify GREEN**
 
 Run:
 
@@ -813,7 +813,7 @@ npm run test:smoke
 
 Expected: API smoke and one Playwright scenario pass.
 
-- [ ] **Step 4: Run full repository verification**
+- [x] **Step 4: Run full repository verification**
 
 Run:
 
@@ -830,7 +830,7 @@ git diff --check
 Expected: all commands pass. Record exact test counts and any existing build
 warning.
 
-- [ ] **Step 5: Commit smoke coverage**
+- [x] **Step 5: Commit smoke coverage**
 
 ```bash
 git add \
@@ -839,7 +839,7 @@ git add \
 git commit -m "test: cover chat conversation timeline"
 ```
 
-- [ ] **Step 6: Refresh the retained local stack**
+- [x] **Step 6: Refresh the retained local stack**
 
 Run:
 
@@ -866,7 +866,7 @@ curl -fsS http://127.0.0.1:43001/health
 
 Expected: Web, API, Worker, MongoDB, and Redis are running; API health is `ok`.
 
-- [ ] **Step 7: Record execution results and commit the plan**
+- [x] **Step 7: Record execution results and commit the plan**
 
 Append exact commits, test counts, smoke result, retained service state, build
 warnings, and preserved unrelated changes under `Execution Results`.
@@ -876,7 +876,7 @@ git add docs/superpowers/plans/2026-07-25-chat-conversation-timeline.md
 git commit -m "docs: complete chat timeline plan"
 ```
 
-- [ ] **Step 8: Verify final local Git state**
+- [x] **Step 8: Verify final local Git state**
 
 Run:
 
@@ -887,3 +887,28 @@ git log -8 --oneline
 
 Expected: only the pre-existing `orchestrator` changes and local
 `.superpowers/` directory remain uncommitted. Do not push.
+
+## Execution Results
+
+- Backend projection: `2bef71c feat: project agent runs into chat turns`
+- Timeline API: `6c74fd3 feat: expose chat conversation timeline`
+- Frontend state: `0dc8a3e feat: model chat conversation timeline`
+- Timeline UI: `7875647 feat: render collapsible agent conversation turns`
+- Workspace integration: `22fc324 feat: connect workspace to chat timeline`
+- Smoke coverage: `a747fe3 test: cover chat conversation timeline`
+- Server unit tests: 92 passed.
+- Server integration tests: 13 passed.
+- Web unit tests: 68 passed.
+- Server and Web type checks passed.
+- Server and Web production builds passed.
+- Deterministic API smoke passed; Playwright workspace smoke passed (1 test,
+  41.4 seconds).
+- `git diff --check` passed.
+- The retained `phase6-manual` stack is running with healthy Web, API,
+  MongoDB, and Redis services plus the Agent Worker. API health returned
+  `{"status":"ok"}`.
+- The Web build retains the existing `SnapshotPreview` chunk-size warning
+  (`619.76 kB`, `209.47 kB` gzip).
+- Pre-existing changes in `apps/server/src/agent/orchestrator.ts` and
+  `apps/server/src/agent/orchestrator.test.ts`, plus local `.superpowers/`
+  artifacts, were preserved and excluded from timeline commits.
