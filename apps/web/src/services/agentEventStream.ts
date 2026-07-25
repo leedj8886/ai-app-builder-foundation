@@ -15,7 +15,7 @@ export interface StreamAgentEventsOptions {
   lastEventId?: number
   maxReconnectAttempts?: number
   fetchImpl?: FetchImplementation
-  sleep: Sleep
+  sleep?: Sleep
   onEvent: (event: AgentEvent) => void | Promise<void>
   onState?: (state: AgentStreamState) => void
 }
@@ -86,6 +86,25 @@ const waitForAbort = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> 
     )
   })
 }
+
+const defaultAbortableSleep: Sleep = (durationMs, signal) => new Promise<void>((resolve, reject) => {
+  if (signal.aborted) {
+    reject(abortError())
+    return
+  }
+
+  let settled = false
+  const finish = (callback: () => void): void => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    signal.removeEventListener('abort', onAbort)
+    callback()
+  }
+  const onAbort = (): void => finish(() => reject(abortError()))
+  const timer = setTimeout(() => finish(resolve), durationMs)
+  signal.addEventListener('abort', onAbort, { once: true })
+})
 
 const normalizeReconnectAttempts = (value: number | undefined): number => {
   if (value === undefined) return 3
@@ -294,7 +313,7 @@ export const streamAgentEvents = async ({
 
       reconnects += 1
       onState?.('retrying')
-      await waitForAbort(sleep(retryDelay(reconnects), signal), signal)
+      await waitForAbort((sleep ?? defaultAbortableSleep)(retryDelay(reconnects), signal), signal)
     }
   }
 }

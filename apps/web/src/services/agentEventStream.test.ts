@@ -244,6 +244,27 @@ describe('streamAgentEvents', () => {
     assert.equal(backoffFetches, 1)
   })
 
+  it('uses an abort-aware default backoff when sleep is not provided', async () => {
+    const controller = new AbortController()
+    let fetches = 0
+    const promise = streamAgentEvents({
+      runId: 'run-1',
+      token: 'token-123',
+      signal: controller.signal,
+      fetchImpl: async () => {
+        fetches += 1
+        throw new Error('offline')
+      },
+      onEvent: () => undefined,
+    })
+
+    await Promise.resolve()
+    controller.abort()
+
+    await assert.rejects(promise, { name: 'AbortError' })
+    assert.equal(fetches, 1)
+  })
+
   it('retries EOF, network errors, and 5xx with 250/500/1000ms delays then exhausts', async () => {
     const sleeps: number[] = []
     let fetches = 0
