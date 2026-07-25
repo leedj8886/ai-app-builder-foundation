@@ -8,6 +8,8 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: process.env.SMOKE_WEB_URL ?? 'http://127.0.0.1:4173',
+    channel: process.env.SMOKE_BROWSER_CHANNEL ??
+      (process.platform === 'darwin' ? 'chrome' : undefined),
     trace: 'retain-on-failure',
   },
   outputDir: 'test-results/playwright',

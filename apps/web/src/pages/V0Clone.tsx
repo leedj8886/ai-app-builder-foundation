@@ -916,7 +916,7 @@ function WorkspaceScreen({
               ) : null}
 
               {state.snapshot ? (
-                <div className="rounded-lg border border-neutral-200 bg-white" data-testid="snapshot-history">
+                <div className="rounded-lg border border-neutral-200 bg-white">
                   <div className="border-b border-neutral-200 px-4 py-3">
                     <p className="text-sm font-medium">Project snapshot</p>
                     <p className="mt-1 text-xs text-neutral-500">{state.snapshot.files.length} files saved in MongoDB</p>
@@ -957,11 +957,15 @@ function WorkspaceScreen({
               ) : null}
 
               {state.snapshots.length > 0 ? (
-                <div className="rounded-lg border border-neutral-200 bg-white">
+                <div className="rounded-lg border border-neutral-200 bg-white" data-testid="snapshot-history">
                   <div className="border-b border-neutral-200 px-4 py-3 text-sm font-medium">Snapshot history</div>
                   <div className="space-y-2 p-2">
                     {state.snapshots.map((snapshot) => (
-                      <div key={snapshot.id} className="flex items-center justify-between gap-2 rounded-md p-2 text-sm">
+                      <div
+                        key={snapshot.id}
+                        className="flex items-center justify-between gap-2 rounded-md p-2 text-sm"
+                        data-testid={`snapshot-${snapshot.id}`}
+                      >
                         <div className="min-w-0">
                           <p className="truncate font-medium">{snapshot.summary}</p>
                           <p className="text-xs text-neutral-500">
