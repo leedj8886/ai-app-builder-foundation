@@ -8,7 +8,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "start:worker": "node dist/worker.js",
+    "start:smoke-worker": "node dist/smokeWorker.js",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test:integration": "node --import tsx --test --test-concurrency=1 \"src/integration/**/*.integration.ts\"",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -37,6 +39,7 @@
     "@types/supertest": "^7.2.1",
     "@types/uuid": "^9.0.8",
     "supertest": "^7.2.2",
+    "testcontainers": "^12.0.4",
     "tsx": "^4.7.1",
     "typescript": "^5.4.0"
   }
