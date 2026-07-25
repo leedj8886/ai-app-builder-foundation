@@ -1,5 +1,6 @@
 import type {
   AgentPlan,
+  FileOperation,
   GenerationResult,
   ModelClient
 } from '../types';
@@ -61,6 +62,11 @@ const deterministicRepair: GenerationResult = {
   devDependencies: {}
 };
 
+const hasFileContent = (
+  operation: FileOperation
+): operation is Extract<FileOperation, { content: string }> =>
+  operation.type !== 'delete';
+
 export const createFakeModelClient = (): FakeModelClient => {
   const calls = { plan: 0, generate: 0, repair: 0 };
   return {
@@ -69,8 +75,30 @@ export const createFakeModelClient = (): FakeModelClient => {
       calls.plan += 1;
       return { value: deterministicPlan };
     },
-    generateFiles: async () => {
+    generateFiles: async input => {
       calls.generate += 1;
+      if (input.context.mode === 'edit') {
+        const currentApp = input.context.files.find(
+          file => file.path === 'src/App.tsx'
+        )?.content ?? deterministicGeneration.operations.filter(
+          hasFileContent
+        ).find(
+          operation => operation.path === 'src/App.tsx'
+        )?.content ?? '';
+
+        return {
+          value: {
+            message: 'Updated the deterministic application',
+            operations: [{
+              type: 'update',
+              path: 'src/App.tsx',
+              content: `${currentApp}\n// deterministic edit`
+            }],
+            dependencies: {},
+            devDependencies: {}
+          }
+        };
+      }
       return { value: deterministicGeneration };
     },
     repairFiles: async () => {

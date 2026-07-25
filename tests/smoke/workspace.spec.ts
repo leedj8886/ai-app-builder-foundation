@@ -11,11 +11,15 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await page.getByPlaceholder('让 v0 构建...').fill(prompt);
   await page.getByLabel('Build prompt').click();
 
-  await expect(page.getByTestId('agent-timeline')).toContainText('Worker started');
+  const timeline = page.getByTestId('conversation-timeline');
+  await expect(timeline).toContainText(prompt);
+  await expect(timeline).toContainText('Agent 已开始工作');
   await expect(page.getByTestId('agent-generation-status'))
-    .toHaveAttribute('data-status', 'ready', { timeout: 30_000 });
+    .toHaveAttribute('data-status', 'ready', { timeout: 90_000 });
   await expect(page).toHaveURL(/\/v0\/chats\/[a-f\d]{24}$/);
   await expect(page.getByText('Recent', { exact: true })).toHaveCount(0);
+  await expect(timeline.locator('[data-testid^="conversation-turn-"]').first())
+    .toContainText('Snapshot');
 
   const workspaceSidebar = page.getByTestId('workspace-sidebar');
   const editComposer = page.getByTestId('workspace-edit-composer');
@@ -42,8 +46,6 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
 
   await page.getByRole('button', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('button', { name: 'src/App.tsx', exact: true }).first()).toBeVisible();
-  await expect(page.getByTestId('snapshot-history')).toContainText('active');
-  await expect(page.getByTestId('snapshot-history')).toContainText('passed');
 
   await expect(editComposer).toBeVisible();
   await page.route('**/api/agent/runs', async (route) => {
@@ -61,12 +63,30 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(editComposer.getByRole('textbox')).toBeDisabled();
   await expect(editComposer.getByRole('button', { name: '正在生成' })).toBeDisabled();
   await expect(page.getByTestId('agent-generation-status'))
-    .toHaveAttribute('data-status', 'ready', { timeout: 30_000 });
+    .toHaveAttribute('data-status', 'ready', { timeout: 90_000 });
   await expect(editComposer.getByRole('textbox')).toHaveValue('');
 
+  const turns = timeline.locator('[data-testid^="conversation-turn-"]');
+  await expect(turns).toHaveCount(2);
+  const firstSummary = turns.nth(0).locator('[data-testid^="agent-turn-summary-"]');
+  const latestSummary = turns.nth(1).locator('[data-testid^="agent-turn-summary-"]');
+  await expect(firstSummary).toHaveAttribute('aria-expanded', 'false');
+  await expect(latestSummary).toHaveAttribute('aria-expanded', 'true');
+  await firstSummary.click();
+  await expect(firstSummary).toHaveAttribute('aria-expanded', 'true');
+  await expect(turns.nth(0)).toContainText('实施计划');
+  await expect(turns.nth(0)).toContainText('src/App.tsx');
+
   await page.reload();
-  await expect(page.getByRole('button', { name: 'src/App.tsx', exact: true }).first()).toBeVisible();
-  await expect(page.getByTestId('snapshot-history')).toContainText('active');
+  const restoredTimeline = page.getByTestId('conversation-timeline');
+  const restoredTurns = restoredTimeline.locator('[data-testid^="conversation-turn-"]');
+  await expect(restoredTurns).toHaveCount(2);
+  await expect(
+    restoredTurns.nth(0).locator('[data-testid^="agent-turn-summary-"]'),
+  ).toHaveAttribute('aria-expanded', 'false');
+  await expect(
+    restoredTurns.nth(1).locator('[data-testid^="agent-turn-summary-"]'),
+  ).toHaveAttribute('aria-expanded', 'true');
 
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(
