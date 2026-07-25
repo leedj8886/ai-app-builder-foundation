@@ -32,7 +32,7 @@
 - Modify: `apps/server/src/routes/agent.ts`
 - Modify: `apps/server/src/integration/agentRoutes.integration.ts`
 
-- [ ] **Step 1: Write failing Chat creation and Run message tests**
+- [x] **Step 1: Write failing Chat creation and Run message tests**
 
 Extend `apps/server/src/integration/agentRoutes.integration.ts` with authenticated requests that establish the intended API contract:
 
@@ -113,7 +113,7 @@ test('Run creation rejects a Chat associated with another Project', async () => 
 });
 ```
 
-- [ ] **Step 2: Run the focused integration tests and verify RED**
+- [x] **Step 2: Run the focused integration tests and verify RED**
 
 Run:
 
@@ -123,7 +123,7 @@ npm run test:integration --workspace @v0/server -- --test-name-pattern="Chat cre
 
 Expected: FAIL because Chat creation still expects `initialMessage` and invokes the legacy generation service, while Agent Run creation does not append a user message.
 
-- [ ] **Step 3: Make Chat endpoints persistence-only**
+- [x] **Step 3: Make Chat endpoints persistence-only**
 
 In `apps/server/src/routes/chat.ts`, remove imports of `generateCode` and
 `generateChatTitle`. Change Chat creation to require a valid Project owned by
@@ -171,7 +171,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
 Change `POST /:id/messages` to append only the supplied user message and return
 the Chat. Delete its `generateCode` call and assistant-message push.
 
-- [ ] **Step 4: Append the Run prompt exactly once in the HTTP creation path**
+- [x] **Step 4: Append the Run prompt exactly once in the HTTP creation path**
 
 In `apps/server/src/routes/agent.ts`, retain the validated `Chat` document and
 append after `AgentRun.create` but before event emission/enqueue:
@@ -207,7 +207,7 @@ if (chat) {
 Do not append messages in the BullMQ processor's job-start path. BullMQ retries
 must process the already persisted Run without duplicating its prompt.
 
-- [ ] **Step 5: Run backend integration and unit verification**
+- [x] **Step 5: Run backend integration and unit verification**
 
 Run:
 
@@ -219,7 +219,7 @@ npm run type-check --workspace @v0/server
 
 Expected: all tests pass and type-check exits with code 0.
 
-- [ ] **Step 6: Commit the Chat/Run alignment**
+- [x] **Step 6: Commit the Chat/Run alignment**
 
 ```bash
 git add apps/server/src/routes/chat.ts \
@@ -233,7 +233,7 @@ git commit -m "feat: persist chat turns through agent runs"
 **Files:**
 - Modify: `apps/server/src/integration/agentWorker.integration.ts`
 
-- [ ] **Step 1: Write a failing/strengthened Worker conversation test**
+- [x] **Step 1: Write a failing/strengthened Worker conversation test**
 
 Add a Chat to the queued Run fixture and assert the exact completed
 conversation:
@@ -268,7 +268,7 @@ test('BullMQ worker appends one assistant turn to its Chat', async () => {
 The helper must persist the initial user message once, set both `chatId` and
 `projectId` on the Run, and return all three records.
 
-- [ ] **Step 2: Run the focused test**
+- [x] **Step 2: Run the focused test**
 
 Run:
 
@@ -280,7 +280,7 @@ Expected: PASS if the existing idempotent completed-Run path is correct; if it
 fails, the failure must show either a missing first assistant turn or a
 duplicate after replay.
 
-- [ ] **Step 3: Run full backend verification and commit**
+- [x] **Step 3: Run full backend verification and commit**
 
 Run:
 
@@ -311,7 +311,7 @@ specific defect that is first reproduced with an additional failing assertion.
 - Create: `apps/web/src/lib/chatWorkspace.ts`
 - Create: `apps/web/src/lib/chatWorkspace.test.ts`
 
-- [ ] **Step 1: Write failing pure request-helper tests**
+- [x] **Step 1: Write failing pure request-helper tests**
 
 Create `apps/web/src/lib/chatWorkspace.test.ts`:
 
@@ -360,7 +360,7 @@ test('buildEditRunRequest requires an active Snapshot and preserves ids', () => 
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -370,7 +370,7 @@ node --import tsx --test apps/web/src/lib/chatWorkspace.test.ts
 
 Expected: FAIL because `chatWorkspace.ts` does not exist.
 
-- [ ] **Step 3: Implement the pure helpers**
+- [x] **Step 3: Implement the pure helpers**
 
 Create `apps/web/src/lib/chatWorkspace.ts`:
 
@@ -407,7 +407,7 @@ export const buildEditRunRequest = (input: {
 };
 ```
 
-- [ ] **Step 4: Type the Chat API**
+- [x] **Step 4: Type the Chat API**
 
 In `apps/web/src/services/api.ts`, introduce the routed Chat shape and update
 creation:
@@ -434,7 +434,7 @@ export const chatApi = {
 };
 ```
 
-- [ ] **Step 5: Define application routes**
+- [x] **Step 5: Define application routes**
 
 Update `apps/web/src/App.tsx`:
 
@@ -455,7 +455,7 @@ function App() {
 }
 ```
 
-- [ ] **Step 6: Run Web tests/type-check and commit**
+- [x] **Step 6: Run Web tests/type-check and commit**
 
 Run:
 
@@ -479,7 +479,7 @@ git commit -m "feat: add chat workspace routing"
 - Modify: `apps/web/src/lib/v0Workspace.ts`
 - Modify: `apps/web/src/lib/v0Workspace.test.ts`
 
-- [ ] **Step 1: Add failing workspace-reset coverage**
+- [x] **Step 1: Add failing workspace-reset coverage**
 
 Add a pure state transition to `apps/web/src/lib/v0Workspace.test.ts`:
 
@@ -500,7 +500,7 @@ test('resetWorkspaceForChat clears stale project state for a new route', () => {
 
 Use the existing Snapshot fixture in that test file.
 
-- [ ] **Step 2: Run the focused state test and verify RED**
+- [x] **Step 2: Run the focused state test and verify RED**
 
 Run:
 
@@ -510,7 +510,7 @@ npm test --workspace @v0/web -- --test-name-pattern="resetWorkspaceForChat"
 
 Expected: FAIL because the transition is not exported.
 
-- [ ] **Step 3: Implement route reset state**
+- [x] **Step 3: Implement route reset state**
 
 Add to `apps/web/src/lib/v0Workspace.ts`:
 
@@ -522,7 +522,7 @@ export const resetWorkspaceForChat = (state: WorkspaceState): WorkspaceState => 
 });
 ```
 
-- [ ] **Step 4: Make `V0Clone` route-aware**
+- [x] **Step 4: Make `V0Clone` route-aware**
 
 In `apps/web/src/pages/V0Clone.tsx`:
 
@@ -598,7 +598,7 @@ useEffect(() => {
 When no `chatId` is present, render the home state and do not restore a Project
 from local storage.
 
-- [ ] **Step 5: Create Project, Chat, and Create Run from home**
+- [x] **Step 5: Create Project, Chat, and Create Run from home**
 
 Replace `createDemoProject` with an authenticated Project+Chat setup. In the
 no-`chatId` branch of `submitPromptToAgent`:
@@ -623,7 +623,7 @@ and never infer `mode` from stale local state.
 Change New Chat/back-home behavior to abort active work and
 `navigate('/')`.
 
-- [ ] **Step 6: Run Web verification and commit**
+- [x] **Step 6: Run Web verification and commit**
 
 Run:
 
@@ -648,7 +648,7 @@ git commit -m "feat: load conversations by chat route"
 - Modify: `apps/web/src/pages/V0Clone.tsx`
 - Modify: `tests/smoke/workspace.spec.ts`
 
-- [ ] **Step 1: Extend browser smoke with failing UI expectations**
+- [x] **Step 1: Extend browser smoke with failing UI expectations**
 
 After the first Run completes in `tests/smoke/workspace.spec.ts`, assert:
 
@@ -667,7 +667,7 @@ await expect(page.getByTestId('agent-generation-status'))
 await expect(editComposer.getByRole('textbox')).toHaveValue('');
 ```
 
-- [ ] **Step 2: Run browser smoke and verify RED**
+- [x] **Step 2: Run browser smoke and verify RED**
 
 Run on alternate ports:
 
@@ -682,7 +682,7 @@ npm run test:smoke
 Expected: FAIL because the URL remains `/` and no workspace edit composer
 exists.
 
-- [ ] **Step 3: Implement the focused composer component**
+- [x] **Step 3: Implement the focused composer component**
 
 Create `apps/web/src/components/WorkspaceEditComposer.tsx`:
 
@@ -746,7 +746,7 @@ export function WorkspaceEditComposer({
 }
 ```
 
-- [ ] **Step 4: Place the composer and remove workspace history**
+- [x] **Step 4: Place the composer and remove workspace history**
 
 In `WorkspaceScreen`, delete the search box and `Recent`/`runHistory` nav.
 Keep the outer sidebar minimal. Add props for edit draft and submission, then
@@ -765,7 +765,7 @@ place `WorkspaceEditComposer` after the left panel's scrollable content:
 Keep the progress content in `flex-1 overflow-y-auto`; the composer itself must
 not be inside that scroll container.
 
-- [ ] **Step 5: Implement draft lifecycle in the parent**
+- [x] **Step 5: Implement draft lifecycle in the parent**
 
 Add `editDraft` independently from the home `draftPrompt`. On submission,
 capture the exact submitted string. Clear it only when the resulting detail is
@@ -792,7 +792,7 @@ if (detail.run.status === 'completed') {
 Failure and cancellation paths do not clear `editDraft`. Disable the composer
 from the synchronous submission-in-flight state through terminal Run state.
 
-- [ ] **Step 6: Run browser and Web verification**
+- [x] **Step 6: Run browser and Web verification**
 
 Run:
 
@@ -810,7 +810,7 @@ npm run test:smoke
 Expected: 0 failures; Playwright completes both Create and Edit within the
 timeout.
 
-- [ ] **Step 7: Commit the composer**
+- [x] **Step 7: Commit the composer**
 
 ```bash
 git add apps/web/src/components/WorkspaceEditComposer.tsx \
@@ -824,7 +824,7 @@ git commit -m "feat: add workspace edit composer"
 - Modify: `tests/smoke/api-smoke.ts`
 - Modify: `docs/superpowers/plans/2026-07-25-chat-routed-multiturn-workspace.md`
 
-- [ ] **Step 1: Extend deterministic API smoke to two turns**
+- [x] **Step 1: Extend deterministic API smoke to two turns**
 
 After Project creation in `tests/smoke/api-smoke.ts`, create a Chat:
 
@@ -868,7 +868,7 @@ assert.deepEqual(
 Extract the existing polling loop into the shown `waitForTerminalRun` helper so
 both runs share identical timeout behavior.
 
-- [ ] **Step 2: Run the full deterministic smoke**
+- [x] **Step 2: Run the full deterministic smoke**
 
 Run:
 
@@ -883,7 +883,7 @@ npm run test:smoke
 Expected: API and Playwright smoke pass; the Chat has four alternating
 messages and the browser remains on its Chat route after reload.
 
-- [ ] **Step 3: Run all automated verification**
+- [x] **Step 3: Run all automated verification**
 
 Run:
 
@@ -899,7 +899,7 @@ npm run build --workspace @v0/web
 
 Expected: all tests pass and all type-check/build commands exit with code 0.
 
-- [ ] **Step 4: Rebuild the retained real DeepSeek stack**
+- [x] **Step 4: Rebuild the retained real DeepSeek stack**
 
 Run:
 
@@ -915,7 +915,7 @@ docker compose \
 Verify all containers are healthy and Worker logs
 `Agent worker listening`, not `Smoke agent worker listening`.
 
-- [ ] **Step 5: Perform one real Create-then-Edit conversation**
+- [x] **Step 5: Perform one real Create-then-Edit conversation**
 
 From `http://127.0.0.1:4173`:
 
@@ -929,7 +929,7 @@ From `http://127.0.0.1:4173`:
 8. verify the persisted Chat roles are
    `user, assistant, user, assistant`.
 
-- [ ] **Step 6: Review state and record results**
+- [x] **Step 6: Review state and record results**
 
 Run:
 
@@ -942,10 +942,42 @@ git log -10 --oneline
 Add exact test counts, smoke result, real Run IDs, Snapshot IDs, and any
 remaining warnings to the plan's `Execution Results` section.
 
-- [ ] **Step 7: Commit the completed plan record**
+- [x] **Step 7: Commit the completed plan record**
 
 ```bash
 git add tests/smoke/api-smoke.ts \
   docs/superpowers/plans/2026-07-25-chat-routed-multiturn-workspace.md
 git commit -m "docs: complete chat multiturn plan"
 ```
+
+## Execution Results
+
+- Chat creation is now metadata-only and deterministic; it associates the Chat
+  with its Project without calling the legacy code-generation service.
+- Creating an Agent Run with `chatId` persists exactly one user message.
+  Worker completion persists one assistant message with the resulting Snapshot,
+  and replaying a completed job does not duplicate it.
+- The frontend now routes conversations through `/v0/chats/:chatId`. Direct
+  route loads resolve `projectId`, Run history, active Snapshot, and preview
+  without relying on `localStorage.v0.activeProjectId`.
+- The workspace sidebar no longer contains recent-chat history. The left
+  workspace panel has a fixed composer that submits Edit runs, supports
+  Enter/Shift+Enter, disables during submission, and displays `正在生成`.
+- Server verification passed: 86 unit tests and 12 integration tests;
+  type-check and build both exited successfully.
+- Web verification passed: 57 tests; type-check and build both exited
+  successfully. Vite retains the existing `SnapshotPreview` large-chunk
+  warning.
+- Deterministic two-turn smoke passed on ports `43002` and `4174`: API verified
+  `user, assistant, user, assistant`, and Playwright verified the dedicated
+  route, removed history region, disabled composer state, Edit completion,
+  cleared draft, and reload restoration.
+- Real DeepSeek Create Run `6a648fe1a80bc0f5256357aa` completed with Snapshot
+  `6a64902ef083d0b8e66bc46d`.
+- Real DeepSeek Edit Run `6a649030a80bc0f525635809` used that Snapshot as
+  `baseSnapshotId` and completed with Snapshot
+  `6a649078f083d0b8e66bc498`.
+- Real Chat `6a648fe1a80bc0f5256357a3`, associated with Project
+  `6a648fe1a80bc0f52563579f`, persisted the expected four alternating roles.
+  Its routed page is
+  `http://127.0.0.1:4173/v0/chats/6a648fe1a80bc0f5256357a3`.

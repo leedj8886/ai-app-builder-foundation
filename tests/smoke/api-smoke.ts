@@ -37,6 +37,28 @@ interface RunDetail {
   };
 }
 
+const waitForTerminalRun = async (
+  runId: string,
+  token: string
+): Promise<RunDetail> => {
+  const deadline = Date.now() + 30_000;
+  let detail = await requestJson<RunDetail>(
+    `/api/agent/runs/${runId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  while (
+    Date.now() < deadline &&
+    !['completed', 'failed', 'cancelled'].includes(detail.run.status)
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    detail = await requestJson<RunDetail>(
+      `/api/agent/runs/${runId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+  }
+  return detail;
+};
+
 const main = async (): Promise<void> => {
   const unique = `${Date.now()}-${crypto.randomUUID()}`;
   const registered = await requestJson<{ token: string }>('/api/auth/register', jsonRequest(
@@ -60,24 +82,25 @@ const main = async (): Promise<void> => {
     }, token)
   );
   const projectId = projectResponse.project._id;
+  const chatResponse = await requestJson<{ chat: { _id: string } }>(
+    '/api/chat',
+    jsonRequest('POST', {
+      projectId,
+      titleSeed: `Build deterministic smoke dashboard ${unique}`
+    }, token)
+  );
+  const chatId = chatResponse.chat._id;
   const created = await requestJson<RunDetail>(
     '/api/agent/runs',
     jsonRequest('POST', {
       projectId,
+      chatId,
       prompt: `Build deterministic smoke dashboard ${unique}`,
       mode: 'create'
     }, token)
   );
 
-  const deadline = Date.now() + 30_000;
-  let detail = created;
-  while (Date.now() < deadline && !['completed', 'failed', 'cancelled'].includes(detail.run.status)) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    detail = await requestJson<RunDetail>(
-      `/api/agent/runs/${created.run._id}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-  }
+  const detail = await waitForTerminalRun(created.run._id, token);
   if (detail.run.status !== 'completed') {
     throw new Error(`Agent Run did not complete: ${JSON.stringify(detail)}`);
   }
@@ -107,11 +130,37 @@ const main = async (): Promise<void> => {
     snapshot.id === snapshotId && snapshot.isActive
   ));
 
+  const edited = await requestJson<RunDetail>(
+    '/api/agent/runs',
+    jsonRequest('POST', {
+      projectId,
+      chatId,
+      prompt: `Add deterministic activity section ${unique}`,
+      mode: 'edit'
+    }, token)
+  );
+  const editedDetail = await waitForTerminalRun(edited.run._id, token);
+  assert.equal(editedDetail.run.status, 'completed');
+
+  const persistedChat = await requestJson<{
+    chat: { messages: Array<{ role: string }> };
+  }>(
+    `/api/chat/${chatId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  assert.deepEqual(
+    persistedChat.chat.messages.map((message) => message.role),
+    ['user', 'assistant', 'user', 'assistant']
+  );
+
   console.log(JSON.stringify({
     ok: true,
     projectId,
+    chatId,
     runId: created.run._id,
-    snapshotId
+    snapshotId,
+    editRunId: edited.run._id,
+    editSnapshotId: editedDetail.run.resultSnapshotId
   }));
 };
 
