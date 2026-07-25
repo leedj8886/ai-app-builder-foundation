@@ -12,10 +12,11 @@ import {
   listAgentRunsQuerySchema,
   objectIdParamSchema
 } from '../agent/schemas';
-import { emitAgentEvent, agentRunChannel } from '../agent/eventBus';
+import { emitAgentEvent } from '../agent/eventBus';
 import { enqueueAgentRun } from '../agent/queue';
 import { createRedisConnection } from '../agent/redis';
 import { isTerminalAgentRunStatus } from '../agent/stateMachine';
+import { streamAgentRunEvents } from '../agent/sseStream';
 
 const router = Router();
 
@@ -159,8 +160,6 @@ router.get('/runs/:runId', async (req: AuthRequest, res, next) => {
 });
 
 router.get('/runs/:runId/events', async (req: AuthRequest, res, next) => {
-  const subscriber = createRedisConnection();
-
   try {
     const userId = requireUserId(req);
     const { runId } = objectIdParamSchema('runId').parse(req.params);
@@ -172,7 +171,6 @@ router.get('/runs/:runId/events', async (req: AuthRequest, res, next) => {
 
     if (!run) {
       res.status(404).json({ error: 'Run not found' });
-      await subscriber.quit();
       return;
     }
 
@@ -183,40 +181,19 @@ router.get('/runs/:runId/events', async (req: AuthRequest, res, next) => {
       'X-Accel-Buffering': 'no'
     });
 
-    const writeEvent = (event: { sequence: number; type: string; [key: string]: unknown }) => {
-      res.write(`id: ${event.sequence}\n`);
-      res.write(`event: ${event.type}\n`);
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    };
-
-    const storedEvents = await AgentEvent.find({
+    await streamAgentRunEvents({
       runId,
       userId,
-      ...(lastEventId !== undefined && { sequence: { $gt: lastEventId } })
-    }).sort({ sequence: 1 });
-
-    for (const event of storedEvents) {
-      writeEvent({
-        id: event._id.toString(),
-        runId: event.runId.toString(),
-        sequence: event.sequence,
-        type: event.type,
-        message: event.message,
-        payload: event.payload,
-        createdAt: event.createdAt.toISOString()
-      });
-    }
-
-    await subscriber.subscribe(agentRunChannel(runId));
-    subscriber.on('message', (_channel, message) => {
-      writeEvent(JSON.parse(message));
-    });
-
-    req.on('close', () => {
-      void subscriber.quit();
+      lastEventId,
+      req,
+      res,
+      subscriber: createRedisConnection()
     });
   } catch (error) {
-    await subscriber.quit();
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
     next(error);
   }
 });
