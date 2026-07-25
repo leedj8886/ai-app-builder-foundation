@@ -1,4 +1,7 @@
-import type { WorkspaceSnapshot } from './v0Workspace'
+import type {
+  GenerationStatus,
+  WorkspaceSnapshot,
+} from './v0Workspace'
 
 export interface SnapshotPreviewModel {
   files: Record<string, string>
@@ -75,5 +78,30 @@ export const createSnapshotPreviewModel = (
       ...snapshot.packageJson.dependencies,
     })),
     entry,
+  }
+}
+
+export type SnapshotPreviewState =
+  | { kind: 'empty' }
+  | { kind: 'running'; model: SnapshotPreviewModel }
+  | { kind: 'ready'; model: SnapshotPreviewModel }
+  | { kind: 'error'; message: string }
+
+export const getSnapshotPreviewState = (
+  snapshot: WorkspaceSnapshot | undefined,
+  generationStatus: GenerationStatus,
+): SnapshotPreviewState => {
+  if (!snapshot) return { kind: 'empty' }
+
+  try {
+    const model = createSnapshotPreviewModel(snapshot)
+    return generationStatus === 'running'
+      ? { kind: 'running', model }
+      : { kind: 'ready', model }
+  } catch (error) {
+    return {
+      kind: 'error',
+      message: error instanceof Error ? error.message : 'Preview is unavailable',
+    }
   }
 }

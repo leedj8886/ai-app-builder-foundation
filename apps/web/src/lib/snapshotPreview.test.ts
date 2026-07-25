@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   createSnapshotPreviewModel,
+  getSnapshotPreviewState,
   type SnapshotPreviewModel,
 } from './snapshotPreview'
 import type { SnapshotFile, WorkspaceSnapshot } from './v0Workspace'
@@ -152,5 +153,47 @@ describe('snapshot preview conversion', () => {
     assert.equal(Object.getPrototypeOf(model.files), Object.prototype)
     assert.equal(Object.getPrototypeOf(model.dependencies), Object.prototype)
     assert.doesNotThrow(() => JSON.stringify(model))
+  })
+})
+
+describe('snapshot preview state', () => {
+  it('returns an empty state without an active snapshot', () => {
+    assert.deepEqual(getSnapshotPreviewState(undefined, 'idle'), {
+      kind: 'empty',
+    })
+    assert.deepEqual(getSnapshotPreviewState(undefined, 'running'), {
+      kind: 'empty',
+    })
+  })
+
+  it('keeps the previous executable snapshot visible while a new run executes', () => {
+    const snapshot = createSnapshot({ files: validFiles() })
+    const state = getSnapshotPreviewState(snapshot, 'running')
+
+    assert.equal(state.kind, 'running')
+    assert.equal(state.kind === 'running' ? state.model.entry : undefined, '/src/main.tsx')
+  })
+
+  it('returns a ready executable model for terminal successful state', () => {
+    const snapshot = createSnapshot({ files: validFiles() })
+
+    assert.equal(getSnapshotPreviewState(snapshot, 'ready').kind, 'ready')
+    assert.equal(getSnapshotPreviewState(snapshot, 'failed').kind, 'ready')
+    assert.equal(getSnapshotPreviewState(snapshot, 'cancelled').kind, 'ready')
+  })
+
+  it('converts invalid snapshot failures to concise error state', () => {
+    const invalid = createSnapshot({
+      files: [{
+        path: 'src/App.tsx',
+        content: 'export default function App() {}',
+        language: 'tsx',
+      }],
+    })
+
+    assert.deepEqual(getSnapshotPreviewState(invalid, 'ready'), {
+      kind: 'error',
+      message: 'Preview entry file is missing',
+    })
   })
 })

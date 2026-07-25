@@ -1,11 +1,18 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FormEvent,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   ArrowRight,
   CheckCircle2,
   ChevronDown,
   Code2,
   Copy,
-  Database,
   Download,
   ExternalLink,
   Eye,
@@ -32,7 +39,6 @@ import {
   UploadCloud,
   Upload,
   Users,
-  Wand2,
   X,
   Zap,
 } from 'lucide-react'
@@ -41,6 +47,7 @@ import row02 from '@/assets/v0/template-row02.png'
 import iosLight from '@/assets/v0/ios-light.png'
 import { agentApi, authApi, projectApi } from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
+import { getSnapshotPreviewState } from '@/lib/snapshotPreview'
 import {
   applyAgentEvent,
   applyAgentRunDetail,
@@ -58,6 +65,7 @@ import {
   type Panel,
   type SnapshotFile,
   type Template,
+  type WorkspaceState,
 } from '@/lib/v0Workspace'
 
 const templateImages: Record<Template['image'], string> = {
@@ -65,6 +73,11 @@ const templateImages: Record<Template['image'], string> = {
   row02,
   ios: iosLight,
 }
+
+const SnapshotPreview = lazy(async () => {
+  const module = await import('@/components/SnapshotPreview')
+  return { default: module.SnapshotPreview }
+})
 
 const categoryFilters: Array<{
   id: 'all' | Template['category']
@@ -1042,7 +1055,12 @@ function WorkspaceScreen({
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 sm:p-5">
-              {state.activePanel === 'preview' ? <PreviewPanel selectedTemplate={selectedTemplate} designMode={designMode} /> : null}
+              {state.activePanel === 'preview' ? (
+                <PreviewPanel
+                  snapshot={state.snapshot}
+                  generationStatus={state.generation.status}
+                />
+              ) : null}
               {state.activePanel === 'code' ? (
                 <CodePanel
                   files={state.snapshot?.files ?? []}
@@ -1066,110 +1084,52 @@ function WorkspaceScreen({
 }
 
 function PreviewPanel({
-  selectedTemplate,
-  designMode,
+  snapshot,
+  generationStatus,
 }: {
-  selectedTemplate: Template
-  designMode: boolean
+  snapshot: WorkspaceState['snapshot']
+  generationStatus: WorkspaceState['generation']['status']
 }) {
+  const previewState = getSnapshotPreviewState(snapshot, generationStatus)
+
+  if (previewState.kind === 'empty') {
+    return (
+      <div className="mx-auto flex min-h-[420px] max-w-5xl items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center">
+        <div>
+          <Eye className="mx-auto h-8 w-8 text-neutral-400" />
+          <h2 className="mt-4 text-base font-semibold">Preview is waiting for a snapshot</h2>
+          <p className="mt-2 max-w-md text-sm leading-6 text-neutral-500">
+            Submit a prompt and the successfully generated React application will run here.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (previewState.kind === 'error') {
+    return (
+      <div className="mx-auto max-w-5xl rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-950">
+        <p className="font-medium">Preview is unavailable</p>
+        <p className="mt-2">{previewState.message}</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="mx-auto max-w-5xl rounded-lg border border-neutral-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-red-400" />
-          <span className="h-3 w-3 rounded-full bg-yellow-400" />
-          <span className="h-3 w-3 rounded-full bg-emerald-400" />
-        </div>
-        <div className="hidden min-w-0 max-w-md flex-1 justify-center px-4 sm:flex">
-          <div className="truncate rounded-md bg-neutral-100 px-3 py-1 text-xs text-neutral-500">
-            preview.v0.local/{selectedTemplate.id}
+    <div className="mx-auto max-w-5xl">
+      <Suspense
+        fallback={(
+          <div className="flex min-h-[620px] items-center justify-center rounded-lg border border-neutral-200 bg-white text-sm text-neutral-500">
+            Loading isolated preview…
           </div>
-        </div>
-        <button className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100" aria-label="Open preview">
-          <ExternalLink className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="grid gap-6 p-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <section className="space-y-6">
-          <div className="rounded-lg border border-neutral-200 bg-neutral-950 p-6 text-white">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-neutral-400">AI generated</p>
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs">Live</span>
-            </div>
-            <h2 className="mt-12 max-w-xl text-4xl font-semibold leading-tight">
-              {selectedTemplate.title}
-            </h2>
-            <p className="mt-4 max-w-lg text-sm leading-6 text-neutral-300">
-              A production-flavored interface with responsive sections, connected
-              data cards, and publish-ready controls.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              <button className="h-9 rounded-md bg-white px-4 text-sm font-medium text-neutral-950">
-                Start free
-              </button>
-              <button className="h-9 rounded-md border border-white/20 px-4 text-sm text-white">
-                View docs
-              </button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              ['Revenue', '$128K', '+12.4%'],
-              ['Active users', '24,890', '+8.1%'],
-              ['Deploys', '42', 'Today'],
-            ].map(([label, value, trend]) => (
-              <div key={label} className="rounded-lg border border-neutral-200 p-4">
-                <p className="text-xs text-neutral-500">{label}</p>
-                <p className="mt-2 text-2xl font-semibold">{value}</p>
-                <p className="mt-1 text-xs text-emerald-600">{trend}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <aside className="space-y-3">
-          <div className="rounded-lg border border-neutral-200 bg-[#fafafa] p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Build graph</p>
-              <Database className="h-4 w-4 text-neutral-500" />
-            </div>
-            <div className="mt-4 space-y-2">
-              {['Web', 'Plan', 'DB', 'API', 'Deploy', 'LLM'].map((item, index) => (
-                <div key={item} className="flex items-center gap-3 rounded-md bg-white p-2 text-sm">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-950 text-xs text-white">
-                    {index + 1}
-                  </span>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {designMode ? (
-            <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
-              <div className="flex items-center gap-2">
-                <Wand2 className="h-4 w-4 text-orange-700" />
-                <p className="text-sm font-medium text-orange-950">Design Mode is editing this preview</p>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {['Colors', 'Type', 'Spacing'].map((item) => (
-                  <button key={item} className="h-8 rounded-md bg-white text-xs text-orange-950 shadow-sm">
-                    {item}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <img
-            src={templateImages[selectedTemplate.image]}
-            alt=""
-            className="aspect-[16/10] w-full rounded-lg border border-neutral-200 object-cover"
-          />
-        </aside>
-      </div>
+        )}
+      >
+        <SnapshotPreview
+          snapshotId={snapshot!.id}
+          model={previewState.model}
+          isGenerating={previewState.kind === 'running'}
+        />
+      </Suspense>
     </div>
   )
 }
