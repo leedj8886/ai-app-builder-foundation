@@ -65,8 +65,8 @@ const ValidationSchema = new Schema<ValidationResult>(
           },
           command: { type: String, required: true },
           exitCode: { type: Number, required: true },
-          stdout: { type: String, required: true, default: '' },
-          stderr: { type: String, required: true, default: '' },
+          stdout: { type: String, default: '' },
+          stderr: { type: String, default: '' },
           durationMs: { type: Number, required: true, default: 0 }
         }
       ],

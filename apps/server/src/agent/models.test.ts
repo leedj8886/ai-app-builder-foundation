@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Types } from 'mongoose';
 import { AgentRun } from '../models/AgentRun';
 import { AgentEvent } from '../models/AgentEvent';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
@@ -47,4 +48,36 @@ test('ProjectSnapshot model stores full file tree snapshots', () => {
   assert.deepEqual(indexes[0], { projectId: 1, createdAt: -1 });
   assert.deepEqual(indexes[1], { userId: 1, createdAt: -1 });
   assert.deepEqual(indexes[2], { sourceRunId: 1 });
+});
+
+test('ProjectSnapshot accepts successful validation checks with empty output streams', () => {
+  const snapshot = new ProjectSnapshot({
+    userId: new Types.ObjectId(),
+    projectId: new Types.ObjectId(),
+    sourceRunId: new Types.ObjectId(),
+    files: [{
+      path: 'index.html',
+      content: '<div id="root"></div>',
+      language: 'html'
+    }],
+    packageJson: {
+      dependencies: {},
+      devDependencies: {},
+      scripts: {}
+    },
+    validation: {
+      status: 'passed',
+      checks: [{
+        name: 'type-check',
+        command: 'npm run type-check',
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        durationMs: 1
+      }]
+    },
+    summary: 'Validated snapshot'
+  });
+
+  assert.equal(snapshot.validateSync(), undefined);
 });

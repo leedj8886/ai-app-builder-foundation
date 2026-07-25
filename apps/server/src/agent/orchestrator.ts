@@ -566,6 +566,8 @@ export const processAgentRun = async (
       return;
     }
 
+    console.error(`AgentRun ${run._id.toString()} failed`, error);
+
     if (['COMPLETION_EVENT_FAILED', 'SNAPSHOT_ACTIVATION_FAILED'].includes(
       (error as { code?: string }).code ?? ''
     )) {

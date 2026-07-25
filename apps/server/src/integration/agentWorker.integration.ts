@@ -103,7 +103,7 @@ test('BullMQ Create run seeds required files when the model only updates App', a
     generatePlan: async input => {
       assert.deepEqual(
         input.context.files.map(file => file.path),
-        ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx']
+        ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx', 'tsconfig.json']
       );
       return {
         value: {
@@ -143,7 +143,7 @@ test('BullMQ Create run seeds required files when the model only updates App', a
   const snapshot = await ProjectSnapshot.findOne({ sourceRunId: run._id });
   assert.deepEqual(
     snapshot?.files.map(file => file.path),
-    ['index.html', 'package.json', 'src/App.tsx', 'src/index.css', 'src/main.tsx']
+    ['index.html', 'package.json', 'src/App.tsx', 'src/index.css', 'src/main.tsx', 'tsconfig.json']
   );
 });
 

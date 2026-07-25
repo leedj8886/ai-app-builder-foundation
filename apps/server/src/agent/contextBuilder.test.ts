@@ -80,7 +80,7 @@ test('buildAgentContext includes the Create template file contents', () => {
 
   assert.deepEqual(
     context.files.map(file => file.path),
-    ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx']
+    ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx', 'tsconfig.json']
   );
   assert.equal(
     context.files.find(file => file.path === 'index.html')?.content?.includes('/src/main.tsx'),
