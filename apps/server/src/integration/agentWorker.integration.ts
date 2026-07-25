@@ -1,0 +1,204 @@
+import assert from 'node:assert/strict';
+import { after, before, beforeEach, test } from 'node:test';
+import type { Worker } from 'bullmq';
+import { createAgentWorker } from '../agent/createWorker';
+import { emitAgentEvent } from '../agent/eventBus';
+import { enqueueAgentRun } from '../agent/queue';
+import { createFakeModelClient } from '../agent/testing/fakeModelClient';
+import {
+  createFailOnceValidator,
+  createPassingValidator
+} from '../agent/testing/fakeValidator';
+import { AgentEvent } from '../models/AgentEvent';
+import { AgentRun } from '../models/AgentRun';
+import { Project } from '../models/Project';
+import { ProjectSnapshot } from '../models/ProjectSnapshot';
+import { User } from '../models/User';
+import {
+  createIntegrationEnvironment,
+  type IntegrationEnvironment
+} from '../testing/integrationEnvironment';
+
+let environment: IntegrationEnvironment;
+
+before(async () => {
+  environment = await createIntegrationEnvironment();
+});
+
+beforeEach(async () => {
+  await environment.reset();
+});
+
+after(async () => {
+  await environment.close();
+});
+
+const createQueuedRun = async () => {
+  const user = await User.create({
+    email: `worker-${crypto.randomUUID()}@example.test`,
+    password: 'password',
+    name: 'Worker owner'
+  });
+  const project = await Project.create({
+    userId: user._id,
+    name: 'Worker project'
+  });
+  const run = await AgentRun.create({
+    userId: user._id,
+    projectId: project._id,
+    prompt: 'Build a dashboard',
+    status: 'queued',
+    mode: 'create',
+    baseSnapshotRevision: 0,
+    maxRepairAttempts: 2,
+    model: 'fake-model'
+  });
+  await emitAgentEvent({
+    runId: run._id,
+    userId: user._id,
+    projectId: project._id,
+    type: 'run.created',
+    message: 'Agent run queued'
+  });
+
+  return { user, project, run };
+};
+
+const waitForTerminalRun = async (runId: string) => {
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const run = await AgentRun.findById(runId);
+    if (run && ['completed', 'failed', 'cancelled'].includes(run.status)) {
+      return run;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for worker run ${runId}`);
+};
+
+const withWorker = async (
+  modelClient: ReturnType<typeof createFakeModelClient>,
+  validator: ReturnType<typeof createPassingValidator> | ReturnType<typeof createFailOnceValidator>,
+  action: (worker: Worker) => Promise<void>
+) => {
+  const worker = createAgentWorker({
+    queueName: environment.queueName,
+    connection: { url: environment.redisUrl },
+    modelClient,
+    validator,
+    concurrency: 1
+  });
+  try {
+    await worker.waitUntilReady();
+    await action(worker);
+  } finally {
+    await worker.close();
+  }
+};
+
+test('BullMQ worker completes a create run and activates one passing snapshot', async () => {
+  const { project, run } = await createQueuedRun();
+  const modelClient = createFakeModelClient();
+
+  await enqueueAgentRun(run._id.toString());
+  await withWorker(modelClient, createPassingValidator(), async () => {
+    const completed = await waitForTerminalRun(run._id.toString());
+    assert.equal(completed.status, 'completed');
+  });
+
+  const [completed, snapshot, refreshedProject, events] = await Promise.all([
+    AgentRun.findById(run._id),
+    ProjectSnapshot.findOne({ sourceRunId: run._id }),
+    Project.findById(project._id),
+    AgentEvent.find({ runId: run._id }).sort({ sequence: 1 })
+  ]);
+  assert.ok(completed?.resultSnapshotId);
+  assert.equal(snapshot?.validation.status, 'passed');
+  assert.ok(snapshot?.files.some((file) => file.path === 'src/App.tsx'));
+  assert.equal(refreshedProject?.activeSnapshotId?.toString(), snapshot?._id.toString());
+  assert.equal(refreshedProject?.activeSnapshotRevision, 1);
+  assert.deepEqual(modelClient.calls, { plan: 1, generate: 1, repair: 0 });
+
+  const lifecycle = events.map((event) => event.type).filter((type) => type !== 'file.changed');
+  assert.deepEqual(lifecycle, [
+    'run.created',
+    'run.started',
+    'agent.step',
+    'agent.plan',
+    'agent.step',
+    'validation.started',
+    'validation.passed',
+    'run.completed'
+  ]);
+  assert.equal(events.filter((event) => event.type === 'file.changed').length, 4);
+});
+
+test('BullMQ worker repairs one failed validation before persisting once', async () => {
+  const { project, run } = await createQueuedRun();
+  const modelClient = createFakeModelClient();
+  const validator = createFailOnceValidator();
+
+  await enqueueAgentRun(run._id.toString());
+  await withWorker(modelClient, validator, async () => {
+    const completed = await waitForTerminalRun(run._id.toString());
+    assert.equal(completed.status, 'completed');
+  });
+
+  const [completed, snapshots, refreshedProject, repairEvents] = await Promise.all([
+    AgentRun.findById(run._id),
+    ProjectSnapshot.find({ sourceRunId: run._id }),
+    Project.findById(project._id),
+    AgentEvent.countDocuments({ runId: run._id, type: 'repair.started' })
+  ]);
+  assert.equal(completed?.attempt, 1);
+  assert.equal(modelClient.calls.repair, 1);
+  assert.equal(validator.calls, 2);
+  assert.equal(repairEvents, 1);
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0]?.validation.status, 'passed');
+  assert.equal(refreshedProject?.activeSnapshotRevision, 1);
+});
+
+test('BullMQ worker leaves a cancelled queued run untouched', async () => {
+  const { run } = await createQueuedRun();
+  const modelClient = createFakeModelClient();
+  await AgentRun.updateOne(
+    { _id: run._id },
+    { $set: { status: 'cancelled', completedAt: new Date() } }
+  );
+  await emitAgentEvent({
+    runId: run._id,
+    userId: run.userId,
+    projectId: run.projectId,
+    type: 'run.cancelled',
+    message: 'Agent run cancelled'
+  });
+
+  await withWorker(modelClient, createPassingValidator(), async (worker) => {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for cancelled job')), 20_000);
+      worker.once('completed', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      worker.once('failed', (_job, error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      void enqueueAgentRun(run._id.toString()).catch((error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+  });
+
+  const [cancelled, startedEvents, snapshots] = await Promise.all([
+    AgentRun.findById(run._id),
+    AgentEvent.countDocuments({ runId: run._id, type: 'run.started' }),
+    ProjectSnapshot.countDocuments({ sourceRunId: run._id })
+  ]);
+  assert.equal(cancelled?.status, 'cancelled');
+  assert.equal(startedEvents, 0);
+  assert.equal(snapshots, 0);
+  assert.deepEqual(modelClient.calls, { plan: 0, generate: 0, repair: 0 });
+});
