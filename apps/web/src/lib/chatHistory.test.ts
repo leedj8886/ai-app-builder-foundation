@@ -4,6 +4,8 @@ import {
   createChatHistoryState,
   failChatHistory,
   formatChatUpdatedAt,
+  getChatAccessibleName,
+  isActiveChat,
   loadChatHistory,
   selectRecentChats,
 } from './chatHistory'
@@ -43,5 +45,14 @@ test('formats same-day and older updated times', () => {
   assert.match(
     formatChatUpdatedAt('2026-07-20T11:00:00+08:00', now, 'zh-CN'),
     /7月20日/,
+  )
+})
+
+test('marks and labels the active Chat', () => {
+  assert.equal(isActiveChat('abc', 'abc'), true)
+  assert.equal(isActiveChat('abc', undefined), false)
+  assert.equal(
+    getChatAccessibleName({ ...chats[0], title: 'Dashboard' }),
+    '打开对话：Dashboard',
   )
 })

@@ -29,6 +29,15 @@ export const selectRecentChats = (
   chats: ChatListItem[],
 ): ChatListItem[] => chats.slice(0, 5)
 
+export const isActiveChat = (
+  chatId: string,
+  activeChatId?: string,
+): boolean => chatId === activeChatId
+
+export const getChatAccessibleName = (
+  chat: Pick<ChatListItem, 'title'>,
+): string => `打开对话：${chat.title}`
+
 const localDateKey = (date: Date): string => [
   date.getFullYear(),
   date.getMonth(),
