@@ -17,7 +17,7 @@
 - Node.js + Express
 - TypeScript
 - MongoDB (数据存储)
-- OpenAI API / Claude API (AI 代码生成)
+- DeepSeek API（AI 代码生成）
 - JWT (认证)
 
 ### 前端
@@ -60,8 +60,33 @@ npm run dev
 PORT=3001
 MONGODB_URI=mongodb://localhost:27017/v0-by-kimi
 JWT_SECRET=your-secret-key
-OPENAI_API_KEY=your-openai-key
+DEEPSEEK_API_KEY=your-deepseek-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+# 可选：只覆盖 Agent Worker 使用的模型
+AGENT_MODEL=
 
 # 前端 (.env)
 VITE_API_URL=http://localhost:3001
 ```
+
+## Agent Worker
+
+生产 Worker 使用真实 DeepSeek API 和真实项目校验：
+
+```bash
+npm run build --workspace @v0/server
+npm run start:worker --workspace @v0/server
+```
+
+`DEEPSEEK_MODEL` 默认是 `deepseek-v4-flash`。如需更高质量，可设置为
+`deepseek-v4-pro`；`AGENT_MODEL` 只覆盖 Agent Worker。
+
+Smoke Worker 使用确定性的 FakeModelClient，不调用 DeepSeek，也不会产生模型费用：
+
+```bash
+npm run build --workspace @v0/server
+npm run start:smoke-worker --workspace @v0/server
+```
+
+不要把 `DEEPSEEK_API_KEY` 提交到 Git。
