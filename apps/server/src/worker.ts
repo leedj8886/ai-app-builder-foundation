@@ -1,13 +1,10 @@
 import dotenv from 'dotenv';
-import { Worker } from 'bullmq';
 import { connectDB, disconnectDB } from './utils/db';
 import { getAgentConfig } from './agent/config';
-import { agentRunJobName } from './agent/queue';
 import { createRedisConnection } from './agent/redis';
-import { processAgentRun } from './agent/orchestrator';
 import { createProductionModelClient } from './agent/modelClient';
 import { createProjectValidator } from './agent/validator';
-import { AgentRunJobData } from './agent/types';
+import { createAgentWorker } from './agent/createWorker';
 
 dotenv.config();
 
@@ -25,20 +22,12 @@ const startWorker = async () => {
     commandTimeoutMs: config.commandTimeoutMs,
     maxOutputChars: config.maxValidationOutputChars
   });
-  const worker = new Worker<AgentRunJobData>(
-    config.queueName,
-    async job => {
-      if (job.name !== agentRunJobName) {
-        throw new Error(`Unsupported job name: ${job.name}`);
-      }
-
-      await processAgentRun(job.data, modelClient, validator);
-    },
-    {
-      connection,
-      concurrency: 2
-    }
-  );
+  const worker = createAgentWorker({
+    queueName: config.queueName,
+    connection,
+    modelClient,
+    validator
+  });
 
   worker.on('completed', job => {
     console.log(`Agent run job completed: ${job.id}`);
