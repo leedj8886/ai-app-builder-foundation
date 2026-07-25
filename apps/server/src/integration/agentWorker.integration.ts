@@ -4,6 +4,7 @@ import type { Worker } from 'bullmq';
 import type { ModelClient } from '../agent/types';
 import { createAgentWorker } from '../agent/createWorker';
 import { emitAgentEvent } from '../agent/eventBus';
+import { processAgentRun } from '../agent/orchestrator';
 import { enqueueAgentRun } from '../agent/queue';
 import { createFakeModelClient } from '../agent/testing/fakeModelClient';
 import {
@@ -12,6 +13,7 @@ import {
 } from '../agent/testing/fakeValidator';
 import { AgentEvent } from '../models/AgentEvent';
 import { AgentRun } from '../models/AgentRun';
+import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { User } from '../models/User';
@@ -63,6 +65,25 @@ const createQueuedRun = async () => {
   });
 
   return { user, project, run };
+};
+
+const createQueuedChatRun = async () => {
+  const fixture = await createQueuedRun();
+  const chat = await Chat.create({
+    userId: fixture.user._id,
+    projectId: fixture.project._id,
+    title: 'Worker chat',
+    messages: [{
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: fixture.run.prompt,
+      createdAt: new Date()
+    }]
+  });
+  fixture.run.chatId = chat._id;
+  await fixture.run.save();
+
+  return { ...fixture, chat };
 };
 
 const waitForTerminalRun = async (runId: string) => {
@@ -208,6 +229,32 @@ test('BullMQ worker repairs one failed validation before persisting once', async
   assert.equal(snapshots.length, 1);
   assert.equal(snapshots[0]?.validation.status, 'passed');
   assert.equal(refreshedProject?.activeSnapshotRevision, 1);
+});
+
+test('BullMQ worker appends one assistant turn to its Chat', async () => {
+  const { project, run, chat } = await createQueuedChatRun();
+  const modelClient = createFakeModelClient();
+  const validator = createPassingValidator();
+
+  await enqueueAgentRun(run._id.toString());
+  await withWorker(modelClient, validator, async () => {
+    const completed = await waitForTerminalRun(run._id.toString());
+    assert.equal(completed.status, 'completed');
+  });
+
+  const refreshed = await Chat.findById(chat._id).lean();
+  assert.equal(refreshed?.messages.length, 2);
+  assert.equal(refreshed?.messages[0]?.role, 'user');
+  assert.equal(refreshed?.messages[1]?.role, 'assistant');
+  assert.match(refreshed?.messages[1]?.content ?? '', /Snapshot:/);
+
+  await processAgentRun(
+    { runId: run._id.toString() },
+    modelClient,
+    validator
+  );
+  assert.equal((await Chat.findById(chat._id))?.messages.length, 2);
+  assert.equal(project._id.toString(), run.projectId.toString());
 });
 
 test('BullMQ worker leaves a cancelled queued run untouched', async () => {
