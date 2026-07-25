@@ -48,6 +48,8 @@ class FakeSubscriber {
   readonly subscriptions: string[] = [];
   readonly calls: string[] = [];
   quitCalls = 0;
+  disconnectCalls = 0;
+  quitError?: Error;
   private listeners = new Set<(channel: string, message: string) => void>();
   onSubscribe?: () => void;
   subscribeGate?: Promise<void>;
@@ -76,7 +78,12 @@ class FakeSubscriber {
 
   async quit(): Promise<'OK'> {
     this.quitCalls += 1;
+    if (this.quitError) throw this.quitError;
     return 'OK';
+  }
+
+  disconnect(): void {
+    this.disconnectCalls += 1;
   }
 
   publish(value: unknown): void {
@@ -209,6 +216,7 @@ test('writes heartbeats and closes its timer and subscriber exactly once', async
   await new Promise((resolve) => setTimeout(resolve, 15));
   await Promise.resolve();
   assert.equal(subscriber.quitCalls, 1);
+  assert.equal(subscriber.disconnectCalls, 0);
   assert.equal(res.writes.length, writesBeforeClose);
 });
 
@@ -259,10 +267,56 @@ test('times out a stalled subscription without loading durable events', async ()
   assert.equal(result, 'rejected');
   assert.equal(loadStarted, false);
   assert.equal(res.endCalls, 1);
-  assert.equal(subscriber.quitCalls, 1);
+  assert.equal(subscriber.quitCalls, 0);
+  assert.equal(subscriber.disconnectCalls, 1);
   req.close();
   assert.equal(res.endCalls, 1);
+  assert.equal(subscriber.quitCalls, 0);
+  assert.equal(subscriber.disconnectCalls, 1);
+});
+
+test('disconnects a rejected subscription without loading durable events', async () => {
+  const req = new FakeRequest();
+  const res = new FakeResponse();
+  const subscriber = new FakeSubscriber();
+  subscriber.subscribeGate = Promise.reject(new Error('Redis unavailable'));
+  let loadStarted = false;
+
+  await assert.rejects(
+    streamAgentRunEvents({
+      runId: 'run-1',
+      userId: 'user-1',
+      req,
+      res,
+      subscriber,
+      loadEvents: async () => {
+        loadStarted = true;
+        return [];
+      },
+      heartbeatMs: 60_000,
+      subscribeTimeoutMs: 5
+    }),
+    /Redis unavailable/
+  );
+
+  assert.equal(loadStarted, false);
+  assert.equal(res.endCalls, 1);
+  assert.equal(subscriber.quitCalls, 0);
+  assert.equal(subscriber.disconnectCalls, 1);
+  req.close();
+  assert.equal(res.endCalls, 1);
+  assert.equal(subscriber.disconnectCalls, 1);
+});
+
+test('forces disconnect when a connected subscriber quit rejects', async () => {
+  const { req, subscriber } = await stream();
+  subscriber.quitError = new Error('quit failed');
+
+  req.close();
+  await Promise.resolve();
+
   assert.equal(subscriber.quitCalls, 1);
+  assert.equal(subscriber.disconnectCalls, 1);
 });
 
 test('ends the stream exactly once when a live event write fails', async () => {

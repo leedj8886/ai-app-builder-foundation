@@ -25,6 +25,7 @@ export interface StreamResponse {
 export interface RedisSubscriber {
   subscribe(...channels: Array<string | Buffer>): Promise<unknown>;
   quit(): Promise<unknown>;
+  disconnect(): void;
   on(event: 'message', listener: (channel: string, message: string) => void): unknown;
   off(event: 'message', listener: (channel: string, message: string) => void): unknown;
 }
@@ -100,6 +101,8 @@ export const streamAgentRunEvents = async ({
 }: StreamAgentRunEventsInput): Promise<void> => {
   let closed = false;
   let backlogLoaded = false;
+  let subscriptionReady = false;
+  let disconnected = false;
   let lastWrittenSequence = lastEventId ?? 0;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   const bufferedEvents: PublicAgentEvent[] = [];
@@ -123,6 +126,17 @@ export const streamAgentRunEvents = async ({
     writeEvent(event);
   };
 
+  const forceDisconnect = (): void => {
+    if (disconnected) return;
+
+    disconnected = true;
+    try {
+      subscriber.disconnect();
+    } catch {
+      // Redis can already be disconnected.
+    }
+  };
+
   const cleanup = (): void => {
     if (closed) return;
 
@@ -138,10 +152,15 @@ export const streamAgentRunEvents = async ({
     } catch {
       // The client may already have disconnected.
     }
+    if (!subscriptionReady) {
+      forceDisconnect();
+      return;
+    }
+
     try {
-      void subscriber.quit().catch(() => undefined);
+      void subscriber.quit().catch(forceDisconnect);
     } catch {
-      // Redis can already be disconnected.
+      forceDisconnect();
     }
   };
 
@@ -183,6 +202,7 @@ export const streamAgentRunEvents = async ({
     } finally {
       if (subscribeTimeout) clearTimeout(subscribeTimeout);
     }
+    subscriptionReady = true;
     if (closed) return;
 
     heartbeat = setInterval(writeHeartbeat, heartbeatMs);
