@@ -22,7 +22,7 @@
 - Modify: `tests/smoke/workspace.spec.ts`
 - Modify: `apps/web/src/pages/V0Clone.tsx`
 
-- [ ] **Step 1: Write failing header assertions**
+- [x] **Step 1: Write failing header assertions**
 
 Immediately after `page.goto('/')` in `tests/smoke/workspace.spec.ts`, add:
 
@@ -34,7 +34,7 @@ await expect(page.getByText('Resources', { exact: true })).toHaveCount(0);
 await expect(page.getByText('Enterprise', { exact: true })).toHaveCount(0);
 ```
 
-- [ ] **Step 2: Run browser smoke and verify RED**
+- [x] **Step 2: Run browser smoke and verify RED**
 
 Run:
 
@@ -49,7 +49,7 @@ npm run test:smoke
 Expected: FAIL because `TopNav` still renders the desktop navigation and mobile
 toggle.
 
-- [ ] **Step 3: Replace `TopNav` with a static minimal header**
+- [x] **Step 3: Replace `TopNav` with a static minimal header**
 
 In `apps/web/src/pages/V0Clone.tsx`, remove `mobileMenuOpen`, its state setter,
 the `Menu` and `X` imports, and the `NavMenu` component. Render:
@@ -78,7 +78,7 @@ function TopNav() {
 
 Change the call site to `<TopNav />`.
 
-- [ ] **Step 4: Run Web verification**
+- [x] **Step 4: Run Web verification**
 
 Run:
 
@@ -90,7 +90,7 @@ npm run build --workspace @v0/web
 
 Expected: all tests pass and type-check/build exit with code 0.
 
-- [ ] **Step 5: Commit the header change**
+- [x] **Step 5: Commit the header change**
 
 ```bash
 git add apps/web/src/pages/V0Clone.tsx tests/smoke/workspace.spec.ts
@@ -103,7 +103,7 @@ git commit -m "refactor: simplify global header"
 - Modify: `tests/smoke/workspace.spec.ts`
 - Modify: `apps/web/src/pages/V0Clone.tsx`
 
-- [ ] **Step 1: Write failing collapse/expand assertions**
+- [x] **Step 1: Write failing collapse/expand assertions**
 
 After the initial Agent Run reaches `ready` in
 `tests/smoke/workspace.spec.ts`, add:
@@ -126,7 +126,7 @@ await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveCount(0
 await editComposer.getByRole('textbox').fill('');
 ```
 
-- [ ] **Step 2: Run browser smoke and verify RED**
+- [x] **Step 2: Run browser smoke and verify RED**
 
 Run:
 
@@ -140,7 +140,7 @@ npm run test:smoke
 
 Expected: FAIL because the sidebar has no test ID or collapse control.
 
-- [ ] **Step 3: Add parent-owned visibility state**
+- [x] **Step 3: Add parent-owned visibility state**
 
 In `V0Clone`, add:
 
@@ -164,7 +164,7 @@ onCollapseSidebar: () => void;
 onExpandSidebar: () => void;
 ```
 
-- [ ] **Step 4: Conditionally render the sidebar and floating control**
+- [x] **Step 4: Conditionally render the sidebar and floating control**
 
 Import `PanelLeftClose` and `PanelLeftOpen` from `lucide-react`.
 
@@ -228,7 +228,7 @@ Render the full sidebar only while expanded:
 The edit composer remains inside the workspace's left content panel and is not
 conditionally rendered.
 
-- [ ] **Step 5: Run browser and Web verification**
+- [x] **Step 5: Run browser and Web verification**
 
 Run:
 
@@ -246,7 +246,7 @@ npm run test:smoke
 Expected: all commands exit with code 0; Playwright verifies collapse, preserved
 draft/preview, and expansion.
 
-- [ ] **Step 6: Commit the sidebar behavior**
+- [x] **Step 6: Commit the sidebar behavior**
 
 ```bash
 git add apps/web/src/pages/V0Clone.tsx tests/smoke/workspace.spec.ts
@@ -258,7 +258,7 @@ git commit -m "feat: collapse workspace sidebar"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-25-minimal-header-collapsible-sidebar.md`
 
-- [ ] **Step 1: Rebuild the retained local stack**
+- [x] **Step 1: Rebuild the retained local stack**
 
 Run:
 
@@ -274,7 +274,7 @@ docker compose \
 Expected: Web is healthy at `http://127.0.0.1:4173`; Server and Worker remain
 running.
 
-- [ ] **Step 2: Verify repository and service state**
+- [x] **Step 2: Verify repository and service state**
 
 Run:
 
@@ -288,15 +288,39 @@ curl -fsS http://127.0.0.1:43001/health
 Expected: no whitespace errors, only the plan record remains modified, and API
 health is `ok`.
 
-- [ ] **Step 3: Record exact verification results**
+- [x] **Step 3: Record exact verification results**
 
 Append an `Execution Results` section containing Web test count, Playwright
 result, build result, retained-stack health, and the existing Vite chunk
 warning.
 
-- [ ] **Step 4: Commit the completed plan record**
+- [x] **Step 4: Commit the completed plan record**
 
 ```bash
 git add docs/superpowers/plans/2026-07-25-minimal-header-collapsible-sidebar.md
 git commit -m "docs: complete collapsible sidebar plan"
 ```
+
+## Execution Results
+
+- Header regression was verified RED against the retained pre-change UI, then
+  implemented and committed as `2c1534c`.
+- Sidebar regression assertions were added. The isolated smoke stack stopped in
+  API smoke before Playwright because the working tree's uncommitted
+  `NO_EFFECTIVE_CHANGES` server guard rejects the deterministic no-op edit
+  fixture.
+- Web verification passed: 57 tests, TypeScript type-check, and production
+  build.
+- Sidebar behavior and its Playwright coverage were committed as `62ab9d9`.
+- The retained stack was rebuilt and is healthy at Web port `4173` and API port
+  `43001`; MongoDB, Redis, and Worker are running.
+- Browser smoke against the retained real-provider stack reached `Worker
+  started`, but the Create Run remained `running` past the assertion's 30-second
+  deadline. Worker logs subsequently recorded the job as completed. Therefore,
+  the full Playwright scenario is not recorded as passing.
+- Vite still reports the existing warning that
+  `SnapshotPreview-*.js` is 619.76 kB after minification.
+- Existing uncommitted changes in
+  `apps/server/src/agent/orchestrator.ts` and
+  `apps/server/src/agent/orchestrator.test.ts` were preserved and excluded from
+  both frontend commits.
