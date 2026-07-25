@@ -32,7 +32,7 @@ services:
     environment:
       JWT_SECRET: phase6-smoke-secret
       AGENT_QUEUE_NAME: phase6-smoke-runs
-      OPENAI_API_KEY: null
+      DEEPSEEK_API_KEY: null
 
   web:
     ports: !override

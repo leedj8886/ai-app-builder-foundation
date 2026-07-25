@@ -35,10 +35,12 @@ services:
       - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
       - CLIENT_URL=${CLIENT_URL:-http://localhost:5173}
       - AGENT_QUEUE_NAME=${AGENT_QUEUE_NAME:-v0-agent-runs}
-      - AGENT_MODEL=${AGENT_MODEL:-gpt-4.1}
+      - AGENT_MODEL=${AGENT_MODEL:-}
       - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
       - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
       - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
@@ -59,9 +61,11 @@ services:
       - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
       - AGENT_QUEUE_NAME=${AGENT_QUEUE_NAME:-v0-agent-runs}
-      - AGENT_MODEL=${AGENT_MODEL:-gpt-4.1}
+      - AGENT_MODEL=${AGENT_MODEL:-}
       - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
       - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
       - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
