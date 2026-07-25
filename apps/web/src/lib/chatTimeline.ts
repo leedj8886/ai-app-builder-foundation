@@ -23,6 +23,48 @@ const activeStatuses = new Set<ChatTimelineTurn['agent']['status']>([
   'persisting',
 ])
 
+export const terminalStatuses = new Set<ChatTimelineTurn['agent']['status']>([
+  'completed',
+  'failed',
+  'cancelled',
+])
+
+export const canToggleTurn = (turn: ChatTimelineTurn): boolean =>
+  terminalStatuses.has(turn.agent.status)
+
+export const formatPlanningDuration = (
+  durationMs?: number,
+): string | undefined => durationMs === undefined
+  ? undefined
+  : `规划用时 ${Math.max(1, Math.round(durationMs / 1000))} 秒`
+
+const formatDuration = (durationMs?: number): string | undefined =>
+  durationMs === undefined
+    ? undefined
+    : `${Math.max(1, Math.round(durationMs / 1000))} 秒`
+
+export const formatCollapsedTurnLabel = (
+  turn: ChatTimelineTurn,
+): string => {
+  if (turn.agent.status === 'failed') {
+    return `生成失败 · ${turn.agent.error?.message ?? '运行未完成'}`
+  }
+  if (turn.agent.status === 'cancelled') {
+    return '已取消 · 保留已完成的工作步骤'
+  }
+
+  const summary = turn.agent.summary ?? turn.agent.plan?.summary ?? '生成完成'
+  const changedFiles = turn.snapshot?.changedFiles.length ?? 0
+  const duration = formatDuration(turn.agent.durationMs)
+
+  return [
+    '已完成',
+    summary,
+    ...(changedFiles > 0 ? [`修改 ${changedFiles} 个文件`] : []),
+    ...(duration ? [duration] : []),
+  ].join(' · ')
+}
+
 export const createTimelineState = (): ChatTimelineState => ({
   turns: [],
   expandedRunIds: new Set(),

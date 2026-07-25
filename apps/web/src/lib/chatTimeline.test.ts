@@ -7,7 +7,10 @@ import type {
 } from '@/services/api'
 import {
   appendTimelineEvent,
+  canToggleTurn,
   createTimelineState,
+  formatCollapsedTurnLabel,
+  formatPlanningDuration,
   mergeOlderTimelinePage,
   replaceTimelinePage,
   resolveDefaultExpandedRunIds,
@@ -87,4 +90,49 @@ test('prepends older pages without duplicating turns', () => {
 
   assert.deepEqual(merged.turns.map((item) => item.runId), ['a', 'b', 'c'])
   assert.equal(merged.pageInfo.hasMore, false)
+})
+
+test('formats completed and failed collapsed labels', () => {
+  const completed = {
+    ...turn('completed', 'completed'),
+    agent: {
+      ...turn('completed', 'completed').agent,
+      durationMs: 29_000,
+      summary: 'Added activity UI',
+    },
+    snapshot: {
+      id: 'snapshot-1',
+      summary: 'Added activity UI',
+      changedFiles: ['src/App.tsx'],
+    },
+  }
+  const failed = {
+    ...turn('failed', 'failed'),
+    agent: {
+      ...turn('failed', 'failed').agent,
+      error: { message: 'Type-check failed' },
+    },
+  }
+
+  assert.equal(
+    formatCollapsedTurnLabel(completed),
+    '已完成 · Added activity UI · 修改 1 个文件 · 29 秒',
+  )
+  assert.equal(
+    formatCollapsedTurnLabel(failed),
+    '生成失败 · Type-check failed',
+  )
+})
+
+test('labels planning duration without implying hidden reasoning', () => {
+  assert.equal(formatPlanningDuration(2_100), '规划用时 2 秒')
+  assert.equal(formatPlanningDuration(undefined), undefined)
+  assert.equal(formatPlanningDuration(2_100)?.includes('思考'), false)
+})
+
+test('only terminal turns can be manually toggled', () => {
+  assert.equal(canToggleTurn(turn('active', 'generating')), false)
+  assert.equal(canToggleTurn(turn('completed', 'completed')), true)
+  assert.equal(canToggleTurn(turn('failed', 'failed')), true)
+  assert.equal(canToggleTurn(turn('cancelled', 'cancelled')), true)
 })
