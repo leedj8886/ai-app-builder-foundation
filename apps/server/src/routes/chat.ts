@@ -2,10 +2,18 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { Chat } from '../models/Chat';
+import { Project } from '../models/Project';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { generateCode, generateChatTitle } from '../services/aiService';
+import { objectIdStringSchema } from '../agent/schemas';
 
 const router = Router();
+
+const toChatTitle = (titleSeed: string): string => {
+  const normalized = titleSeed.trim().replace(/\s+/g, ' ');
+  return normalized.length <= 60
+    ? normalized
+    : `${normalized.slice(0, 57)}...`;
+};
 
 // All routes require authentication
 router.use(authMiddleware);
@@ -45,40 +53,32 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
 // Create new chat
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
-    const { projectId, initialMessage } = z.object({
-      projectId: z.string().optional(),
-      initialMessage: z.string().min(1)
+    const { projectId, titleSeed } = z.object({
+      projectId: objectIdStringSchema,
+      titleSeed: z.string().trim().min(1)
     }).parse(req.body);
 
-    // Generate title from first message
-    const title = await generateChatTitle(initialMessage);
+    const project = await Project.findOne({
+      _id: projectId,
+      userId: req.userId
+    });
 
-    const chat = new Chat({
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const chat = await Chat.create({
       userId: req.userId,
       projectId,
-      title,
-      messages: [{
-        id: uuidv4(),
-        role: 'user',
-        content: initialMessage,
-        createdAt: new Date()
-      }]
+      title: toChatTitle(titleSeed),
+      messages: []
     });
 
-    await chat.save();
-
-    // Generate AI response
-    const { content, codeBlocks } = await generateCode(chat.messages);
-
-    chat.messages.push({
-      id: uuidv4(),
-      role: 'assistant',
-      content,
-      codeBlocks,
-      createdAt: new Date()
-    });
-
-    await chat.save();
+    await Project.updateOne(
+      { _id: projectId, userId: req.userId },
+      { $addToSet: { chatIds: chat._id } }
+    );
 
     res.status(201).json({ chat });
   } catch (error) {
@@ -108,17 +108,6 @@ router.post('/:id/messages', async (req: AuthRequest, res, next) => {
       id: uuidv4(),
       role: 'user',
       content,
-      createdAt: new Date()
-    });
-
-    // Generate AI response
-    const { content: aiContent, codeBlocks } = await generateCode(chat.messages);
-
-    chat.messages.push({
-      id: uuidv4(),
-      role: 'assistant',
-      content: aiContent,
-      codeBlocks,
       createdAt: new Date()
     });
 

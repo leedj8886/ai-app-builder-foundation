@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AgentRun } from '../models/AgentRun';
 import { AgentEvent } from '../models/AgentEvent';
@@ -67,17 +68,17 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       return;
     }
 
-    if (body.chatId) {
-      const chat = await Chat.findOne({
+    const chat = body.chatId
+      ? await Chat.findOne({
         _id: body.chatId,
         userId,
         projectId: body.projectId
-      });
+      })
+      : null;
 
-      if (!chat) {
-        res.status(404).json({ error: 'Chat not found' });
-        return;
-      }
+    if (body.chatId && !chat) {
+      res.status(404).json({ error: 'Chat not found' });
+      return;
     }
 
     const activeSnapshot = project.activeSnapshotId
@@ -112,6 +113,16 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       model: config.model,
       maxRepairAttempts: config.maxRepairAttempts
     });
+
+    if (chat) {
+      chat.messages.push({
+        id: randomUUID(),
+        role: 'user',
+        content: body.prompt,
+        createdAt: new Date()
+      });
+      await chat.save();
+    }
 
     await emitAgentEvent({
       runId: run._id,

@@ -85,6 +85,55 @@ test('authenticated run creation persists its event and BullMQ job', async () =>
   assert.ok(await getAgentRunQueue().getJob(response.body.run._id));
 });
 
+test('Chat creation stores project metadata without an assistant response', async () => {
+  const { ownerToken, project } = await fixtures();
+  const response = await request(app)
+    .post('/api/chat')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      projectId: project._id.toString(),
+      titleSeed: 'Build a support dashboard'
+    })
+    .expect(201);
+
+  assert.equal(response.body.chat.projectId, project._id.toString());
+  assert.equal(response.body.chat.title, 'Build a support dashboard');
+  assert.deepEqual(response.body.chat.messages, []);
+  assert.equal(
+    (await Project.findById(project._id))?.chatIds.some(
+      chatId => chatId.toString() === response.body.chat._id
+    ),
+    true
+  );
+});
+
+test('creating a Chat-associated Run appends one user message', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const chat = await Chat.create({
+    userId: owner._id,
+    projectId: project._id,
+    title: 'Support dashboard',
+    messages: []
+  });
+
+  const response = await request(app)
+    .post('/api/agent/runs')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      projectId: project._id.toString(),
+      chatId: chat._id.toString(),
+      prompt: 'Add ticket filters',
+      mode: 'create'
+    })
+    .expect(201);
+
+  const refreshed = await Chat.findById(chat._id).lean();
+  assert.equal(refreshed?.messages.length, 1);
+  assert.equal(refreshed?.messages[0]?.role, 'user');
+  assert.equal(refreshed?.messages[0]?.content, 'Add ticket filters');
+  assert.equal(response.body.run.chatId, chat._id.toString());
+});
+
 test('agent routes hide projects runs snapshots and cross-project chats from other owners', async () => {
   const {
     owner,
@@ -126,6 +175,7 @@ test('agent routes hide projects runs snapshots and cross-project chats from oth
       chatId: chat._id.toString(),
       prompt: 'Wrong project chat'
     }).expect(404);
+  assert.equal((await Chat.findById(chat._id))?.messages.length, 0);
 });
 
 interface StreamEvent {
