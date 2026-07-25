@@ -109,6 +109,21 @@ export interface AgentRunDetailResponse {
   resultSnapshot?: ProjectSnapshot | null;
 }
 
+export interface RoutedChat {
+  _id: string;
+  userId: string;
+  projectId?: string;
+  title: string;
+  messages: Array<{
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    createdAt: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const agentApi = {
   createRun: (data: {
     projectId: string;
@@ -128,12 +143,12 @@ export const agentApi = {
 
 // Chat API
 export const chatApi = {
-  getAll: () => api.get('/api/chat'),
-  getById: (id: string) => api.get(`/api/chat/${id}`),
-  create: (initialMessage: string, projectId?: string) =>
-    api.post('/api/chat', { initialMessage, projectId }),
+  getAll: () => api.get<{ chats: RoutedChat[] }>('/api/chat'),
+  getById: (id: string) => api.get<{ chat: RoutedChat }>(`/api/chat/${id}`),
+  create: (titleSeed: string, projectId: string) =>
+    api.post<{ chat: RoutedChat }>('/api/chat', { titleSeed, projectId }),
   sendMessage: (id: string, content: string) =>
-    api.post(`/api/chat/${id}/messages`, { content }),
+    api.post<{ chat: RoutedChat }>(`/api/chat/${id}/messages`, { content }),
   update: (id: string, title: string) =>
     api.patch(`/api/chat/${id}`, { title }),
   delete: (id: string) => api.delete(`/api/chat/${id}`),

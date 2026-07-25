@@ -42,19 +42,6 @@ export function Chat() {
     }
   }, [chatData])
 
-  // Create new chat mutation
-  const createChatMutation = useMutation({
-    mutationFn: (initialMessage: string) => chatApi.create(initialMessage),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['chats'] })
-      navigate(`/chat/${response.data.chat._id}`)
-      toast.success('Chat created')
-    },
-    onError: () => {
-      toast.error('Failed to create chat')
-    },
-  })
-
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: ({ chatId, content }: { chatId: string; content: string }) =>
@@ -100,7 +87,7 @@ export function Chat() {
     if (chatId) {
       sendMessageMutation.mutate({ chatId, content: message })
     } else {
-      createChatMutation.mutate(message)
+      toast.error('Create a project conversation from the v0 home page')
     }
   }
 
@@ -154,7 +141,7 @@ export function Chat() {
         {/* Messages */}
         <MessageList
           messages={currentChat?.messages || []}
-          isLoading={sendMessageMutation.isPending || createChatMutation.isPending}
+          isLoading={sendMessageMutation.isPending}
         />
 
         {/* Input */}
@@ -162,7 +149,7 @@ export function Chat() {
           <div className="max-w-4xl mx-auto">
             <ChatInput
               onSend={handleSendMessage}
-              isLoading={sendMessageMutation.isPending || createChatMutation.isPending}
+              isLoading={sendMessageMutation.isPending}
             />
             <p className="text-xs text-muted-foreground text-center mt-2">
               AI can make mistakes. Please verify important information.
