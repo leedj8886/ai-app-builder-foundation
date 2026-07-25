@@ -11,6 +11,10 @@ import {
   RepairInput
 } from './types';
 import { agentPlanSchema, generationResultSchema } from './schemas';
+import {
+  createDeepSeekClient,
+  DeepSeekConfig
+} from '../services/modelProvider';
 
 interface CompletionRequest {
   model: string;
@@ -137,16 +141,16 @@ export const createOpenAIModelClient = (
 };
 
 export const createProductionModelClient = (
-  apiKey: string | undefined,
-  model: string
+  config: DeepSeekConfig,
+  dependencies: {
+    createClient?: Parameters<typeof createDeepSeekClient>[1];
+  } = {}
 ): ModelClient => {
-  if (!apiKey) {
-    throw modelError('MODEL_CONFIGURATION_ERROR', 'OPENAI_API_KEY is required by the agent worker');
-  }
+  const client = createDeepSeekClient(config, dependencies.createClient);
 
-  const openai = new OpenAI({ apiKey });
   return createOpenAIModelClient({
-    model,
-    createCompletion: request => openai.chat.completions.create(request)
+    model: config.model,
+    createCompletion: async request =>
+      client.chat.completions.create(request) as Promise<CompletionResponse>
   });
 };

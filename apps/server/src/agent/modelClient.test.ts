@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createOpenAIModelClient } from './modelClient';
+import OpenAI from 'openai';
+import {
+  createOpenAIModelClient,
+  createProductionModelClient
+} from './modelClient';
 import { AgentContext } from './types';
 
 const context: AgentContext = {
@@ -188,4 +192,49 @@ test('OpenAI model client sends structured validation diagnostics for repair', a
   assert.equal(userInput.attempt, 1);
   assert.equal(userInput.validation.checks[0].name, 'type-check');
   assert.equal(userInput.files[0].path, 'src/App.tsx');
+});
+
+test('production model client uses DeepSeek configuration', async () => {
+  const requests: Array<{ model: string }> = [];
+  const client = createProductionModelClient(
+    {
+      apiKey: 'test-key',
+      baseURL: 'https://deepseek.example.test',
+      model: 'deepseek-v4-pro'
+    },
+    {
+      createClient: config => {
+        assert.equal(config.apiKey, 'test-key');
+        assert.equal(config.baseURL, 'https://deepseek.example.test');
+        return {
+          chat: {
+            completions: {
+              create: async (request: { model: string }) => {
+                requests.push(request);
+                return {
+                  choices: [{
+                    message: {
+                      content: JSON.stringify({
+                        summary: 'Plan',
+                        steps: [{
+                          title: 'Create UI',
+                          intent: 'Render the generated app',
+                          filesLikelyTouched: ['src/App.tsx']
+                        }],
+                        assumptions: []
+                      })
+                    }
+                  }]
+                };
+              }
+            }
+          }
+        } as unknown as OpenAI;
+      }
+    }
+  );
+
+  await client.generatePlan({ context });
+
+  assert.equal(requests[0].model, 'deepseek-v4-pro');
 });

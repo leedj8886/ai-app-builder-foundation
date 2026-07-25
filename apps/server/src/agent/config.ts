@@ -23,7 +23,10 @@ const numberFromEnv = (value: string | undefined, fallback: number): number => {
 export const getAgentConfig = (env: EnvLike = process.env): AgentConfig => ({
   redisUrl: env.REDIS_URL || 'redis://localhost:6379',
   queueName: env.AGENT_QUEUE_NAME || 'v0-agent-runs',
-  model: env.AGENT_MODEL || 'gpt-4.1',
+  model:
+    env.AGENT_MODEL ||
+    env.DEEPSEEK_MODEL ||
+    'deepseek-v4-flash',
   maxRepairAttempts: numberFromEnv(env.AGENT_MAX_REPAIR_ATTEMPTS, 2),
   workspaceRoot: env.AGENT_WORKSPACE_ROOT || '/tmp/v0-agent-runs',
   contextCharLimit: numberFromEnv(env.AGENT_CONTEXT_CHAR_LIMIT, 120000),

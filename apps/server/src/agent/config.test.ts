@@ -7,12 +7,26 @@ test('getAgentConfig uses stable defaults', () => {
 
   assert.equal(config.redisUrl, 'redis://localhost:6379');
   assert.equal(config.queueName, 'v0-agent-runs');
-  assert.equal(config.model, 'gpt-4.1');
+  assert.equal(config.model, 'deepseek-v4-flash');
   assert.equal(config.maxRepairAttempts, 2);
   assert.equal(config.workspaceRoot, '/tmp/v0-agent-runs');
   assert.equal(config.contextCharLimit, 120000);
   assert.equal(config.commandTimeoutMs, 120000);
   assert.equal(config.maxValidationOutputChars, 12000);
+});
+
+test('getAgentConfig gives AGENT_MODEL precedence over DEEPSEEK_MODEL', () => {
+  assert.equal(
+    getAgentConfig({
+      AGENT_MODEL: 'agent-model',
+      DEEPSEEK_MODEL: 'shared-model'
+    }).model,
+    'agent-model'
+  );
+  assert.equal(
+    getAgentConfig({ DEEPSEEK_MODEL: 'shared-model' }).model,
+    'shared-model'
+  );
 });
 
 test('getAgentConfig parses numeric env values', () => {

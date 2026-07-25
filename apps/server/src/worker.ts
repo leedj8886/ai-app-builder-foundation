@@ -5,6 +5,7 @@ import { createRedisConnection } from './agent/redis';
 import { createProductionModelClient } from './agent/modelClient';
 import { createProjectValidator } from './agent/validator';
 import { createAgentWorker } from './agent/createWorker';
+import { getDeepSeekConfig } from './services/modelProvider';
 
 dotenv.config();
 
@@ -13,10 +14,11 @@ const startWorker = async () => {
 
   const config = getAgentConfig();
   const connection = createRedisConnection();
-  const modelClient = createProductionModelClient(
-    process.env.OPENAI_API_KEY,
-    config.model
-  );
+  const providerConfig = getDeepSeekConfig();
+  const modelClient = createProductionModelClient({
+    ...providerConfig,
+    model: config.model
+  });
   const validator = createProjectValidator({
     workspaceRoot: config.workspaceRoot,
     commandTimeoutMs: config.commandTimeoutMs,
