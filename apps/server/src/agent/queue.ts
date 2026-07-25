@@ -38,3 +38,12 @@ export const enqueueAgentRun = async (runId: string): Promise<void> => {
     }
   );
 };
+
+export const closeAgentRunQueue = async (): Promise<void> => {
+  if (!agentRunQueue) {
+    return;
+  }
+
+  await agentRunQueue.close();
+  agentRunQueue = undefined;
+};
