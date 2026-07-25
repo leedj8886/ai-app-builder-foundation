@@ -12,6 +12,7 @@ import {
   startApiGeneration,
   submitPrompt,
   isCancellableRunId,
+  type AgentEventSummary,
 } from './v0Workspace'
 
 describe('v0 workspace state', () => {
@@ -324,6 +325,79 @@ describe('v0 workspace state', () => {
       { type: 'run.failed', message: 'brief failure', sequence: 2 },
     )
     assert.equal(failed.generation.error, 'brief failure')
+  })
+
+  it('maps streamed Agent phases to user-facing progress labels', () => {
+    const events: AgentEventSummary[] = [
+      {
+        type: 'agent.step',
+        message: 'Planning project changes',
+        sequence: 2,
+        payload: { phase: 'planning' },
+      },
+      {
+        type: 'agent.step',
+        message: 'Generating React TypeScript files',
+        sequence: 3,
+        payload: { phase: 'generating' },
+      },
+      {
+        type: 'validation.started',
+        message: 'Validating generated project',
+        sequence: 4,
+        payload: { phase: 'validating' },
+      },
+      {
+        type: 'repair.started',
+        message: 'Repair attempt 1 started',
+        sequence: 5,
+        payload: { phase: 'repairing', attempt: 1 },
+      },
+    ]
+
+    const state = events.reduce(
+      (current, event) => applyAgentEvent(current, 'run_current', event),
+      startApiGeneration(createInitialWorkspaceState(), 'Build a dashboard', 'run_current'),
+    )
+
+    assert.deepEqual(
+      state.generation.steps.map((step) => step.label),
+      [
+        'Run queued',
+        'Planning project changes',
+        'Generating application files',
+        'Validating generated project',
+        'Repairing generated project',
+      ],
+    )
+  })
+
+  it('completes the previous active step when progress advances', () => {
+    const queued = startApiGeneration(
+      createInitialWorkspaceState(),
+      'Build a dashboard',
+      'run_current',
+    )
+    const started = applyAgentEvent(queued, 'run_current', {
+      type: 'run.started',
+      message: 'Agent run started',
+      sequence: 2,
+    })
+    const validating = applyAgentEvent(started, 'run_current', {
+      type: 'validation.started',
+      message: 'Validating generated project',
+      sequence: 3,
+      payload: { phase: 'validating' },
+    })
+
+    assert.deepEqual(
+      validating.generation.steps.map((step) => step.status),
+      ['done', 'done', 'active'],
+    )
+    assert.equal(
+      validating.generation.steps.filter((step) => step.status === 'active').length,
+      1,
+    )
   })
 
   it('does not let terminal events from stale runs replace the active generation', () => {

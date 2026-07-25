@@ -334,24 +334,40 @@ export const failApiGeneration = (
 const eventTypeLabels: Record<string, string> = {
   'run.created': 'Run queued',
   'run.started': 'Worker started',
-  'agent.step': 'Agent step',
+  'agent.plan': 'Plan ready',
   'file.changed': 'File changed',
+  'validation.started': 'Validating generated project',
+  'validation.failed': 'Validation failed',
+  'validation.passed': 'Validation passed',
+  'repair.started': 'Repairing generated project',
   'run.completed': 'Snapshot ready',
   'run.failed': 'Generation failed',
   'run.cancelled': 'Generation cancelled',
 }
 
+const phaseLabels: Record<string, string> = {
+  planning: 'Planning project changes',
+  generating: 'Generating application files',
+  validating: 'Validating generated project',
+  repairing: 'Repairing generated project',
+  persisting: 'Saving generated snapshot',
+}
+
 const mapEventToStep = (event: AgentEventSummary): GenerationStep => {
+  const phase = typeof event.payload?.phase === 'string'
+    ? event.payload.phase
+    : undefined
   const label = event.type === 'file.changed'
     ? event.message
-    : eventTypeLabels[event.type] ?? event.message
-  const isTerminalEvent = ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)
+    : phase
+      ? phaseLabels[phase] ?? event.message
+      : eventTypeLabels[event.type] ?? event.message
 
   return {
     id: `${event.sequence}:${event.type}`,
     label,
     detail: event.payload?.path ? String(event.payload.path) : event.message,
-    status: isTerminalEvent ? 'active' : 'done',
+    status: 'active',
   }
 }
 
@@ -376,6 +392,10 @@ export const applyAgentEvent = (
       : isFailed
         ? 'failed'
         : 'running'
+  const previousSteps = state.generation.steps.map((existing) => ({
+    ...existing,
+    status: existing.status === 'active' ? 'done' as const : existing.status,
+  }))
 
   return {
     ...state,
@@ -383,7 +403,7 @@ export const applyAgentEvent = (
       ...state.generation,
       status,
       error: isFailed ? conciseEventMessage(event.message) : undefined,
-      steps: [...state.generation.steps, step],
+      steps: [...previousSteps, step],
     },
   }
 }
