@@ -31,12 +31,10 @@ import {
   Palette,
   RefreshCw,
   Rocket,
-  Search,
   Settings2,
   SlidersHorizontal,
   Sparkles,
   Square,
-  Terminal,
   UploadCloud,
   Upload,
   Users,
@@ -46,6 +44,7 @@ import {
 import row01 from '@/assets/v0/template-row01.png'
 import row02 from '@/assets/v0/template-row02.png'
 import iosLight from '@/assets/v0/ios-light.png'
+import { WorkspaceEditComposer } from '@/components/WorkspaceEditComposer'
 import { agentApi, authApi, chatApi, projectApi } from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
 import {
@@ -183,6 +182,8 @@ export function V0Clone() {
   const { chatId } = useParams<{ chatId: string }>()
   const [workspace, setWorkspace] = useState(createInitialWorkspaceState)
   const [draftPrompt, setDraftPrompt] = useState('')
+  const [editDraft, setEditDraft] = useState('')
+  const [submissionPending, setSubmissionPending] = useState(false)
   const [routeError, setRouteError] = useState<string>()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
@@ -238,6 +239,7 @@ export function V0Clone() {
   useEffect(() => {
     const requestId = ++routeRequestRef.current
     setRouteError(undefined)
+    setEditDraft('')
 
     if (!chatId) {
       monitorControllerRef.current?.abort()
@@ -305,6 +307,7 @@ export function V0Clone() {
     }
 
     submissionInFlightRef.current = true
+    setSubmissionPending(true)
     const submissionId = ++submissionIdRef.current
 
     if (!chatId) {
@@ -365,6 +368,9 @@ export function V0Clone() {
       })
       setWorkspace((state) => applyAgentRunDetail(state, detail))
       await refreshProjectData(activeProjectId)
+      if (chatId && detail.run.status === 'completed') {
+        setEditDraft((current) => current.trim() === prompt ? '' : current)
+      }
     } catch (error) {
       if (!isAbortError(error) && submissionId === submissionIdRef.current) {
         setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
@@ -372,6 +378,7 @@ export function V0Clone() {
     } finally {
       if (submissionId === submissionIdRef.current) {
         submissionInFlightRef.current = false
+        setSubmissionPending(false)
       }
     }
   }
@@ -397,6 +404,7 @@ export function V0Clone() {
   const handleBackHome = () => {
     submissionIdRef.current += 1
     submissionInFlightRef.current = false
+    setSubmissionPending(false)
     monitorControllerRef.current?.abort()
     monitorControllerRef.current = null
     navigate('/')
@@ -656,6 +664,10 @@ export function V0Clone() {
           onRollback={(snapshotId) => void handleRollback(snapshotId)}
           currentCode={currentCode}
           currentFileName={currentFileName}
+          editDraft={editDraft}
+          submissionPending={submissionPending}
+          onEditDraftChange={setEditDraft}
+          onSubmitEdit={() => void submitPromptToAgent(editDraft)}
         />
       )}
     </div>
@@ -826,6 +838,10 @@ function WorkspaceScreen({
   onRollback,
   currentCode,
   currentFileName,
+  editDraft,
+  submissionPending,
+  onEditDraftChange,
+  onSubmitEdit,
 }: {
   prompt: string
   selectedTemplate: Template
@@ -844,6 +860,10 @@ function WorkspaceScreen({
   onRollback: (snapshotId: string) => void
   currentCode: string
   currentFileName: string
+  editDraft: string
+  submissionPending: boolean
+  onEditDraftChange: (value: string) => void
+  onSubmitEdit: () => void
 }) {
   const assistantTitle = state.generation.status === 'running'
     ? 'I am creating a project snapshot.'
@@ -872,30 +892,7 @@ function WorkspaceScreen({
             New chat
           </button>
         </div>
-        <div className="border-y border-neutral-200 p-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
-            <input
-              className="h-9 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-neutral-400"
-              placeholder="Search chats"
-            />
-          </div>
-        </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          <p className="px-2 pb-2 pt-1 text-xs font-medium uppercase text-neutral-400">Recent</p>
-          {state.runHistory.map((run, index) => (
-            <button
-              key={run._id}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
-                index === 0 ? 'bg-neutral-200 text-neutral-950' : 'text-neutral-600 hover:bg-neutral-100'
-              }`}
-            >
-              <Terminal className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{run.prompt ?? 'Untitled run'}</span>
-              <span className="text-[10px] uppercase text-neutral-400">{run.status}</span>
-            </button>
-          ))}
-        </nav>
+        <div className="flex-1" />
         <div className="space-y-1 border-t border-neutral-200 p-2">
           <button className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100">
             <Github className="h-4 w-4" />
@@ -1078,6 +1075,13 @@ function WorkspaceScreen({
                 </div>
               </div>
             </div>
+            <WorkspaceEditComposer
+              value={editDraft}
+              disabled={state.generation.status === 'running' || submissionPending}
+              canSubmit={Boolean(state.snapshot) && Boolean(editDraft.trim())}
+              onChange={onEditDraftChange}
+              onSubmit={onSubmitEdit}
+            />
           </section>
 
           <section className="flex min-w-0 flex-col bg-[#f5f5f5]">
