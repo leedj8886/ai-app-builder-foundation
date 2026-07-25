@@ -29,7 +29,7 @@
 - Create: `apps/server/src/services/modelProvider.ts`
 - Create: `apps/server/src/services/modelProvider.test.ts`
 
-- [ ] **Step 1: Write failing configuration and client-factory tests**
+- [x] **Step 1: Write failing configuration and client-factory tests**
 
 Create `apps/server/src/services/modelProvider.test.ts`:
 
@@ -103,7 +103,7 @@ test('createDeepSeekClient rejects missing credentials without leaking values', 
 });
 ```
 
-- [ ] **Step 2: Run the provider test to verify it fails**
+- [x] **Step 2: Run the provider test to verify it fails**
 
 Run:
 
@@ -113,7 +113,7 @@ node --import tsx --test --test-name-pattern="DeepSeek|deepseek" apps/server/src
 
 Expected: FAIL because `./modelProvider` does not exist.
 
-- [ ] **Step 3: Implement the shared provider module**
+- [x] **Step 3: Implement the shared provider module**
 
 Create `apps/server/src/services/modelProvider.ts`:
 
@@ -159,7 +159,7 @@ export const createDeepSeekClient = (
 };
 ```
 
-- [ ] **Step 4: Run focused tests and type-check**
+- [x] **Step 4: Run focused tests and type-check**
 
 Run:
 
@@ -170,7 +170,7 @@ npm run type-check --workspace @v0/server
 
 Expected: provider tests PASS and TypeScript exits with code 0.
 
-- [ ] **Step 5: Commit the provider boundary**
+- [x] **Step 5: Commit the provider boundary**
 
 ```bash
 git add apps/server/src/services/modelProvider.ts apps/server/src/services/modelProvider.test.ts
@@ -186,7 +186,7 @@ git commit -m "feat: add DeepSeek provider configuration"
 - Modify: `apps/server/src/agent/modelClient.test.ts`
 - Modify: `apps/server/src/worker.ts`
 
-- [ ] **Step 1: Write failing Agent model-selection tests**
+- [x] **Step 1: Write failing Agent model-selection tests**
 
 Update the default assertion in `apps/server/src/agent/config.test.ts` and add the precedence test:
 
@@ -219,7 +219,7 @@ test('getAgentConfig gives AGENT_MODEL precedence over DEEPSEEK_MODEL', () => {
 });
 ```
 
-- [ ] **Step 2: Run the Agent config tests to verify they fail**
+- [x] **Step 2: Run the Agent config tests to verify they fail**
 
 Run:
 
@@ -230,7 +230,7 @@ node --import tsx --test apps/server/src/agent/config.test.ts
 Expected: FAIL because the current default is `gpt-4.1` and
 `DEEPSEEK_MODEL` is ignored.
 
-- [ ] **Step 3: Implement Agent model precedence**
+- [x] **Step 3: Implement Agent model precedence**
 
 Replace the model property in `apps/server/src/agent/config.ts`:
 
@@ -241,7 +241,7 @@ model:
   'deepseek-v4-flash',
 ```
 
-- [ ] **Step 4: Add a failing production-adapter test**
+- [x] **Step 4: Add a failing production-adapter test**
 
 Change the import in `apps/server/src/agent/modelClient.test.ts`:
 
@@ -298,7 +298,7 @@ test('production model client uses DeepSeek configuration', async () => {
 });
 ```
 
-- [ ] **Step 5: Run the production-adapter test to verify it fails**
+- [x] **Step 5: Run the production-adapter test to verify it fails**
 
 Run:
 
@@ -309,7 +309,7 @@ node --import tsx --test --test-name-pattern="production model client" apps/serv
 Expected: FAIL because `createProductionModelClient` still accepts
 `apiKey, model` and constructs an OpenAI client directly.
 
-- [ ] **Step 6: Connect the Agent adapter to the shared provider**
+- [x] **Step 6: Connect the Agent adapter to the shared provider**
 
 In `apps/server/src/agent/modelClient.ts`, import:
 
@@ -343,7 +343,7 @@ export const createProductionModelClient = (
 
 Do not widen the orchestration-facing `ModelClient` interface.
 
-- [ ] **Step 7: Update the production worker bootstrap**
+- [x] **Step 7: Update the production worker bootstrap**
 
 In `apps/server/src/worker.ts`, import:
 
@@ -363,7 +363,7 @@ const modelClient = createProductionModelClient({
 
 The smoke worker remains unchanged.
 
-- [ ] **Step 8: Run Agent tests, type-check, and build**
+- [x] **Step 8: Run Agent tests, type-check, and build**
 
 Run:
 
@@ -375,7 +375,7 @@ npm run build --workspace @v0/server
 
 Expected: all focused tests PASS; type-check and build exit with code 0.
 
-- [ ] **Step 9: Commit the Agent integration**
+- [x] **Step 9: Commit the Agent integration**
 
 ```bash
 git add apps/server/src/agent/config.ts apps/server/src/agent/config.test.ts apps/server/src/agent/modelClient.ts apps/server/src/agent/modelClient.test.ts apps/server/src/worker.ts
@@ -388,7 +388,7 @@ git commit -m "feat: run agent worker with DeepSeek"
 - Create: `apps/server/src/services/aiService.test.ts`
 - Modify: `apps/server/src/services/aiService.ts`
 
-- [ ] **Step 1: Write failing legacy-service tests**
+- [x] **Step 1: Write failing legacy-service tests**
 
 Create `apps/server/src/services/aiService.test.ts`:
 
@@ -466,7 +466,7 @@ test('generateChatTitle preserves the fallback on provider failure', async () =>
 });
 ```
 
-- [ ] **Step 2: Run the legacy-service tests to verify they fail**
+- [x] **Step 2: Run the legacy-service tests to verify they fail**
 
 Run:
 
@@ -477,7 +477,7 @@ node --import tsx --test apps/server/src/services/aiService.test.ts
 Expected: FAIL because `AIServiceDependencies` and dependency parameters do not
 exist.
 
-- [ ] **Step 3: Replace the module-level client with lazy DeepSeek dependencies**
+- [x] **Step 3: Replace the module-level client with lazy DeepSeek dependencies**
 
 In `apps/server/src/services/aiService.ts`, remove the direct `OpenAI` import
 and module-level `openai` instance. Add:
@@ -565,7 +565,7 @@ const response = await dependencies.createCompletion({
 Keep the existing code-block extraction, dependency extraction, error mapping,
 and `New Chat` fallback.
 
-- [ ] **Step 4: Run service tests and all server unit tests**
+- [x] **Step 4: Run service tests and all server unit tests**
 
 Run:
 
@@ -578,7 +578,7 @@ npm run type-check --workspace @v0/server
 Expected: legacy-service tests PASS, all server unit tests PASS, and type-check
 exits with code 0. No network request is made because tests inject completions.
 
-- [ ] **Step 5: Commit the legacy integration**
+- [x] **Step 5: Commit the legacy integration**
 
 ```bash
 git add apps/server/src/services/aiService.ts apps/server/src/services/aiService.test.ts
@@ -590,7 +590,7 @@ git commit -m "feat: run legacy chat with DeepSeek"
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 1: Update provider naming and environment variables**
+- [x] **Step 1: Update provider naming and environment variables**
 
 Replace `OpenAI API / Claude API (AI 代码生成)` with:
 
@@ -612,7 +612,7 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 AGENT_MODEL=
 ```
 
-- [ ] **Step 2: Document real and deterministic workers**
+- [x] **Step 2: Document real and deterministic workers**
 
 Add after the environment section:
 
@@ -639,7 +639,7 @@ npm run start:smoke-worker --workspace @v0/server
 不要把 `DEEPSEEK_API_KEY` 提交到 Git。
 ````
 
-- [ ] **Step 3: Check documentation and stale OpenAI configuration**
+- [x] **Step 3: Check documentation and stale OpenAI configuration**
 
 Run:
 
@@ -651,7 +651,7 @@ git diff --check
 Expected: `rg` returns no stale production configuration or model names;
 `git diff --check` exits with code 0.
 
-- [ ] **Step 4: Commit the documentation**
+- [x] **Step 4: Commit the documentation**
 
 ```bash
 git add README.md
@@ -663,7 +663,7 @@ git commit -m "docs: document DeepSeek worker configuration"
 **Files:**
 - Modify only if verification exposes an implementation defect.
 
-- [ ] **Step 1: Run the complete server verification suite**
+- [x] **Step 1: Run the complete server verification suite**
 
 Run:
 
@@ -677,7 +677,7 @@ npm run build --workspace @v0/server
 Expected: all unit and integration tests PASS; type-check and build exit with
 code 0.
 
-- [ ] **Step 2: Run the deterministic end-to-end smoke test**
+- [x] **Step 2: Run the deterministic end-to-end smoke test**
 
 Run:
 
@@ -688,7 +688,7 @@ npm run test:smoke
 Expected: API and browser smoke checks PASS using `start:smoke-worker`; no
 DeepSeek request is made.
 
-- [ ] **Step 3: Review the final diff and history**
+- [x] **Step 3: Review the final diff and history**
 
 Run:
 
@@ -702,7 +702,7 @@ rg -n "OPENAI_API_KEY|gpt-4|gpt-3\\.5" README.md apps/server/src
 Expected: worktree is clean after task commits, diff check passes, and no stale
 OpenAI credentials or model names remain in production paths.
 
-- [ ] **Step 4: Optionally verify the official API with user-provided credentials**
+- [x] **Step 4: Optionally verify the official API with user-provided credentials**
 
 Only when `DEEPSEEK_API_KEY` is already available in the local environment,
 start the real worker without printing the key:
@@ -720,3 +720,16 @@ Submit one generation from the browser and verify:
 
 Do not run this step when credentials are absent, do not echo the environment,
 and do not commit any `.env` file.
+
+## Execution Results
+
+- Tasks 1–4 were implemented and committed locally.
+- Server verification passed: 79 unit tests, 4 integration tests, type-check,
+  and production build.
+- The API and Playwright browser smoke passed with the deterministic Smoke
+  Worker on alternate ports because the retained manual stack owns the default
+  smoke ports.
+- Compose configuration discovered during smoke verification was updated to
+  pass DeepSeek variables to both Server and Worker.
+- The optional real-API check was safely skipped because
+  `DEEPSEEK_API_KEY` was not present in the local process environment.
