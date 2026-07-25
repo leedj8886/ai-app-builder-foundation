@@ -126,6 +126,15 @@ export interface RoutedChat {
   updatedAt: string;
 }
 
+export interface ChatListItem {
+  _id: string;
+  projectId?: string;
+  title: string;
+  preview?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ChatTimelineStatus = AgentRun['status'];
 
 export interface ChatTimelineEvent {
@@ -206,7 +215,7 @@ export const agentApi = {
 
 // Chat API
 export const chatApi = {
-  getAll: () => api.get<{ chats: RoutedChat[] }>('/api/chat'),
+  getAll: () => api.get<{ chats: ChatListItem[] }>('/api/chat'),
   getById: (id: string) => api.get<{ chat: RoutedChat }>(`/api/chat/${id}`),
   getTimeline: (
     id: string,

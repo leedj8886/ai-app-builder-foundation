@@ -4,7 +4,7 @@ import { Button } from './ui/Button'
 import type { Chat } from '@/types'
 
 interface ChatHistoryProps {
-  chats: Chat[]
+  chats: Array<Pick<Chat, '_id' | 'title'>>
   currentChatId?: string
   onSelectChat: (chatId: string) => void
   onDeleteChat: (chatId: string) => void
@@ -18,7 +18,7 @@ function ChatItem({
   onDelete, 
   onRename 
 }: { 
-  chat: Chat
+  chat: Pick<Chat, '_id' | 'title'>
   isActive: boolean
   onSelect: () => void
   onDelete: () => void
