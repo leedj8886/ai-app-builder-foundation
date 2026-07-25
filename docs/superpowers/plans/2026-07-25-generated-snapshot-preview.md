@@ -44,7 +44,7 @@ Do not implement:
 - Create: `apps/web/src/lib/snapshotPreview.test.ts`
 - Create: `apps/web/src/lib/snapshotPreview.ts`
 
-- [ ] **Step 1: Write failing conversion tests**
+- [x] **Step 1: Write failing conversion tests**
 
 Cover these behaviors with real `WorkspaceSnapshot` objects:
 
@@ -89,7 +89,7 @@ Also verify:
 - existing React versions are preserved;
 - repeated conversion returns deeply equal output without mutating the snapshot.
 
-- [ ] **Step 2: Run tests and verify red**
+- [x] **Step 2: Run tests and verify red**
 
 Run:
 
@@ -99,7 +99,7 @@ npm run test --workspace @v0/web
 
 Expected: FAIL because `snapshotPreview.ts` does not exist.
 
-- [ ] **Step 3: Implement the pure preview model**
+- [x] **Step 3: Implement the pure preview model**
 
 Create this contract:
 
@@ -127,7 +127,7 @@ Implementation rules:
 - default missing `react` and `react-dom` to `^18.2.0`;
 - sort file and dependency keys for deterministic output.
 
-- [ ] **Step 4: Verify green**
+- [x] **Step 4: Verify green**
 
 Run:
 
@@ -138,7 +138,7 @@ npm run type-check --workspace @v0/web
 
 Expected: all conversion and existing Web tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/lib/snapshotPreview.ts apps/web/src/lib/snapshotPreview.test.ts
@@ -152,7 +152,7 @@ git commit -m "feat: prepare snapshots for isolated preview"
 - Create: `apps/web/src/components/SnapshotPreview.tsx`
 - Modify: `apps/web/src/pages/V0Clone.tsx`
 
-- [ ] **Step 1: Add a failing Preview state test**
+- [x] **Step 1: Add a failing Preview state test**
 
 Extend `snapshotPreview.test.ts` with a pure state selector:
 
@@ -175,7 +175,7 @@ The returned `running` state includes the existing preview model so the last
 active snapshot remains visible while a new Run executes. Invalid conversion
 returns `{ kind: 'error', message }` instead of throwing through React render.
 
-- [ ] **Step 2: Run tests and verify red**
+- [x] **Step 2: Run tests and verify red**
 
 Run:
 
@@ -185,7 +185,7 @@ npm run test --workspace @v0/web
 
 Expected: FAIL because `getSnapshotPreviewState` does not exist.
 
-- [ ] **Step 3: Implement the state selector**
+- [x] **Step 3: Implement the state selector**
 
 Add:
 
@@ -205,7 +205,7 @@ export const getSnapshotPreviewState = (
 Use `createSnapshotPreviewModel` inside a `try/catch`. Return only a concise
 `Error.message` and never include source contents.
 
-- [ ] **Step 4: Create `SnapshotPreview`**
+- [x] **Step 4: Create `SnapshotPreview`**
 
 Render:
 
@@ -234,7 +234,7 @@ The component owns a numeric `reloadKey`, renders a `Reload preview` button,
 uses a minimum iframe height of 620px, and displays a small “Generating a new
 version” badge when the state kind is `running`.
 
-- [ ] **Step 5: Replace the static Preview panel**
+- [x] **Step 5: Replace the static Preview panel**
 
 In `V0Clone.tsx`:
 
@@ -246,7 +246,7 @@ In `V0Clone.tsx`:
   mocked Design Mode preview overlay;
 - leave the separate Design and Deploy panels unchanged.
 
-- [ ] **Step 6: Verify Web**
+- [x] **Step 6: Verify Web**
 
 Run:
 
@@ -258,7 +258,7 @@ npm run build --workspace @v0/web
 
 Expected: tests, type-check, and production build pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/lib/snapshotPreview.ts apps/web/src/lib/snapshotPreview.test.ts apps/web/src/components/SnapshotPreview.tsx apps/web/src/pages/V0Clone.tsx
@@ -272,7 +272,7 @@ git commit -m "feat: execute active snapshot in preview"
 - Modify: `apps/server/src/agent/testing/fakeModelClient.ts`
 - Modify: `tests/smoke/workspace.spec.ts`
 
-- [ ] **Step 1: Write the failing browser assertion**
+- [x] **Step 1: Write the failing browser assertion**
 
 After the Run reaches `ready`, assert generated content inside the iframe:
 
@@ -288,7 +288,7 @@ await expect(
 After `page.reload()`, wait for the restored snapshot and repeat the iframe
 assertion. Keep the existing active-snapshot and code-file assertions.
 
-- [ ] **Step 2: Run smoke and verify red**
+- [x] **Step 2: Run smoke and verify red**
 
 Run:
 
@@ -299,7 +299,7 @@ npm run test:smoke
 Expected: FAIL until the real Preview component is connected to the active
 snapshot. The generated Compose project must still be cleaned in `finally`.
 
-- [ ] **Step 3: Stabilize the deterministic smoke application**
+- [x] **Step 3: Stabilize the deterministic smoke application**
 
 Keep the fake generated `src/App.tsx` marker:
 
@@ -309,7 +309,7 @@ Keep the fake generated `src/App.tsx` marker:
 
 Do not add preview-only behavior to production model or validator code.
 
-- [ ] **Step 4: Verify complete smoke**
+- [x] **Step 4: Verify complete smoke**
 
 Run:
 
@@ -321,7 +321,7 @@ Expected: API smoke passes, Playwright observes `Generated app` inside the
 Sandpack iframe before and after reload, and Compose removes only its generated
 containers, network, and volume.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/server/src/agent/testing/fakeModelClient.ts tests/smoke/workspace.spec.ts
@@ -334,7 +334,7 @@ git commit -m "test: verify generated snapshot preview"
 
 - Modify: `docs/superpowers/plans/2026-07-25-generated-snapshot-preview.md`
 
-- [ ] **Step 1: Run Web regression checks**
+- [x] **Step 1: Run Web regression checks**
 
 ```bash
 npm run test --workspace @v0/web
@@ -344,7 +344,7 @@ npm run build --workspace @v0/web
 
 Expected: zero test failures and successful type-check/build.
 
-- [ ] **Step 2: Run Server regression checks**
+- [x] **Step 2: Run Server regression checks**
 
 ```bash
 npm run test --workspace @v0/server
@@ -354,7 +354,7 @@ npm run build --workspace @v0/server
 
 Expected: zero test failures and successful type-check/build.
 
-- [ ] **Step 3: Run deterministic end-to-end smoke**
+- [x] **Step 3: Run deterministic end-to-end smoke**
 
 ```bash
 npm run test:smoke
@@ -363,7 +363,7 @@ npm run test:smoke
 Expected: API and browser smoke pass and the generated Compose project is
 removed.
 
-- [ ] **Step 4: Review isolation**
+- [x] **Step 4: Review isolation**
 
 Confirm:
 
@@ -374,7 +374,7 @@ Confirm:
 - production Worker does not import smoke collaborators;
 - Preview failure cannot mutate Run or snapshot persistence.
 
-- [ ] **Step 5: Complete the plan and commit**
+- [x] **Step 5: Complete the plan and commit**
 
 Check every box in this plan, then run:
 
