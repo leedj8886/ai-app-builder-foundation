@@ -2,6 +2,20 @@ import { agentEventStreamUrl, type AgentEvent } from './api'
 
 const RETRY_DELAYS_MS = [250, 500, 1000] as const
 const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'run.cancelled'])
+const PUBLIC_AGENT_EVENT_TYPES = new Set([
+  'run.created',
+  'run.started',
+  'agent.step',
+  'agent.plan',
+  'file.changed',
+  'validation.started',
+  'validation.failed',
+  'validation.passed',
+  'repair.started',
+  'run.completed',
+  'run.failed',
+  'run.cancelled',
+])
 
 export type AgentStreamState = 'connected' | 'retrying'
 
@@ -45,6 +59,16 @@ class AgentStreamRetryableError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'AgentStreamRetryableError'
+  }
+}
+
+class AgentStreamApplicationError extends Error {
+  readonly original: unknown
+
+  constructor(original: unknown) {
+    super('Agent event stream callback failed')
+    this.name = 'AgentStreamApplicationError'
+    this.original = original
   }
 }
 
@@ -141,7 +165,9 @@ const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: number } | u
     !Number.isInteger(sequence) ||
     sequence < 0 ||
     typeof type !== 'string' ||
-    typeof message !== 'string'
+    !PUBLIC_AGENT_EVENT_TYPES.has(type) ||
+    typeof message !== 'string' ||
+    (payload !== undefined && !isRecord(payload))
   ) {
     throw new AgentStreamProtocolError('Invalid agent event stream frame: invalid event fields')
   }
@@ -159,7 +185,7 @@ const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: number } | u
       sequence,
       type,
       message,
-      ...(isRecord(payload) ? { payload } : {}),
+      ...(payload !== undefined ? { payload } : {}),
     },
     id: Number(frame.id),
   }
@@ -187,11 +213,13 @@ const consumeResponse = async ({
   signal,
   lastSequence,
   onEvent,
+  onProgress,
 }: {
   response: Response
-  signal?: AbortSignal
+  signal: AbortSignal
   lastSequence?: number
   onEvent: (event: AgentEvent) => void | Promise<void>
+  onProgress: (id: number, sequence: number) => void
 }): Promise<ConsumeResult> => {
   if (!response.body) {
     throw new AgentStreamProtocolError('Agent event stream response has no body')
@@ -215,22 +243,31 @@ const consumeResponse = async ({
     frame = { data: [] }
     if (!parsed || (acceptedSequence !== undefined && parsed.event.sequence <= acceptedSequence)) return
 
+    try {
+      await waitForAbort(Promise.resolve().then(() => onEvent(parsed.event)), signal)
+    } catch (error) {
+      if (isAbortError(error) || signal.aborted) throw abortError()
+      throw new AgentStreamApplicationError(error)
+    }
     acceptedSequence = parsed.event.sequence
     acceptedId = parsed.id
-    await onEvent(parsed.event)
+    onProgress(acceptedId, acceptedSequence)
+    throwIfAborted(signal)
     if (TERMINAL_EVENT_TYPES.has(parsed.event.type)) terminal = true
   }
 
-  const processBufferedLines = async (): Promise<void> => {
-    let newlineIndex = buffer.indexOf('\n')
+  const processBufferedLines = async (endOfStream = false): Promise<void> => {
+    let newlineIndex = buffer.search(/[\r\n]/)
     while (newlineIndex !== -1) {
-      const rawLine = buffer.slice(0, newlineIndex)
-      buffer = buffer.slice(newlineIndex + 1)
-      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+      const delimiter = buffer[newlineIndex]
+      if (delimiter === '\r' && newlineIndex === buffer.length - 1 && !endOfStream) return
+      const line = buffer.slice(0, newlineIndex)
+      const delimiterLength = delimiter === '\r' && buffer[newlineIndex + 1] === '\n' ? 2 : 1
+      buffer = buffer.slice(newlineIndex + delimiterLength)
       if (line === '') await dispatchFrame()
       else processLine(frame, line)
       if (terminal) return
-      newlineIndex = buffer.indexOf('\n')
+      newlineIndex = buffer.search(/[\r\n]/)
     }
   }
 
@@ -240,7 +277,7 @@ const consumeResponse = async ({
       const { done, value } = await waitForAbort(reader.read(), signal)
       if (done) {
         buffer += decoder.decode()
-        await processBufferedLines()
+        await processBufferedLines(true)
         reachedEof = true
         break
       }
@@ -298,14 +335,29 @@ export const streamAgentEvents = async ({
         throw new AgentStreamHttpError(response.status, response.statusText)
       }
 
-      onState?.('connected')
-      const result = await consumeResponse({ response, signal, lastSequence, onEvent })
+      try {
+        onState?.('connected')
+      } catch (error) {
+        throw new AgentStreamApplicationError(error)
+      }
+      const result = await consumeResponse({
+        response,
+        signal,
+        lastSequence,
+        onEvent,
+        onProgress: (id, sequence) => {
+          lastEventId = id
+          lastSequence = sequence
+        },
+      })
       lastSequence = result.lastSequence
       if (result.lastEventId !== undefined) lastEventId = result.lastEventId
+      throwIfAborted(signal)
       if (result.terminal) return { outcome: 'terminal', lastEventId: lastEventId as number }
       throw new AgentStreamRetryableError('Agent event stream ended before a terminal event')
     } catch (error) {
       if (isAbortError(error) || signal?.aborted) throw abortError()
+      if (error instanceof AgentStreamApplicationError) throw error.original
       if (isControlledFailure(error)) throw error
       if (reconnects >= maximumReconnects) {
         return { outcome: 'exhausted', ...(lastEventId !== undefined ? { lastEventId } : {}) }

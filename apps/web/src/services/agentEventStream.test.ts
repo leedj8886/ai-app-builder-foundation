@@ -16,7 +16,7 @@ interface ReaderCleanup {
 
 const eventFrame = (
   sequence: number,
-  type = 'run.progress',
+  type = 'agent.step',
   message = `event ${sequence}`,
   id = String(sequence),
 ): string =>
@@ -26,6 +26,7 @@ const responseFromChunks = (
   chunks: Array<string | Uint8Array>,
   status = 200,
   cleanup?: ReaderCleanup,
+  readError?: Error,
 ): Response => ({
   ok: status >= 200 && status < 300,
   status,
@@ -36,7 +37,10 @@ const responseFromChunks = (
       let index = 0
       return {
         read: async () => {
-          if (index >= chunks.length) return { done: true, value: undefined }
+          if (index >= chunks.length) {
+            if (readError) throw readError
+            return { done: true, value: undefined }
+          }
           const chunk = chunks[index++]
           return { done: false, value: typeof chunk === 'string' ? encoder.encode(chunk) : chunk }
         },
@@ -69,7 +73,7 @@ describe('streamAgentEvents', () => {
 
   it('parses a frame split inside a UTF-8 code point and preserves event fields', async () => {
     const received: AgentEvent[] = []
-    const frame = eventFrame(7, 'run.progress', '进度 ✅')
+    const frame = eventFrame(7, 'agent.step', '进度 ✅')
     const encoded = encoder.encode(frame)
     const characterStart = encoder.encode(frame.slice(0, frame.indexOf('进'))).length
     const chunks = [
@@ -83,7 +87,7 @@ describe('streamAgentEvents', () => {
       onEvent: (event) => { received.push(event) },
     }))
 
-    assert.deepEqual(received, [{ sequence: 7, type: 'run.progress', message: '进度 ✅' }])
+    assert.deepEqual(received, [{ sequence: 7, type: 'agent.step', message: '进度 ✅' }])
     assert.deepEqual(result, { outcome: 'exhausted', lastEventId: 7 })
   })
 
@@ -92,8 +96,8 @@ describe('streamAgentEvents', () => {
     const cleanup = { cancelled: false, released: false }
     const body = [
       ': heartbeat\r\n\r\n',
-      'id: 8\r\nevent: run.progress\r\ndata: {"sequence":8,"type":"run.progress",\r\ndata: "message":"joined"}\r\n\r\n',
-      'id: 9\r\nevent: run.progress\r\ndata: not-json\r\n\r\n',
+      'id: 8\r\nevent: agent.step\r\ndata: {"sequence":8,"type":"agent.step",\r\ndata: "message":"joined"}\r\n\r\n',
+      'id: 9\r\nevent: agent.step\r\ndata: not-json\r\n\r\n',
     ]
 
     await assert.rejects(
@@ -104,18 +108,20 @@ describe('streamAgentEvents', () => {
       /Invalid agent event stream frame/,
     )
 
-    assert.deepEqual(received, [{ sequence: 8, type: 'run.progress', message: 'joined' }])
+    assert.deepEqual(received, [{ sequence: 8, type: 'agent.step', message: 'joined' }])
     assert.deepEqual(cleanup, { cancelled: true, released: true })
   })
 
   it('rejects invalid sequences, event fields, and SSE ids without retrying', async () => {
     const invalidFrames = [
-      'id: 1\nevent: run.progress\ndata: {"sequence":1.5,"type":"run.progress","message":"bad"}\n\n',
-      'id: -1\nevent: run.progress\ndata: {"sequence":-1,"type":"run.progress","message":"bad"}\n\n',
-      'id: 1\nevent: run.progress\ndata: {"sequence":1,"type":3,"message":"bad"}\n\n',
-      'id: 1\nevent: run.progress\ndata: {"sequence":1,"type":"run.progress","message":3}\n\n',
-      eventFrame(1, 'run.progress', 'bad', 'not-a-number'),
-      eventFrame(1, 'run.progress', 'bad', '2'),
+      'id: 1\nevent: agent.step\ndata: {"sequence":1.5,"type":"agent.step","message":"bad"}\n\n',
+      'id: -1\nevent: agent.step\ndata: {"sequence":-1,"type":"agent.step","message":"bad"}\n\n',
+      'id: 1\nevent: agent.step\ndata: {"sequence":1,"type":3,"message":"bad"}\n\n',
+      'id: 1\nevent: agent.step\ndata: {"sequence":1,"type":"agent.step","message":3}\n\n',
+      'id: 1\nevent: agent.step\ndata: {"sequence":1,"type":"agent.step","message":"bad","payload":null}\n\n',
+      'id: 1\nevent: agent.step\ndata: {"sequence":1,"type":"agent.step","message":"bad","payload":[]}\n\n',
+      eventFrame(1, 'agent.step', 'bad', 'not-a-number'),
+      eventFrame(1, 'agent.step', 'bad', '2'),
     ]
 
     for (const frame of invalidFrames) {
@@ -168,6 +174,36 @@ describe('streamAgentEvents', () => {
     assert.deepEqual(result, { outcome: 'terminal', lastEventId: 5 })
   })
 
+  it('preserves delivered progress when a later socket read fails', async () => {
+    const requests: RequestInit[] = []
+    const received: number[] = []
+    let fetches = 0
+    const result = await streamAgentEvents(options(async (_url, init) => {
+      requests.push(init ?? {})
+      fetches += 1
+      return fetches === 1
+        ? responseFromChunks([eventFrame(1)], 200, undefined, new Error('socket closed'))
+        : responseFromChunks([eventFrame(1), eventFrame(2, 'run.completed', 'done')])
+    }, {
+      maxReconnectAttempts: 1,
+      onEvent: (event) => { received.push(event.sequence) },
+    }))
+
+    assert.equal((requests[1]?.headers as Record<string, string>)['Last-Event-ID'], '1')
+    assert.deepEqual(received, [1, 2])
+    assert.deepEqual(result, { outcome: 'terminal', lastEventId: 2 })
+  })
+
+  it('parses bare-CR delimiters split across chunks', async () => {
+    const frame = eventFrame(4, 'run.completed', 'done').replace(/\n/g, '\r')
+    const delimiterStart = frame.length - 2
+    const result = await streamAgentEvents(options(async () => responseFromChunks([
+      frame.slice(0, delimiterStart + 1), frame.slice(delimiterStart + 1),
+    ])))
+
+    assert.deepEqual(result, { outcome: 'terminal', lastEventId: 4 })
+  })
+
   it('ignores duplicate and out-of-order sequences', async () => {
     const received: number[] = []
     await streamAgentEvents(options(async () => responseFromChunks([
@@ -191,6 +227,66 @@ describe('streamAgentEvents', () => {
       },
     }))
     assert.deepEqual(callbacks, ['start-1', 'end-1', 'start-2', 'end-2'])
+  })
+
+  it('aborts a hanging asynchronous callback without returning terminal', async () => {
+    const controller = new AbortController()
+    const cleanup = { cancelled: false, released: false }
+    let startCallback!: () => void
+    const callbackStarted = new Promise<void>((resolve) => { startCallback = resolve })
+    const promise = streamAgentEvents(options(async () => responseFromChunks([
+      eventFrame(1, 'run.completed', 'done'),
+    ], 200, cleanup), {
+      signal: controller.signal,
+      onEvent: async () => {
+        startCallback()
+        return await new Promise<never>(() => undefined)
+      },
+    }))
+
+    await callbackStarted
+    controller.abort()
+
+    await assert.rejects(promise, { name: 'AbortError' })
+    assert.deepEqual(cleanup, { cancelled: true, released: true })
+  })
+
+  it('propagates callback and state handler errors exactly once without retrying', async () => {
+    const callbackError = new Error('callback failed')
+    let callbackFetches = 0
+    let callbacks = 0
+    await assert.rejects(
+      streamAgentEvents(options(async () => {
+        callbackFetches += 1
+        return responseFromChunks([eventFrame(1)])
+      }, {
+        onEvent: () => {
+          callbacks += 1
+          throw callbackError
+        },
+      })),
+      (error: unknown) => error === callbackError,
+    )
+    assert.equal(callbackFetches, 1)
+    assert.equal(callbacks, 1)
+
+    const stateError = new Error('state failed')
+    let stateFetches = 0
+    let states = 0
+    await assert.rejects(
+      streamAgentEvents(options(async () => {
+        stateFetches += 1
+        return responseFromChunks([])
+      }, {
+        onState: () => {
+          states += 1
+          throw stateError
+        },
+      })),
+      (error: unknown) => error === stateError,
+    )
+    assert.equal(stateFetches, 1)
+    assert.equal(states, 1)
   })
 
   it('aborts during fetch, reads, and backoff without another retry', async () => {
