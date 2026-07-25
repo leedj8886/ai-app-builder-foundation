@@ -134,6 +134,165 @@ test('creating a Chat-associated Run appends one user message', async () => {
   assert.equal(response.body.run.chatId, chat._id.toString());
 });
 
+test('Chat timeline aggregates owned Runs with stable cursor pagination', async () => {
+  const {
+    ownerToken,
+    strangerToken,
+    owner,
+    project
+  } = await fixtures();
+  const chat = await Chat.create({
+    userId: owner._id,
+    projectId: project._id,
+    title: 'Timeline chat',
+    messages: []
+  });
+  const createdAt = [
+    new Date('2026-07-25T10:00:00.000Z'),
+    new Date('2026-07-25T10:01:00.000Z'),
+    new Date('2026-07-25T10:02:00.000Z')
+  ];
+  const [oldest, completed, failed] = await AgentRun.create([
+    {
+      userId: owner._id,
+      projectId: project._id,
+      chatId: chat._id,
+      prompt: 'Create the first version',
+      status: 'completed',
+      mode: 'create',
+      baseSnapshotRevision: 0,
+      maxRepairAttempts: 2,
+      model: 'test-model',
+      startedAt: new Date('2026-07-25T10:00:01.000Z'),
+      completedAt: new Date('2026-07-25T10:00:05.000Z'),
+      createdAt: createdAt[0]
+    },
+    {
+      userId: owner._id,
+      projectId: project._id,
+      chatId: chat._id,
+      prompt: 'Add an activity list',
+      status: 'completed',
+      mode: 'edit',
+      baseSnapshotRevision: 1,
+      maxRepairAttempts: 2,
+      model: 'test-model',
+      startedAt: new Date('2026-07-25T10:01:01.000Z'),
+      completedAt: new Date('2026-07-25T10:01:08.000Z'),
+      createdAt: createdAt[1]
+    },
+    {
+      userId: owner._id,
+      projectId: project._id,
+      chatId: chat._id,
+      prompt: 'Add a broken widget',
+      status: 'failed',
+      mode: 'edit',
+      baseSnapshotRevision: 2,
+      maxRepairAttempts: 2,
+      model: 'test-model',
+      error: {
+        code: 'VALIDATION_FAILED',
+        message: 'Type-check failed'
+      },
+      startedAt: new Date('2026-07-25T10:02:01.000Z'),
+      completedAt: new Date('2026-07-25T10:02:04.000Z'),
+      createdAt: createdAt[2]
+    }
+  ]);
+  assert.ok(oldest && completed && failed);
+
+  await AgentEvent.create([
+    {
+      runId: completed._id,
+      userId: owner._id,
+      projectId: project._id,
+      type: 'run.started',
+      sequence: 1,
+      message: 'Worker started',
+      createdAt: new Date('2026-07-25T10:01:01.000Z')
+    },
+    {
+      runId: completed._id,
+      userId: owner._id,
+      projectId: project._id,
+      type: 'agent.plan',
+      sequence: 2,
+      message: 'Add activity UI',
+      payload: {
+        summary: 'Add activity UI',
+        steps: [{
+          title: 'Update App',
+          intent: 'Render recent activity',
+          filesLikelyTouched: ['src/App.tsx']
+        }],
+        assumptions: []
+      },
+      createdAt: new Date('2026-07-25T10:01:03.000Z')
+    },
+    {
+      runId: completed._id,
+      userId: owner._id,
+      projectId: project._id,
+      type: 'file.changed',
+      sequence: 3,
+      message: 'update src/App.tsx',
+      payload: { operation: 'update', path: 'src/App.tsx' },
+      createdAt: new Date('2026-07-25T10:01:05.000Z')
+    },
+    {
+      runId: completed._id,
+      userId: owner._id,
+      projectId: project._id,
+      type: 'file.changed',
+      sequence: 4,
+      message: 'update src/App.tsx',
+      payload: { operation: 'update', path: 'src/App.tsx' },
+      createdAt: new Date('2026-07-25T10:01:06.000Z')
+    }
+  ]);
+  const snapshot = await ProjectSnapshot.create({
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId: completed._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Added a compact activity list'
+  });
+  completed.resultSnapshotId = snapshot._id;
+  await completed.save();
+
+  const first = await request(app)
+    .get(`/api/chat/${chat._id}/timeline?limit=2`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+
+  assert.equal(first.body.turns.length, 2);
+  assert.equal(first.body.pageInfo.hasMore, true);
+  assert.equal(first.body.turns[0].runId, completed._id.toString());
+  assert.equal(first.body.turns[1].runId, failed._id.toString());
+  assert.equal(first.body.turns[0].agent.plan.steps[0].title, 'Update App');
+  assert.deepEqual(first.body.turns[0].snapshot.changedFiles, ['src/App.tsx']);
+  assert.equal(first.body.turns[1].agent.error.message, 'Type-check failed');
+  assert.ok(first.body.pageInfo.nextBefore);
+
+  const older = await request(app)
+    .get(`/api/chat/${chat._id}/timeline`)
+    .query({ limit: 2, before: first.body.pageInfo.nextBefore })
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+
+  assert.equal(older.body.turns.length, 1);
+  assert.equal(older.body.turns[0].runId, oldest._id.toString());
+  assert.equal(older.body.pageInfo.hasMore, false);
+
+  await request(app)
+    .get(`/api/chat/${chat._id}/timeline`)
+    .set('Authorization', `Bearer ${strangerToken}`)
+    .expect(404);
+});
+
 test('agent routes hide projects runs snapshots and cross-project chats from other owners', async () => {
   const {
     owner,
