@@ -29,7 +29,7 @@
 - Create: `apps/server/src/agent/projectTemplate.ts`
 - Create: `apps/server/src/agent/projectTemplate.test.ts`
 
-- [ ] **Step 1: Write failing template tests**
+- [x] **Step 1: Write failing template tests**
 
 Create `apps/server/src/agent/projectTemplate.test.ts`:
 
@@ -87,7 +87,7 @@ test('resolveProjectBaseFiles creates the template only without a snapshot', () 
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -97,7 +97,7 @@ node --import tsx --test apps/server/src/agent/projectTemplate.test.ts
 
 Expected: FAIL because `projectTemplate.ts` does not exist.
 
-- [ ] **Step 3: Implement the template factory**
+- [x] **Step 3: Implement the template factory**
 
 Create `apps/server/src/agent/projectTemplate.ts`:
 
@@ -176,7 +176,7 @@ export const resolveProjectBaseFiles = (
 ): ProjectFile[] => snapshotFiles ?? createProjectTemplateFiles();
 ```
 
-- [ ] **Step 4: Run focused tests and type-check**
+- [x] **Step 4: Run focused tests and type-check**
 
 Run:
 
@@ -187,7 +187,7 @@ npm run type-check --workspace @v0/server
 
 Expected: 4 template tests PASS and type-check exits with code 0.
 
-- [ ] **Step 5: Commit the template**
+- [x] **Step 5: Commit the template**
 
 ```bash
 git add apps/server/src/agent/projectTemplate.ts apps/server/src/agent/projectTemplate.test.ts
@@ -203,7 +203,7 @@ git commit -m "feat: add create project template"
 - Modify: `apps/server/src/agent/orchestrator.test.ts`
 - Modify: `apps/server/src/integration/agentWorker.integration.ts`
 
-- [ ] **Step 1: Add a context representation regression test**
+- [x] **Step 1: Add a context representation regression test**
 
 Add to `apps/server/src/agent/contextBuilder.test.ts`:
 
@@ -236,7 +236,7 @@ This test documents the context representation and will pass after Task 1. The
 RED behavior for automatic fallback is covered by the orchestrator test below,
 where the existing Create baseline is empty.
 
-- [ ] **Step 2: Write a failing App-only Create generation test**
+- [x] **Step 2: Write a failing App-only Create generation test**
 
 Add to `apps/server/src/agent/orchestrator.test.ts`:
 
@@ -307,7 +307,7 @@ test('Create generation keeps required template files when the model only update
 });
 ```
 
-- [ ] **Step 3: Write and run a failing Worker integration test**
+- [x] **Step 3: Write and run a failing Worker integration test**
 
 In `apps/server/src/integration/agentWorker.integration.ts`, add:
 
@@ -379,7 +379,7 @@ node --import tsx --test --test-concurrency=1 --test-name-pattern="seeds require
 Expected: FAIL because Create context files are empty and the persisted
 snapshot lacks the server-owned template files.
 
-- [ ] **Step 4: Wire the template into model context**
+- [x] **Step 4: Wire the template into model context**
 
 In `apps/server/src/agent/contextBuilder.ts`, import:
 
@@ -410,7 +410,7 @@ files: contextFiles.map(file => ({
 }))
 ```
 
-- [ ] **Step 5: Wire the same baseline into generation and validation**
+- [x] **Step 5: Wire the same baseline into generation and validation**
 
 In `apps/server/src/agent/orchestrator.ts`, import:
 
@@ -448,7 +448,7 @@ baseFiles,
 An existing empty snapshot array remains an empty Edit baseline because
 `resolveProjectBaseFiles([])` returns the supplied array.
 
-- [ ] **Step 6: Run backend tests, type-check, and build**
+- [x] **Step 6: Run backend tests, type-check, and build**
 
 Run:
 
@@ -463,7 +463,7 @@ npm run build --workspace @v0/server
 Expected: focused and full Server tests PASS; type-check and build exit with
 code 0.
 
-- [ ] **Step 7: Commit backend integration**
+- [x] **Step 7: Commit backend integration**
 
 ```bash
 git add apps/server/src/agent/contextBuilder.ts apps/server/src/agent/contextBuilder.test.ts apps/server/src/agent/orchestrator.ts apps/server/src/agent/orchestrator.test.ts apps/server/src/integration/agentWorker.integration.ts
@@ -476,7 +476,7 @@ git commit -m "feat: seed create runs with Vite template"
 - Modify: `apps/web/src/lib/v0Workspace.ts`
 - Modify: `apps/web/src/lib/v0Workspace.test.ts`
 
-- [ ] **Step 1: Write failing phase-label tests**
+- [x] **Step 1: Write failing phase-label tests**
 
 Add to `apps/web/src/lib/v0Workspace.test.ts`:
 
@@ -531,7 +531,7 @@ it('maps streamed Agent phases to user-facing progress labels', () => {
 });
 ```
 
-- [ ] **Step 2: Write a failing active-step progression test**
+- [x] **Step 2: Write a failing active-step progression test**
 
 Add:
 
@@ -565,7 +565,7 @@ it('completes the previous active step when progress advances', () => {
 });
 ```
 
-- [ ] **Step 3: Run Web tests to verify the new tests fail**
+- [x] **Step 3: Run Web tests to verify the new tests fail**
 
 Run:
 
@@ -576,7 +576,7 @@ npm test --workspace @v0/web
 Expected: FAIL because phase-specific labels are absent and the initial queued
 step remains active.
 
-- [ ] **Step 4: Implement phase-aware labels**
+- [x] **Step 4: Implement phase-aware labels**
 
 In `apps/web/src/lib/v0Workspace.ts`, extend `eventTypeLabels`:
 
@@ -621,7 +621,7 @@ const label = event.type === 'file.changed'
     : eventTypeLabels[event.type] ?? event.message
 ```
 
-- [ ] **Step 5: Advance exactly one active step**
+- [x] **Step 5: Advance exactly one active step**
 
 In `applyAgentEvent`, replace the direct append with:
 
@@ -641,7 +641,7 @@ steps: [...previousSteps, step],
 Keep the existing run-id guard, sequence/type deduplication, terminal status,
 and concise failure message logic.
 
-- [ ] **Step 6: Run Web tests, type-check, and build**
+- [x] **Step 6: Run Web tests, type-check, and build**
 
 Run:
 
@@ -653,7 +653,7 @@ npm run build --workspace @v0/web
 
 Expected: all Web tests PASS; type-check and build exit with code 0.
 
-- [ ] **Step 7: Commit frontend progress**
+- [x] **Step 7: Commit frontend progress**
 
 ```bash
 git add apps/web/src/lib/v0Workspace.ts apps/web/src/lib/v0Workspace.test.ts
@@ -666,7 +666,7 @@ git commit -m "fix: show current agent generation phase"
 - Modify: `tests/smoke/workspace.spec.ts` only if required by an outdated progress assertion.
 - Modify: `docs/superpowers/plans/2026-07-25-create-template-and-progress.md` to record execution results.
 
-- [ ] **Step 1: Run all automated verification**
+- [x] **Step 1: Run all automated verification**
 
 Run:
 
@@ -683,7 +683,7 @@ npm run build --workspace @v0/web
 Expected: Server and Web unit/integration tests PASS; both type-checks and builds
 exit with code 0.
 
-- [ ] **Step 2: Run deterministic browser smoke on alternate ports**
+- [x] **Step 2: Run deterministic browser smoke on alternate ports**
 
 The retained real manual stack owns `43001` and `4173`, so run:
 
@@ -697,7 +697,7 @@ npm run test:smoke
 
 Expected: API and Playwright smoke PASS using FakeModelClient.
 
-- [ ] **Step 3: Rebuild the retained real validation stack**
+- [x] **Step 3: Rebuild the retained real validation stack**
 
 Run:
 
@@ -713,7 +713,7 @@ docker compose \
 Expected: Server, production Worker, and Web start; Worker logs
 `Agent worker listening`, not `Smoke agent worker listening`.
 
-- [ ] **Step 4: Submit one real DeepSeek Create run**
+- [x] **Step 4: Submit one real DeepSeek Create run**
 
 From `http://127.0.0.1:4173`, register or log in, enter a new prompt, and submit
 it. Verify from persisted events:
@@ -725,7 +725,7 @@ it. Verify from persisted events:
 - the build does not fail solely because `index.html` or `src/main.tsx` is
   missing.
 
-- [ ] **Step 5: Review repository state**
+- [x] **Step 5: Review repository state**
 
 Run:
 
@@ -738,7 +738,7 @@ git log -8 --oneline
 Expected: no uncommitted production changes, no whitespace errors, and all task
 commits are present locally.
 
-- [ ] **Step 6: Complete and commit the plan record**
+- [x] **Step 6: Complete and commit the plan record**
 
 Mark completed checklist items, add the final test counts and real-run outcome,
 then run:
@@ -747,3 +747,31 @@ then run:
 git add docs/superpowers/plans/2026-07-25-create-template-and-progress.md
 git commit -m "docs: complete create template progress plan"
 ```
+
+## Execution Results
+
+- Added a deterministic Create baseline containing `index.html`,
+  `src/App.tsx`, `src/index.css`, `src/main.tsx`, and `tsconfig.json`;
+  `package.json` continues to be generated from the server-owned dependency
+  manifest.
+- Wired the same baseline into model context, file-operation application, and
+  validation, while preserving existing snapshots for Edit runs.
+- Updated frontend progress so planning, generation, validation, repair, and
+  terminal events advance one active step at a time.
+- Fixed snapshot persistence for successful commands whose `stdout` or
+  `stderr` is an empty string. The real-provider run exposed this independently
+  of the original missing-entry-file defect.
+- Server verification: 86 unit tests and 9 integration tests passed; type-check
+  and build exited successfully.
+- Web verification: 53 unit tests passed; type-check and build exited
+  successfully. Vite continues to report the existing large-chunk warning for
+  `SnapshotPreview`.
+- Deterministic API and Playwright smoke passed on ports `43002` and `4174`
+  (1 Playwright test).
+- The retained stack was rebuilt at `http://127.0.0.1:4173`; Server and Web
+  were healthy and the production Worker logged `Agent worker listening`.
+- Real DeepSeek Create run `6a647a25e185aa742a49f689` completed without a
+  repair attempt. Snapshot `6a647a68d4db749d20f7e60d` passed validation and
+  contains `index.html`, `package.json`, `src/App.tsx`,
+  `src/ContactForm.tsx`, `src/index.css`, `src/main.tsx`, and
+  `tsconfig.json`.
