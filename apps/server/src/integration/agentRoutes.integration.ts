@@ -107,6 +107,67 @@ test('Chat creation stores project metadata without an assistant response', asyn
   );
 });
 
+test('Chat list returns owned records newest first with bounded previews', async () => {
+  const { ownerToken, owner, stranger, project } = await fixtures();
+  const longPrompt = 'x'.repeat(220);
+  const [older, newer] = await Chat.create([
+    {
+      userId: owner._id,
+      projectId: project._id,
+      title: 'Older chat',
+      messages: [
+        {
+          id: 'system-message',
+          role: 'system',
+          content: 'ignored',
+          createdAt: new Date('2026-07-25T10:00:00.000Z')
+        },
+        {
+          id: 'user-message',
+          role: 'user',
+          content: longPrompt,
+          createdAt: new Date('2026-07-25T10:01:00.000Z')
+        }
+      ]
+    },
+    {
+      userId: owner._id,
+      projectId: project._id,
+      title: 'Newer chat',
+      messages: []
+    }
+  ]);
+  await Chat.create({
+    userId: stranger._id,
+    title: 'Stranger chat',
+    messages: []
+  });
+  await Chat.updateOne(
+    { _id: older._id },
+    { updatedAt: new Date('2026-07-25T11:00:00.000Z') },
+    { timestamps: false }
+  );
+  await Chat.updateOne(
+    { _id: newer._id },
+    { updatedAt: new Date('2026-07-25T12:00:00.000Z') },
+    { timestamps: false }
+  );
+
+  const response = await request(app)
+    .get('/api/chat')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+
+  assert.deepEqual(
+    response.body.chats.map((chat: { title: string }) => chat.title),
+    ['Newer chat', 'Older chat']
+  );
+  assert.equal(response.body.chats[0].preview, undefined);
+  assert.equal(response.body.chats[1].preview, `${'x'.repeat(157)}...`);
+  assert.equal(response.body.chats[1].preview.length, 160);
+  assert.equal('messages' in response.body.chats[1], false);
+});
+
 test('creating a Chat-associated Run appends one user message', async () => {
   const { ownerToken, owner, project } = await fixtures();
   const chat = await Chat.create({

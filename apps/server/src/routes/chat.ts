@@ -14,6 +14,7 @@ import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { objectIdStringSchema } from '../agent/schemas';
+import { projectChatListItem } from '../chat/chatList';
 
 const router = Router();
 
@@ -37,9 +38,10 @@ router.get('/', async (req: AuthRequest, res, next) => {
   try {
     const chats = await Chat.find({ userId: req.userId })
       .sort({ updatedAt: -1 })
-      .select('_id title projectId createdAt updatedAt');
+      .select('_id title projectId messages createdAt updatedAt')
+      .lean();
 
-    res.json({ chats });
+    res.json({ chats: chats.map(projectChatListItem) });
   } catch (error) {
     next(error);
   }
