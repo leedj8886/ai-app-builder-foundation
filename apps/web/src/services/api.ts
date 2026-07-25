@@ -54,6 +54,7 @@ export interface AgentRun {
   prompt: string;
   status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'failed' | 'cancelled';
   mode: 'create' | 'edit';
+  model?: string;
   baseSnapshotId?: string;
   resultSnapshotId?: string;
   error?: {
@@ -64,6 +65,7 @@ export interface AgentRun {
   attempt?: number;
   maxRepairAttempts?: number;
   createdAt?: string;
+  startedAt?: string;
   updatedAt?: string;
   completedAt?: string;
 }

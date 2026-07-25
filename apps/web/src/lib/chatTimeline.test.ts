@@ -7,12 +7,15 @@ import type {
 } from '@/services/api'
 import {
   appendTimelineEvent,
+  applyTimelineEvent,
   canToggleTurn,
   createTimelineState,
   formatCollapsedTurnLabel,
   formatPlanningDuration,
   mergeOlderTimelinePage,
+  insertTimelineRun,
   replaceTimelinePage,
+  resetTimeline,
   resolveDefaultExpandedRunIds,
 } from './chatTimeline'
 
@@ -135,4 +138,91 @@ test('only terminal turns can be manually toggled', () => {
   assert.equal(canToggleTurn(turn('completed', 'completed')), true)
   assert.equal(canToggleTurn(turn('failed', 'failed')), true)
   assert.equal(canToggleTurn(turn('cancelled', 'cancelled')), true)
+})
+
+test('inserts the returned Run as the expanded active turn', () => {
+  const state = replaceTimelinePage(
+    createTimelineState(),
+    page([turn('previous', 'completed')]),
+  )
+  const inserted = insertTimelineRun(state, {
+    _id: 'active',
+    projectId: 'project-1',
+    prompt: 'Add filters',
+    status: 'queued',
+    mode: 'edit',
+    model: 'deepseek-chat',
+    createdAt: '2026-07-25T10:02:00.000Z',
+  })
+
+  assert.deepEqual(inserted.turns.map((item) => item.runId), ['previous', 'active'])
+  assert.equal(inserted.expandedRunIds.has('active'), true)
+})
+
+test('terminal event completes the active turn and collapses the previous turn', () => {
+  const state = replaceTimelinePage(
+    createTimelineState(),
+    page([turn('previous', 'completed'), turn('active', 'generating')]),
+  )
+  const completed = applyTimelineEvent(state, 'active', {
+    type: 'run.completed',
+    sequence: 8,
+    message: 'Snapshot ready',
+    createdAt: '2026-07-25T10:03:00.000Z',
+  })
+
+  assert.equal(completed.turns[1]?.agent.status, 'completed')
+  assert.deepEqual([...completed.expandedRunIds], ['active'])
+})
+
+test('agent plan event populates the active turn immediately', () => {
+  const state = replaceTimelinePage(
+    createTimelineState(),
+    page([turn('active', 'queued')]),
+  )
+  const started = applyTimelineEvent(state, 'active', {
+    type: 'run.started',
+    sequence: 2,
+    message: 'Worker started',
+    createdAt: '2026-07-25T10:00:01.000Z',
+  })
+  const planned = applyTimelineEvent(started, 'active', {
+    type: 'agent.plan',
+    sequence: 3,
+    message: 'Add activity UI',
+    payload: {
+      summary: 'Add activity UI',
+      steps: [{
+        title: 'Update App',
+        intent: 'Render recent activity',
+        filesLikelyTouched: ['src/App.tsx'],
+      }],
+      assumptions: [],
+    },
+    createdAt: '2026-07-25T10:00:03.000Z',
+  })
+
+  assert.equal(planned.turns[0]?.agent.plan?.steps[0]?.title, 'Update App')
+  assert.equal(planned.turns[0]?.agent.planningDurationMs, 2_000)
+})
+
+test('ignores events for a stale Run', () => {
+  const state = replaceTimelinePage(
+    createTimelineState(),
+    page([turn('active', 'generating')]),
+  )
+
+  assert.equal(
+    applyTimelineEvent(state, 'stale', event(2)),
+    state,
+  )
+})
+
+test('resetTimeline removes turns when chatId changes', () => {
+  const state = replaceTimelinePage(
+    createTimelineState(),
+    page([turn('old-chat-run', 'completed')]),
+  )
+
+  assert.deepEqual(resetTimeline(state), createTimelineState())
 })

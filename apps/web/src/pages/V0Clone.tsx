@@ -35,15 +35,14 @@ import {
   Settings2,
   SlidersHorizontal,
   Sparkles,
-  Square,
   UploadCloud,
   Upload,
   Users,
-  Zap,
 } from 'lucide-react'
 import row01 from '@/assets/v0/template-row01.png'
 import row02 from '@/assets/v0/template-row02.png'
 import iosLight from '@/assets/v0/ios-light.png'
+import { ConversationTimeline } from '@/components/ConversationTimeline'
 import { WorkspaceEditComposer } from '@/components/WorkspaceEditComposer'
 import { agentApi, authApi, chatApi, projectApi } from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
@@ -53,6 +52,18 @@ import {
   resolveRoutedProjectId,
 } from '@/lib/chatWorkspace'
 import { getSnapshotPreviewState } from '@/lib/snapshotPreview'
+import {
+  applyTimelineEvent,
+  createTimelineState,
+  failTimelineLoading,
+  insertTimelineRun,
+  mergeOlderTimelinePage,
+  replaceTimelinePage,
+  resetTimeline,
+  startTimelineLoading,
+  toggleTimelineTurn,
+  type ChatTimelineState,
+} from '@/lib/chatTimeline'
 import {
   applyAgentEvent,
   applyAgentRunDetail,
@@ -113,14 +124,6 @@ const promptIcons = {
   'Mini Game': Gamepad2,
   'Finance Calculator': LineChart,
 }
-
-const integrationItems = [
-  'GitHub repo sync',
-  'Supabase database',
-  'Vercel Blob uploads',
-  'Stripe checkout',
-  'AI SDK streaming',
-]
 
 const sampleCode = `import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -192,14 +195,15 @@ export function V0Clone() {
   const [deployOpen, setDeployOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [workspaceSidebarCollapsed, setWorkspaceSidebarCollapsed] = useState(false)
+  const [timeline, setTimeline] = useState(createTimelineState)
   const [projectId, setProjectId] = useState('')
   const refreshRequestRef = useRef(0)
   const routeRequestRef = useRef(0)
   const pendingNavigationChatRef = useRef<string | null>(null)
-  const rollbackInFlightRef = useRef(false)
   const monitorControllerRef = useRef<AbortController | null>(null)
   const submissionInFlightRef = useRef(false)
   const submissionIdRef = useRef(0)
+  const timelineRequestRef = useRef(0)
 
   const visibleTemplates = useMemo(
     () => templates.filter((template) => category === 'all' || template.category === category),
@@ -236,15 +240,40 @@ export function V0Clone() {
     return snapshotsResponse.data.snapshots
   }
 
+  const loadTimeline = async (
+    targetChatId: string,
+    before?: string,
+  ): Promise<void> => {
+    const requestId = ++timelineRequestRef.current
+    setTimeline((state) => startTimelineLoading(state, Boolean(before)))
+    try {
+      const response = await chatApi.getTimeline(targetChatId, {
+        limit: 20,
+        ...(before ? { before } : {}),
+      })
+      if (requestId !== timelineRequestRef.current) return
+      setTimeline((state) =>
+        before
+          ? mergeOlderTimelinePage(state, response.data)
+          : replaceTimelinePage(state, response.data),
+      )
+    } catch (error) {
+      if (requestId !== timelineRequestRef.current) return
+      setTimeline((state) => failTimelineLoading(state, getErrorMessage(error)))
+    }
+  }
+
   useEffect(() => {
     const requestId = ++routeRequestRef.current
     setRouteError(undefined)
     setEditDraft('')
 
     if (!chatId) {
+      timelineRequestRef.current += 1
       monitorControllerRef.current?.abort()
       monitorControllerRef.current = null
       setProjectId('')
+      setTimeline((state) => resetTimeline(state))
       setWorkspace(createInitialWorkspaceState())
       return
     }
@@ -256,7 +285,9 @@ export function V0Clone() {
 
     monitorControllerRef.current?.abort()
     monitorControllerRef.current = null
+    timelineRequestRef.current += 1
     setProjectId('')
+    setTimeline((state) => resetTimeline(state))
     setWorkspace((state) => resetWorkspaceForChat(state))
 
     void (async () => {
@@ -274,6 +305,7 @@ export function V0Clone() {
               .find((message) => message.role === 'user')?.content ??
             chatResponse.data.chat.title,
         }))
+        void loadTimeline(chatId)
 
         const snapshots = await refreshProjectData(routedProjectId)
         if (requestId !== routeRequestRef.current) return
@@ -309,6 +341,7 @@ export function V0Clone() {
     submissionInFlightRef.current = true
     setSubmissionPending(true)
     const submissionId = ++submissionIdRef.current
+    let activeTimelineRunId: string | undefined
 
     if (!chatId) {
       setDraftPrompt(prompt)
@@ -357,6 +390,8 @@ export function V0Clone() {
       if (!token) throw new Error('Authentication token is unavailable')
 
       const runId = runResponse.data.run._id
+      activeTimelineRunId = runId
+      setTimeline((state) => insertTimelineRun(state, runResponse.data.run))
       setWorkspace((state) => startApiGeneration(state, prompt, runId))
       const detail = await monitorAgentRun({
         runId,
@@ -364,16 +399,38 @@ export function V0Clone() {
         signal: controller.signal,
         onEvent: (event) => {
           setWorkspace((state) => applyAgentEvent(state, runId, event))
+          setTimeline((state) => applyTimelineEvent(state, runId, {
+            ...event,
+            createdAt: new Date().toISOString(),
+          }))
         },
       })
       setWorkspace((state) => applyAgentRunDetail(state, detail))
       await refreshProjectData(activeProjectId)
+      await loadTimeline(activeChatId)
       if (chatId && detail.run.status === 'completed') {
         setEditDraft((current) => current.trim() === prompt ? '' : current)
       }
     } catch (error) {
       if (!isAbortError(error) && submissionId === submissionIdRef.current) {
         setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
+        setTimeline((state) => {
+          if (!activeTimelineRunId) return state
+          const activeTurn = state.turns.find(
+            (turn) => turn.runId === activeTimelineRunId,
+          )
+          if (!activeTurn) return state
+          const maxSequence = Math.max(
+            0,
+            ...activeTurn.agent.events.map((event) => event.sequence),
+          )
+          return applyTimelineEvent(state, activeTimelineRunId, {
+            type: 'run.failed',
+            sequence: maxSequence + 1,
+            message: getErrorMessage(error),
+            createdAt: new Date().toISOString(),
+          })
+        })
       }
     } finally {
       if (submissionId === submissionIdRef.current) {
@@ -383,8 +440,8 @@ export function V0Clone() {
     }
   }
 
-  const handleCancelRun = async () => {
-    const runId = workspace.generation.runId
+  const handleCancelRun = async (requestedRunId?: string) => {
+    const runId = requestedRunId ?? workspace.generation.runId
     if (!isCancellableRunId(runId)) return
     monitorControllerRef.current?.abort()
     monitorControllerRef.current = null
@@ -396,6 +453,7 @@ export function V0Clone() {
         resultSnapshot: null,
       }))
       if (projectId) await refreshProjectData(projectId)
+      if (chatId) await loadTimeline(chatId)
     } catch (error) {
       setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
     }
@@ -410,17 +468,10 @@ export function V0Clone() {
     navigate('/')
   }
 
-  const handleRollback = async (snapshotId: string) => {
-    if (!projectId || rollbackInFlightRef.current) return
-    rollbackInFlightRef.current = true
-    refreshRequestRef.current += 1
-    try {
-      const response = await projectApi.rollbackSnapshot(projectId, snapshotId)
-      setWorkspace((state) => applyWorkspaceSnapshot(state, response.data.snapshot))
-      await refreshProjectData(projectId)
-    } finally {
-      rollbackInFlightRef.current = false
-    }
+  const handleSelectTimelineSnapshot = async (snapshotId: string) => {
+    if (!projectId) return
+    const response = await projectApi.getSnapshot(projectId, snapshotId)
+    setWorkspace((state) => applyWorkspaceSnapshot(state, response.data.snapshot))
   }
 
   const handlePromptSubmit = (event?: FormEvent) => {
@@ -658,13 +709,27 @@ export function V0Clone() {
           onCopy={handleCopy}
           onDownload={handleDownload}
           onCancelRun={() => void handleCancelRun()}
-          onRollback={(snapshotId) => void handleRollback(snapshotId)}
           currentCode={currentCode}
           currentFileName={currentFileName}
           editDraft={editDraft}
           submissionPending={submissionPending}
           onEditDraftChange={setEditDraft}
           onSubmitEdit={() => void submitPromptToAgent(editDraft)}
+          timeline={timeline}
+          onToggleTimelineTurn={(runId) =>
+            setTimeline((state) => toggleTimelineTurn(state, runId))
+          }
+          onLoadOlderTimeline={() => {
+            if (chatId && timeline.pageInfo.nextBefore) {
+              void loadTimeline(chatId, timeline.pageInfo.nextBefore)
+            }
+          }}
+          onRetryTimeline={() => {
+            if (chatId) void loadTimeline(chatId)
+          }}
+          onSelectTimelineSnapshot={(snapshotId) =>
+            void handleSelectTimelineSnapshot(snapshotId)
+          }
           sidebarCollapsed={workspaceSidebarCollapsed}
           onCollapseSidebar={() => setWorkspaceSidebarCollapsed(true)}
           onExpandSidebar={() => setWorkspaceSidebarCollapsed(false)}
@@ -768,13 +833,17 @@ function WorkspaceScreen({
   onCopy,
   onDownload,
   onCancelRun,
-  onRollback,
   currentCode,
   currentFileName,
   editDraft,
   submissionPending,
   onEditDraftChange,
   onSubmitEdit,
+  timeline,
+  onToggleTimelineTurn,
+  onLoadOlderTimeline,
+  onRetryTimeline,
+  onSelectTimelineSnapshot,
   sidebarCollapsed,
   onCollapseSidebar,
   onExpandSidebar,
@@ -793,32 +862,21 @@ function WorkspaceScreen({
   onCopy: () => void
   onDownload: () => void
   onCancelRun: () => void
-  onRollback: (snapshotId: string) => void
   currentCode: string
   currentFileName: string
   editDraft: string
   submissionPending: boolean
   onEditDraftChange: (value: string) => void
   onSubmitEdit: () => void
+  timeline: ChatTimelineState
+  onToggleTimelineTurn: (runId: string) => void
+  onLoadOlderTimeline: () => void
+  onRetryTimeline: () => void
+  onSelectTimelineSnapshot: (snapshotId: string) => void
   sidebarCollapsed: boolean
   onCollapseSidebar: () => void
   onExpandSidebar: () => void
 }) {
-  const assistantTitle = state.generation.status === 'running'
-    ? 'I am creating a project snapshot.'
-    : state.generation.status === 'failed'
-      ? 'The agent run needs attention.'
-      : state.generation.status === 'cancelled'
-        ? 'The agent run was cancelled.'
-        : 'I built a snapshot-backed preview.'
-  const assistantDescription = state.generation.status === 'running'
-    ? 'The prompt is running through the local API, Redis queue, worker, and MongoDB snapshot store.'
-    : state.generation.status === 'failed'
-      ? state.generation.error ?? 'The run did not complete.'
-      : state.generation.status === 'cancelled'
-        ? 'You can revise the prompt and start another run.'
-        : state.snapshot?.summary ?? 'The app includes responsive layout, structured files, code export, repo sync, and a publish flow.'
-
   return (
     <main
       className={`grid min-h-[calc(100vh-48px)] grid-cols-1 bg-white ${
@@ -890,154 +948,26 @@ function WorkspaceScreen({
 
         <div className="grid flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[440px_1fr]">
           <section className="flex min-h-[420px] flex-col border-b border-neutral-200 xl:border-b-0 xl:border-r">
-            <div className="border-b border-neutral-200 p-4">
-              <div className="rounded-lg border border-neutral-200 bg-[#fafafa] p-3">
-                <p className="text-sm leading-6 text-neutral-700">{prompt}</p>
-              </div>
+            <div
+              className="sr-only"
+              data-testid="agent-generation-status"
+              data-status={state.generation.status}
+            >
+              {state.generation.status}
             </div>
-
-            <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              <div className="flex gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-950 text-sm font-semibold text-white">
-                  v0
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div
-                    className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
-                    data-testid="agent-generation-status"
-                    data-status={state.generation.status}
-                  >
-                    <p className="text-sm font-medium">{assistantTitle}</p>
-                    <p className="mt-2 text-sm leading-6 text-neutral-600">{assistantDescription}</p>
-                  </div>
-                  {state.generation.status === 'running' &&
-                  isCancellableRunId(state.generation.runId) ? (
-                    <button
-                      className="mt-2 inline-flex h-8 items-center gap-2 rounded-md border border-red-200 px-3 text-xs font-medium text-red-700 hover:bg-red-50"
-                      onClick={onCancelRun}
-                    >
-                      <Square className="h-3 w-3 fill-current" />
-                      Stop run
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-neutral-200 bg-white" data-testid="agent-timeline">
-                <div className="border-b border-neutral-200 px-4 py-3">
-                  <p className="text-sm font-medium">Agent plan</p>
-                </div>
-                <div className="space-y-1 p-2">
-                  {state.generation.steps.map((step) => (
-                    <div key={step.id} className="flex gap-3 rounded-md p-2">
-                      <div
-                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                          step.status === 'active'
-                            ? 'bg-orange-100 text-orange-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
-                      >
-                        {step.status === 'active' ? <Zap className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{step.label}</p>
-                        <p className="text-xs leading-5 text-neutral-500">{step.detail}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {state.generation.error ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-950">
-                  {state.generation.error}
-                </div>
-              ) : null}
-
-              {state.snapshot ? (
-                <div className="rounded-lg border border-neutral-200 bg-white">
-                  <div className="border-b border-neutral-200 px-4 py-3">
-                    <p className="text-sm font-medium">Project snapshot</p>
-                    <p className="mt-1 text-xs text-neutral-500">{state.snapshot.files.length} files saved in MongoDB</p>
-                  </div>
-                  <div className="space-y-1 p-2">
-                    {state.snapshot.files.map((file) => (
-                      <button
-                        key={file.path}
-                        className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
-                          state.snapshot?.selectedFilePath === file.path
-                            ? 'bg-neutral-950 text-white'
-                            : 'text-neutral-700 hover:bg-neutral-100'
-                        }`}
-                        onClick={() => {
-                          onSelectSnapshotFile(file.path)
-                          onSwitchPanel('code')
-                        }}
-                      >
-                        <FileCode2 className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{file.path}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="border-t border-neutral-200 p-3 text-xs text-neutral-600">
-                    <p className="font-medium text-neutral-800">
-                      Validation: {state.snapshot.validation.status}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {Object.entries(state.snapshot.packageJson.dependencies).map(([name, version]) => (
-                        <span key={name} className="rounded bg-neutral-100 px-2 py-1">{name} {version}</span>
-                      ))}
-                      {Object.entries(state.snapshot.packageJson.devDependencies).map(([name, version]) => (
-                        <span key={name} className="rounded bg-blue-50 px-2 py-1 text-blue-700">{name} {version} (dev)</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {state.snapshots.length > 0 ? (
-                <div className="rounded-lg border border-neutral-200 bg-white" data-testid="snapshot-history">
-                  <div className="border-b border-neutral-200 px-4 py-3 text-sm font-medium">Snapshot history</div>
-                  <div className="space-y-2 p-2">
-                    {state.snapshots.map((snapshot) => (
-                      <div
-                        key={snapshot.id}
-                        className="flex items-center justify-between gap-2 rounded-md p-2 text-sm"
-                        data-testid={`snapshot-${snapshot.id}`}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{snapshot.summary}</p>
-                          <p className="text-xs text-neutral-500">
-                            {snapshot.fileCount} files · {snapshot.validation.status}
-                            {snapshot.isActive ? ' · active' : ''}
-                          </p>
-                        </div>
-                        {!snapshot.isActive ? (
-                          <button
-                            className="rounded-md border border-neutral-200 px-2 py-1 text-xs hover:bg-neutral-50"
-                            onClick={() => onRollback(snapshot.id)}
-                          >
-                            Restore
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="rounded-lg border border-neutral-200 bg-[#fafafa] p-3">
-                <p className="text-xs font-medium uppercase text-neutral-400">Integrations</p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                  {integrationItems.map((item) => (
-                    <div key={item} className="flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm text-neutral-700">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <ConversationTimeline
+              state={timeline}
+              activeRunId={
+                isCancellableRunId(state.generation.runId)
+                  ? state.generation.runId
+                  : undefined
+              }
+              onToggleTurn={onToggleTimelineTurn}
+              onLoadOlder={onLoadOlderTimeline}
+              onRetry={onRetryTimeline}
+              onSelectSnapshot={onSelectTimelineSnapshot}
+              onCancelRun={onCancelRun}
+            />
             <WorkspaceEditComposer
               value={editDraft}
               disabled={state.generation.status === 'running' || submissionPending}
