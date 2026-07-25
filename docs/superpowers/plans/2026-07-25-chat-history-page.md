@@ -1,6 +1,6 @@
 # Chat History Page Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a five-item recent-chat section to the Workspace sidebar and a read-only `/v0/chats` page for opening every prior conversation.
 
@@ -53,7 +53,7 @@ committed. Stage only the explicit files listed in each task.
 - Modify: `apps/server/src/routes/chat.ts`
 - Modify: `apps/server/src/integration/agentRoutes.integration.ts`
 
-- [ ] **Step 1: Write failing projection tests**
+- [x] **Step 1: Write failing projection tests**
 
 Create `apps/server/src/chat/chatList.test.ts`:
 
@@ -93,7 +93,7 @@ test('omits preview when a Chat has no user message', () => {
 });
 ```
 
-- [ ] **Step 2: Run the projection test and verify RED**
+- [x] **Step 2: Run the projection test and verify RED**
 
 Run:
 
@@ -103,7 +103,7 @@ npm test --workspace @v0/server -- --test-name-pattern="first user message|no us
 
 Expected: FAIL because `chatList.ts` does not exist.
 
-- [ ] **Step 3: Implement the bounded projection**
+- [x] **Step 3: Implement the bounded projection**
 
 Create `apps/server/src/chat/chatList.ts` with:
 
@@ -158,7 +158,7 @@ needed for projection, call `.lean()`, and return:
 res.json({ chats: chats.map(projectChatListItem) });
 ```
 
-- [ ] **Step 4: Add failing integration assertions**
+- [x] **Step 4: Add failing integration assertions**
 
 In `apps/server/src/integration/agentRoutes.integration.ts`, add a test that:
 
@@ -170,7 +170,7 @@ In `apps/server/src/integration/agentRoutes.integration.ts`, add a test that:
 - asserts newest-first ordering, exactly two results, a 160-character bounded
   preview, no `messages` property, and no stranger Chat.
 
-- [ ] **Step 5: Run backend verification**
+- [x] **Step 5: Run backend verification**
 
 Run:
 
@@ -182,7 +182,7 @@ npm run type-check --workspace @v0/server
 
 Expected: all Server unit and integration tests pass and TypeScript exits 0.
 
-- [ ] **Step 6: Commit the Server list projection**
+- [x] **Step 6: Commit the Server list projection**
 
 ```bash
 git add \
@@ -200,7 +200,7 @@ git commit -m "feat: expose chat history list items"
 - Create: `apps/web/src/lib/chatHistory.ts`
 - Create: `apps/web/src/lib/chatHistory.test.ts`
 
-- [ ] **Step 1: Write failing state and display tests**
+- [x] **Step 1: Write failing state and display tests**
 
 Create `apps/web/src/lib/chatHistory.test.ts`:
 
@@ -252,7 +252,7 @@ test('formats same-day and older updated times', () => {
 });
 ```
 
-- [ ] **Step 2: Run the Web test and verify RED**
+- [x] **Step 2: Run the Web test and verify RED**
 
 Run:
 
@@ -262,7 +262,7 @@ npm test --workspace @v0/web -- --test-name-pattern="recent Chats|loading ready|
 
 Expected: FAIL because `chatHistory.ts` does not exist.
 
-- [ ] **Step 3: Add the API type**
+- [x] **Step 3: Add the API type**
 
 In `apps/web/src/services/api.ts`, add:
 
@@ -283,7 +283,7 @@ Change `chatApi.getAll` to:
 getAll: () => api.get<{ chats: ChatListItem[] }>('/api/chat')
 ```
 
-- [ ] **Step 4: Implement pure Chat history state**
+- [x] **Step 4: Implement pure Chat history state**
 
 Create `apps/web/src/lib/chatHistory.ts` with:
 
@@ -324,7 +324,7 @@ Also implement `formatChatUpdatedAt` with `Intl.DateTimeFormat`: use hour/minute
 for the same local calendar day, `昨天` for the previous local calendar day,
 and month/day for older records.
 
-- [ ] **Step 5: Run Web unit and type verification**
+- [x] **Step 5: Run Web unit and type verification**
 
 Run:
 
@@ -335,7 +335,7 @@ npm run type-check --workspace @v0/web
 
 Expected: all Web tests pass and TypeScript exits 0.
 
-- [ ] **Step 6: Commit the Web state model**
+- [x] **Step 6: Commit the Web state model**
 
 ```bash
 git add \
@@ -353,7 +353,7 @@ git commit -m "feat: model chat history state"
 - Modify: `apps/web/src/App.tsx`
 - Test: `apps/web/src/lib/chatHistory.test.ts`
 
-- [ ] **Step 1: Add failing presentation-helper tests**
+- [x] **Step 1: Add failing presentation-helper tests**
 
 Extend `apps/web/src/lib/chatHistory.test.ts` to assert:
 
@@ -370,7 +370,7 @@ test('marks and labels the active Chat', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -380,7 +380,7 @@ npm test --workspace @v0/web -- --test-name-pattern="active Chat"
 
 Expected: FAIL because the presentation helpers are not exported.
 
-- [ ] **Step 3: Implement `RecentChats`**
+- [x] **Step 3: Implement `RecentChats`**
 
 Create `apps/web/src/components/RecentChats.tsx` with props:
 
@@ -403,7 +403,7 @@ The component must:
 - render `More` as a link to `/v0/chats`;
 - omit `More` in the empty state.
 
-- [ ] **Step 4: Implement the full history page**
+- [x] **Step 4: Implement the full history page**
 
 Create `apps/web/src/pages/ChatHistoryPage.tsx`. On mount it calls
 `chatApi.getAll()`, transitions the pure state, and renders:
@@ -417,7 +417,7 @@ Create `apps/web/src/pages/ChatHistoryPage.tsx`. On mount it calls
 
 Use a centered `max-w-4xl` content column and mobile-safe padding.
 
-- [ ] **Step 5: Register the route**
+- [x] **Step 5: Register the route**
 
 Modify `apps/web/src/App.tsx`:
 
@@ -428,7 +428,7 @@ Modify `apps/web/src/App.tsx`:
 
 Keep the static route before the parameterized route for readability.
 
-- [ ] **Step 6: Run component boundary verification**
+- [x] **Step 6: Run component boundary verification**
 
 Run:
 
@@ -441,7 +441,7 @@ npm run build --workspace @v0/web
 Expected: all Web tests, type checking, and the production build pass. Record
 the existing Preview chunk warning if it remains.
 
-- [ ] **Step 7: Commit the history UI**
+- [x] **Step 7: Commit the history UI**
 
 ```bash
 git add \
@@ -459,7 +459,7 @@ git commit -m "feat: add chat history page"
 - Modify: `apps/web/src/pages/V0Clone.tsx`
 - Modify: `tests/smoke/workspace.spec.ts`
 
-- [ ] **Step 1: Add Workspace integration state**
+- [x] **Step 1: Add Workspace integration state**
 
 In `apps/web/src/pages/V0Clone.tsx`:
 
@@ -470,7 +470,7 @@ In `apps/web/src/pages/V0Clone.tsx`:
   created;
 - pass state, `chatId`, and retry to `WorkspaceScreen`.
 
-- [ ] **Step 2: Render recent Chats below `New chat`**
+- [x] **Step 2: Render recent Chats below `New chat`**
 
 Update the expanded sidebar in `WorkspaceScreen`:
 
@@ -486,7 +486,7 @@ Place it below the top action row and above the flexible spacer. Do not modify
 the existing Timeline, composer, Preview/Code panels, or sidebar-collapse
 behavior.
 
-- [ ] **Step 3: Extend the smoke test**
+- [x] **Step 3: Extend the smoke test**
 
 Update `tests/smoke/workspace.spec.ts` to:
 
@@ -500,7 +500,7 @@ Update `tests/smoke/workspace.spec.ts` to:
 
 Use role-based locators and the existing 90-second generation timeout.
 
-- [ ] **Step 4: Run deterministic end-to-end verification**
+- [x] **Step 4: Run deterministic end-to-end verification**
 
 Run the existing deterministic smoke stack and:
 
@@ -510,7 +510,7 @@ SMOKE_WEB_URL=http://127.0.0.1:4174 npm run test:smoke
 
 Expected: API smoke and the Playwright Workspace scenario pass.
 
-- [ ] **Step 5: Run full repository verification**
+- [x] **Step 5: Run full repository verification**
 
 Run:
 
@@ -527,7 +527,7 @@ git diff --check
 
 Expected: every command exits 0. Record exact test counts and build warnings.
 
-- [ ] **Step 6: Commit Workspace and smoke integration**
+- [x] **Step 6: Commit Workspace and smoke integration**
 
 ```bash
 git add \
@@ -541,7 +541,7 @@ git commit -m "feat: connect recent chats to workspace"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-25-chat-history-page.md`
 
-- [ ] **Step 1: Refresh the retained local stack**
+- [x] **Step 1: Refresh the retained local stack**
 
 Run:
 
@@ -554,7 +554,7 @@ docker compose \
   up -d --build
 ```
 
-- [ ] **Step 2: Verify service health**
+- [x] **Step 2: Verify service health**
 
 Run:
 
@@ -570,7 +570,7 @@ curl -fsS http://127.0.0.1:43001/health
 
 Expected: Web, API, Worker, MongoDB, and Redis are running; API health is `ok`.
 
-- [ ] **Step 3: Record execution results**
+- [x] **Step 3: Record execution results**
 
 Append an `Execution Results` section containing:
 
@@ -583,14 +583,14 @@ Append an `Execution Results` section containing:
 - build warnings;
 - preserved unrelated working-tree changes.
 
-- [ ] **Step 4: Commit the completed plan**
+- [x] **Step 4: Commit the completed plan**
 
 ```bash
 git add docs/superpowers/plans/2026-07-25-chat-history-page.md
 git commit -m "docs: complete chat history plan"
 ```
 
-- [ ] **Step 5: Verify final local Git state**
+- [x] **Step 5: Verify final local Git state**
 
 Run:
 
@@ -601,3 +601,33 @@ git log -8 --oneline
 
 Expected: only the pre-existing guarded changes and local `.superpowers/`
 directory remain uncommitted. Do not push.
+
+## Execution Results
+
+- Server Chat list projection:
+  `06212d7 feat: expose chat history list items`
+- Web Chat history state:
+  `a6bc1e7 feat: model chat history state`
+- Recent Chats and full history page:
+  `da047ee feat: add chat history page`
+- Workspace integration:
+  `fdfd1a8 feat: connect recent chats to workspace`
+- Server unit tests: 94 passed.
+- Server integration tests: 14 passed.
+- Web unit tests: 73 passed.
+- Server and Web type checks passed.
+- Server and Web production builds passed.
+- Deterministic API smoke passed; Playwright Workspace smoke passed (1 test,
+  15.4 seconds).
+- `git diff --check` passed.
+- The retained `phase6-manual` stack is running with healthy Web, API,
+  MongoDB, and Redis services plus the Agent Worker. API health returned
+  `{"status":"ok"}`.
+- The Web build retains the existing `SnapshotPreview` chunk-size warning
+  (`619.76 kB`, `209.47 kB` gzip).
+- Pre-existing changes in `apps/server/src/agent/orchestrator.ts`,
+  `apps/server/src/agent/orchestrator.test.ts`,
+  `apps/web/src/components/ConversationTimeline.tsx`,
+  `apps/web/src/lib/chatTimeline.ts`, and
+  `apps/web/src/lib/chatTimeline.test.ts`, plus local `.superpowers/`
+  artifacts, were preserved and excluded from history-page commits.
