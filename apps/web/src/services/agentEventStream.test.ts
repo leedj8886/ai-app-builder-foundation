@@ -12,6 +12,7 @@ const encoder = new TextEncoder()
 interface ReaderCleanup {
   cancelled: boolean
   released: boolean
+  bodyCancels?: number
 }
 
 const eventFrame = (
@@ -27,12 +28,14 @@ const responseFromChunks = (
   status = 200,
   cleanup?: ReaderCleanup,
   readError?: Error,
+  contentType = 'text/event-stream',
 ): Response => ({
   ok: status >= 200 && status < 300,
   status,
   statusText: '',
-  headers: { get: (name: string) => name.toLowerCase() === 'content-type' ? 'text/event-stream' : null },
+  headers: { get: (name: string) => name.toLowerCase() === 'content-type' ? contentType : null },
   body: {
+    cancel: async () => { if (cleanup) cleanup.bodyCancels = (cleanup.bodyCancels ?? 0) + 1 },
     getReader: () => {
       let index = 0
       return {
@@ -376,6 +379,37 @@ describe('streamAgentEvents', () => {
     assert.equal(fetches, 4)
     assert.deepEqual(sleeps, [250, 500, 1000])
     assert.deepEqual(result, { outcome: 'exhausted' })
+  })
+
+  it('cancels rejected response bodies exactly once before retrying or propagating', async () => {
+    const fiveXxBodies = Array.from({ length: 3 }, () => ({ cancelled: false, released: false, bodyCancels: 0 }))
+    let fetches = 0
+    await streamAgentEvents(options(async () => {
+      const cleanup = fiveXxBodies[fetches++]
+      return responseFromChunks([], 503, cleanup)
+    }, {
+      maxReconnectAttempts: 2,
+      sleep: async () => undefined,
+    }))
+    assert.equal(fetches, 3)
+    assert.deepEqual(fiveXxBodies.map((cleanup) => cleanup.bodyCancels), [1, 1, 1])
+
+    const invalidContentType = { cancelled: false, released: false, bodyCancels: 0 }
+    await assert.rejects(
+      streamAgentEvents(options(async () => responseFromChunks([], 200, invalidContentType, undefined, 'application/json'))),
+      /not text\/event-stream/,
+    )
+    assert.equal(invalidContentType.bodyCancels, 1)
+
+    const stateFailure = { cancelled: false, released: false, bodyCancels: 0 }
+    const stateError = new Error('connected state failed')
+    await assert.rejects(
+      streamAgentEvents(options(async () => responseFromChunks([], 200, stateFailure), {
+        onState: () => { throw stateError },
+      })),
+      (error: unknown) => error === stateError,
+    )
+    assert.equal(stateFailure.bodyCancels, 1)
   })
 
   it('does not retry 401, 403, or 404 responses', async () => {

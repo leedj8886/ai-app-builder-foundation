@@ -144,6 +144,14 @@ const isNonNegativeInteger = (value: string): boolean => /^\d+$/.test(value)
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const cancelResponseBody = async (response: Response): Promise<void> => {
+  try {
+    await response.body?.cancel()
+  } catch {
+    // The stream can already be closed or unavailable for cancellation.
+  }
+}
+
 const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: number } | undefined => {
   if (frame.data.length === 0) return undefined
 
@@ -221,15 +229,7 @@ const consumeResponse = async ({
   onEvent: (event: AgentEvent) => void | Promise<void>
   onProgress: (id: number, sequence: number) => void
 }): Promise<ConsumeResult> => {
-  if (!response.body) {
-    throw new AgentStreamProtocolError('Agent event stream response has no body')
-  }
-  const contentType = response.headers.get('Content-Type')
-  if (!contentType?.toLowerCase().includes('text/event-stream')) {
-    throw new AgentStreamProtocolError('Agent event stream response is not text/event-stream')
-  }
-
-  const reader = response.body.getReader()
+  const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let frame: SseFrame = { data: [] }
@@ -329,15 +329,26 @@ export const streamAgentEvents = async ({
       }), signal)
 
       if (!response.ok) {
+        await cancelResponseBody(response)
         if (response.status >= 500) {
           throw new AgentStreamRetryableError(`Agent event stream request failed (${response.status})`)
         }
         throw new AgentStreamHttpError(response.status, response.statusText)
       }
 
+      if (!response.body) {
+        throw new AgentStreamProtocolError('Agent event stream response has no body')
+      }
+      const contentType = response.headers.get('Content-Type')
+      if (!contentType?.toLowerCase().includes('text/event-stream')) {
+        await cancelResponseBody(response)
+        throw new AgentStreamProtocolError('Agent event stream response is not text/event-stream')
+      }
+
       try {
         onState?.('connected')
       } catch (error) {
+        await cancelResponseBody(response)
         throw new AgentStreamApplicationError(error)
       }
       const result = await consumeResponse({
