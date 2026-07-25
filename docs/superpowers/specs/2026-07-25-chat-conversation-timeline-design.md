@@ -157,7 +157,6 @@ interface ChatTimelineTurn {
   }
   snapshot?: {
     id: string
-    revision: number
     summary: string
     changedFiles: string[]
   }
@@ -172,6 +171,10 @@ which keeps ordering deterministic when multiple Runs share a timestamp.
 `changedFiles` is the ordered, deduplicated set of paths from that Run's
 `file.changed` events. It does not require loading full Snapshot file contents
 into the timeline response.
+
+The UI labels the Snapshot entry with a short stable identifier derived from
+its ID. It does not display a numeric revision because existing Snapshot records
+do not persist a stable per-Snapshot revision number.
 
 ## Event Presentation
 
