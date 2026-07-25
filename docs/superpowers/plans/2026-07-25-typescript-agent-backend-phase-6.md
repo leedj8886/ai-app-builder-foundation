@@ -81,7 +81,7 @@ Do not implement:
 - Modify: `.gitignore`
 - Create: `playwright.config.ts`
 
-- [ ] **Step 1: Install integration and browser-test dependencies**
+- [x] **Step 1: Install integration and browser-test dependencies**
 
 Run:
 
@@ -92,7 +92,7 @@ npm install --save-dev @playwright/test tsx
 
 Expected: `apps/server/package.json`, root `package.json`, and `package-lock.json` change; no application source changes.
 
-- [ ] **Step 2: Add isolated commands**
+- [x] **Step 2: Add isolated commands**
 
 Add to `apps/server/package.json`:
 
@@ -117,7 +117,7 @@ Add to the root `package.json`:
 }
 ```
 
-- [ ] **Step 3: Add Playwright configuration and ignored artifacts**
+- [x] **Step 3: Add Playwright configuration and ignored artifacts**
 
 Create `playwright.config.ts`:
 
@@ -145,7 +145,7 @@ test-results/
 playwright-report/
 ```
 
-- [ ] **Step 4: Verify command parsing and existing builds**
+- [x] **Step 4: Verify command parsing and existing builds**
 
 Run:
 
@@ -159,7 +159,7 @@ npx playwright install chromium
 
 Expected: existing tests and type-checks pass; Chromium installs outside the repository.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json package-lock.json apps/server/package.json .gitignore playwright.config.ts
@@ -174,7 +174,7 @@ git commit -m "test: add phase 6 test tooling"
 - Create: `apps/server/src/agent/sseStream.ts`
 - Modify: `apps/server/src/routes/agent.ts`
 
-- [ ] **Step 1: Write failing stream delivery tests**
+- [x] **Step 1: Write failing stream delivery tests**
 
 Create tests with injected event loading, subscriber, response, and timers. Cover:
 
@@ -197,7 +197,7 @@ test('streamAgentRunEvents heartbeats and closes the subscriber once', async () 
 });
 ```
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run:
 
@@ -207,7 +207,7 @@ npm run test --workspace @v0/server
 
 Expected: FAIL because `streamAgentRunEvents` does not exist.
 
-- [ ] **Step 3: Implement the focused stream module**
+- [x] **Step 3: Implement the focused stream module**
 
 Create this public contract in `sseStream.ts`:
 
@@ -247,7 +247,7 @@ export const streamAgentRunEvents = async (
 
 Use `serializeAgentEvent` for MongoDB documents. Do not create a second public event shape in the route.
 
-- [ ] **Step 4: Delegate the route**
+- [x] **Step 4: Delegate the route**
 
 In `routes/agent.ts`:
 
@@ -258,7 +258,7 @@ In `routes/agent.ts`:
 
 The route must still include `userId` in the durable event query through the injected loader.
 
-- [ ] **Step 5: Verify green**
+- [x] **Step 5: Verify green**
 
 Run:
 
@@ -270,7 +270,7 @@ npm run build --workspace @v0/server
 
 Expected: all commands pass and existing SSE response fields remain unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/server/src/agent/sseStream.ts apps/server/src/agent/sseStream.test.ts apps/server/src/routes/agent.ts
@@ -285,7 +285,7 @@ git commit -m "feat: make agent event streaming resumable"
 - Create: `apps/web/src/services/agentEventStream.ts`
 - Modify: `apps/web/src/services/api.ts`
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 Cover protocol behavior with `ReadableStream` chunks:
 
@@ -315,7 +315,7 @@ it('returns exhausted after bounded retryable failures', async () => {
 });
 ```
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run:
 
@@ -325,7 +325,7 @@ npm run test --workspace @v0/web
 
 Expected: FAIL because the SSE client module is missing.
 
-- [ ] **Step 3: Implement the stream client**
+- [x] **Step 3: Implement the stream client**
 
 Create this contract:
 
@@ -368,7 +368,7 @@ export const agentEventStreamUrl = (runId: string) =>
 
 Pass the URL into the stream function or import the helper; do not duplicate API base URL resolution.
 
-- [ ] **Step 4: Verify green**
+- [x] **Step 4: Verify green**
 
 Run:
 
@@ -379,7 +379,7 @@ npm run type-check --workspace @v0/web
 
 Expected: parser, retry, abort, and existing workspace tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/services/agentEventStream.ts apps/web/src/services/agentEventStream.test.ts apps/web/src/services/api.ts
@@ -396,7 +396,7 @@ git commit -m "feat: add authenticated agent event stream client"
 - Modify: `apps/web/src/lib/v0Workspace.ts`
 - Modify: `apps/web/src/pages/V0Clone.tsx`
 
-- [ ] **Step 1: Write failing monitor tests**
+- [x] **Step 1: Write failing monitor tests**
 
 Use injected stream, detail fetch, polling, and delay functions:
 
@@ -428,7 +428,7 @@ it('ignores a stale streamed event from a replaced run', () => {
 });
 ```
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run:
 
@@ -438,7 +438,7 @@ npm run test --workspace @v0/web
 
 Expected: FAIL because monitor and streamed-event state helper are missing.
 
-- [ ] **Step 3: Implement monitor and state helper**
+- [x] **Step 3: Implement monitor and state helper**
 
 Create:
 
@@ -471,7 +471,7 @@ Add `applyAgentEvent(state, runId, event)` in `v0Workspace.ts`. It must:
 - represent terminal event status immediately;
 - leave the final snapshot replacement to `applyAgentRunDetail`.
 
-- [ ] **Step 4: Replace normal polling in `V0Clone`**
+- [x] **Step 4: Replace normal polling in `V0Clone`**
 
 For each submitted persisted Run:
 
@@ -492,7 +492,7 @@ Add stable attributes for smoke assertions:
 <div data-testid="snapshot-history">
 ```
 
-- [ ] **Step 5: Verify green**
+- [x] **Step 5: Verify green**
 
 Run:
 
@@ -504,7 +504,7 @@ npm run build --workspace @v0/web
 
 Expected: stream-first tests pass; normal builds contain no page-local polling loop.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/services/agentRunMonitor.ts apps/web/src/services/agentRunMonitor.test.ts apps/web/src/lib/v0Workspace.ts apps/web/src/lib/v0Workspace.test.ts apps/web/src/pages/V0Clone.tsx
@@ -520,7 +520,7 @@ git commit -m "feat: stream agent progress with polling fallback"
 - Create: `apps/server/src/testing/integrationEnvironment.ts`
 - Create: `apps/server/src/integration/environment.integration.ts`
 
-- [ ] **Step 1: Write a failing environment lifecycle test**
+- [x] **Step 1: Write a failing environment lifecycle test**
 
 Create `environment.integration.ts`:
 
@@ -540,7 +540,7 @@ test('integration environment provides isolated MongoDB Redis and BullMQ state',
 });
 ```
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run:
 
@@ -550,7 +550,7 @@ npm run test:integration --workspace @v0/server
 
 Expected: FAIL because `createIntegrationEnvironment` does not exist. If Docker is unavailable, stop and restore Docker before continuing.
 
-- [ ] **Step 3: Add explicit singleton cleanup**
+- [x] **Step 3: Add explicit singleton cleanup**
 
 In `redis.ts`, keep `closeSharedRedisConnection` idempotent and add no global key deletion.
 
@@ -566,7 +566,7 @@ export const closeAgentRunQueue = async (): Promise<void> => {
 
 Use these helpers during integration teardown so later tests can change queue configuration safely.
 
-- [ ] **Step 4: Implement the integration environment**
+- [x] **Step 4: Implement the integration environment**
 
 Create:
 
@@ -597,7 +597,7 @@ Wrap container startup errors with:
 Phase 6 integration tests require a running Docker daemon: <original message>
 ```
 
-- [ ] **Step 5: Verify green**
+- [x] **Step 5: Verify green**
 
 Run:
 
@@ -609,7 +609,7 @@ npm run type-check --workspace @v0/server
 
 Expected: integration lifecycle and all unit tests pass without leaked Node handles.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/server/src/agent/redis.ts apps/server/src/agent/queue.ts apps/server/src/testing/integrationEnvironment.ts apps/server/src/integration/environment.integration.ts
@@ -623,7 +623,7 @@ git commit -m "test: add real agent integration environment"
 - Create: `apps/server/src/integration/agentRoutes.integration.ts`
 - Modify: `apps/server/src/agent/sseStream.ts` only if integration reveals a delivery defect.
 
-- [ ] **Step 1: Write the authenticated create-and-queue test**
+- [x] **Step 1: Write the authenticated create-and-queue test**
 
 Use one shared integration environment with `before`, `beforeEach`, and `after`.
 Create real users through `User.create`, sign tokens with `generateToken`, and call
@@ -647,7 +647,7 @@ assert.equal(await AgentEvent.countDocuments({
 assert.ok(await queue.getJob(response.body.run._id));
 ```
 
-- [ ] **Step 2: Write ownership isolation tests**
+- [x] **Step 2: Write ownership isolation tests**
 
 Assert a second authenticated user receives 404 when:
 
@@ -659,7 +659,7 @@ Assert a second authenticated user receives 404 when:
 
 Also assert a Chat from another Project cannot be supplied during Run creation.
 
-- [ ] **Step 3: Write SSE backlog, live, and resume tests**
+- [x] **Step 3: Write SSE backlog, live, and resume tests**
 
 Create stored events 1–3, open the authenticated stream, and assert:
 
@@ -670,7 +670,7 @@ Create stored events 1–3, open the authenticated stream, and assert:
 
 Use a bounded stream reader helper; do not wait indefinitely for socket close.
 
-- [ ] **Step 4: Write cancellation integration**
+- [x] **Step 4: Write cancellation integration**
 
 Create a queued Run, call cancel, and assert:
 
@@ -684,7 +684,7 @@ assert.equal(await AgentEvent.countDocuments({
 
 Process its queued job later in Task 8 and assert it remains cancelled.
 
-- [ ] **Step 5: Run and fix only route-level defects**
+- [x] **Step 5: Run and fix only route-level defects**
 
 Run:
 
@@ -696,7 +696,7 @@ npm run type-check --workspace @v0/server
 
 Expected: all route, ownership, queue, and SSE integration tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/server/src/integration/agentRoutes.integration.ts apps/server/src/agent/sseStream.ts
@@ -713,7 +713,7 @@ git commit -m "test: cover authenticated agent routes end to end"
 - Create: `apps/server/src/agent/testing/fakeValidator.ts`
 - Modify: `apps/server/src/worker.ts`
 
-- [ ] **Step 1: Write failing Worker factory tests**
+- [x] **Step 1: Write failing Worker factory tests**
 
 Cover:
 
@@ -737,7 +737,7 @@ export const createAgentJobProcessor = (dependencies: {
 }) => async (job: Pick<Job<AgentRunJobData>, 'name' | 'data'>): Promise<void>;
 ```
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run:
 
@@ -747,7 +747,7 @@ npm run test --workspace @v0/server
 
 Expected: FAIL because the Worker factory does not exist.
 
-- [ ] **Step 3: Implement the Worker factory**
+- [x] **Step 3: Implement the Worker factory**
 
 Create:
 
@@ -776,7 +776,7 @@ export const createAgentWorker = (
 Update `worker.ts` to keep only configuration, database connection, production
 collaborator creation, event logging, and signal cleanup.
 
-- [ ] **Step 4: Implement deterministic fakes**
+- [x] **Step 4: Implement deterministic fakes**
 
 `fakeModelClient.ts` must export a factory with observable counters:
 
@@ -814,7 +814,7 @@ export const createFailOnceValidator = (): ProjectValidator & {
 The fail-once result contains one concise `type-check` diagnostic; the second
 result passes.
 
-- [ ] **Step 5: Verify green**
+- [x] **Step 5: Verify green**
 
 Run:
 
@@ -826,7 +826,7 @@ npm run build --workspace @v0/server
 
 Expected: production bootstrap and fake collaborators compile; unit tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/server/src/agent/createWorker.ts apps/server/src/agent/createWorker.test.ts apps/server/src/agent/testing/fakeModelClient.ts apps/server/src/agent/testing/fakeValidator.ts apps/server/src/worker.ts
@@ -840,7 +840,7 @@ git commit -m "refactor: make agent worker injectable"
 - Create: `apps/server/src/integration/agentWorker.integration.ts`
 - Modify: production files only if the E2E exposes an actual lifecycle defect.
 
-- [ ] **Step 1: Write the successful create E2E**
+- [x] **Step 1: Write the successful create E2E**
 
 Arrange a User, Project, queued AgentRun, `run.created` event, real Queue, and real
 Worker factory. Inject `createFakeModelClient()` and `createPassingValidator()`.
@@ -872,7 +872,7 @@ assert.deepEqual(
 For the event assertion, filter repeated `file.changed` entries separately rather
 than hard-coding their count into unrelated lifecycle order assertions.
 
-- [ ] **Step 2: Verify red if Worker wiring is incomplete**
+- [x] **Step 2: Verify red if Worker wiring is incomplete**
 
 Run:
 
@@ -882,7 +882,7 @@ npm run test:integration --workspace @v0/server
 
 Expected: PASS if Task 7 wiring is correct, otherwise fail at the exact lifecycle boundary.
 
-- [ ] **Step 3: Write the repair E2E**
+- [x] **Step 3: Write the repair E2E**
 
 Use `createFailOnceValidator()` and assert:
 
@@ -893,7 +893,7 @@ Use `createFailOnceValidator()` and assert:
 - only one passed Snapshot exists;
 - active revision advances once.
 
-- [ ] **Step 4: Write the cancelled queued job E2E**
+- [x] **Step 4: Write the cancelled queued job E2E**
 
 Cancel the Run before starting the Worker, then enqueue/process its job. Assert:
 
@@ -902,7 +902,7 @@ Cancel the Run before starting the Worker, then enqueue/process its job. Assert:
 - no Snapshot;
 - fake model counters remain zero.
 
-- [ ] **Step 5: Verify all integration and unit checks**
+- [x] **Step 5: Verify all integration and unit checks**
 
 Run:
 
@@ -915,7 +915,7 @@ npm run build --workspace @v0/server
 
 Expected: create, repair, cancel, route, and environment integration suites pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/server/src/integration/agentWorker.integration.ts
@@ -931,7 +931,7 @@ git commit -m "test: exercise agent worker lifecycle end to end"
 - Modify: `docker-compose.yml`
 - Create: `docker-compose.smoke.yml`
 
-- [ ] **Step 1: Add the smoke-only Worker entry**
+- [x] **Step 1: Add the smoke-only Worker entry**
 
 Create a process bootstrap that:
 
@@ -951,7 +951,7 @@ const worker = createAgentWorker({
 Install the same SIGINT/SIGTERM cleanup as production. The production `worker.ts`
 must not import `agent/testing/*`.
 
-- [ ] **Step 2: Add same-origin API and SSE proxying**
+- [x] **Step 2: Add same-origin API and SSE proxying**
 
 Add before the SPA location in `apps/web/nginx.conf`:
 
@@ -969,14 +969,14 @@ location /api/ {
 
 This makes the web bundle's default relative API URL work in both normal and smoke Compose.
 
-- [ ] **Step 3: Make Compose project isolation effective**
+- [x] **Step 3: Make Compose project isolation effective**
 
 Remove every fixed `container_name` entry from `docker-compose.yml`. Compose will
 then scope container and network names by the `-p` project name. Do not rename
 services because internal hostnames such as `mongodb`, `redis`, and `server` are
 part of the application configuration.
 
-- [ ] **Step 4: Create the smoke Compose overlay**
+- [x] **Step 4: Create the smoke Compose overlay**
 
 Define:
 
@@ -1022,7 +1022,7 @@ services:
 
 Do not add `OPENAI_API_KEY` to the smoke Worker.
 
-- [ ] **Step 5: Validate images and Compose shape**
+- [x] **Step 5: Validate images and Compose shape**
 
 Run:
 
@@ -1035,7 +1035,7 @@ docker compose -f docker-compose.yml -f docker-compose.smoke.yml build server wo
 
 Expected: Compose config is valid; server build contains `dist/smokeWorker.js`; images build without an OpenAI key.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/server/src/smokeWorker.ts apps/web/nginx.conf docker-compose.yml docker-compose.smoke.yml
@@ -1048,7 +1048,7 @@ git commit -m "test: add deterministic agent smoke topology"
 
 - Create: `tests/smoke/api-smoke.ts`
 
-- [ ] **Step 1: Implement a bounded HTTP helper**
+- [x] **Step 1: Implement a bounded HTTP helper**
 
 Use native fetch and a structured assertion helper:
 
@@ -1068,7 +1068,7 @@ const requestJson = async <T>(
 
 Read `SMOKE_API_URL`, defaulting to `http://127.0.0.1:43001`.
 
-- [ ] **Step 2: Implement the public API flow**
+- [x] **Step 2: Implement the public API flow**
 
 The script must:
 
@@ -1083,7 +1083,7 @@ The script must:
 
 On timeout, throw an error containing the last serialized Run response.
 
-- [ ] **Step 3: Verify against the smoke topology**
+- [x] **Step 3: Verify against the smoke topology**
 
 Run:
 
@@ -1096,7 +1096,7 @@ docker compose -p "$phase6_smoke_project" -f docker-compose.yml -f docker-compos
 
 Expected: API smoke exits zero and no OpenAI request occurs.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/smoke/api-smoke.ts
@@ -1111,7 +1111,7 @@ git commit -m "test: add agent API smoke flow"
 - Create: `tests/smoke/workspace.spec.ts`
 - Create: `tests/smoke/run-smoke.ts`
 
-- [ ] **Step 1: Add only the missing stable selectors**
+- [x] **Step 1: Add only the missing stable selectors**
 
 Prefer existing roles and labels. Add `data-testid` only for generated state that
 has no semantic locator:
@@ -1125,7 +1125,7 @@ data-testid="snapshot-history"
 data-testid={`snapshot-${snapshot.id}`}
 ```
 
-- [ ] **Step 2: Write the browser smoke**
+- [x] **Step 2: Write the browser smoke**
 
 Create:
 
@@ -1154,7 +1154,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
 If the existing localized copy differs, use the existing accessible labels rather
 than adding duplicate buttons for the test.
 
-- [ ] **Step 3: Implement the scoped Compose runner**
+- [x] **Step 3: Implement the scoped Compose runner**
 
 `run-smoke.ts` must use `spawn` with argument arrays and no shell:
 
@@ -1181,7 +1181,7 @@ The generated Compose project name is unique to this smoke invocation, so
 `--volumes` removes only its ephemeral MongoDB volume. The runner must never use
 the normal development Compose project name or delete unrelated Docker data.
 
-- [ ] **Step 4: Verify the full smoke command**
+- [x] **Step 4: Verify the full smoke command**
 
 Run:
 
@@ -1192,7 +1192,7 @@ npm run test:smoke
 Expected: Compose becomes healthy, API smoke passes, Chromium smoke passes,
 containers stop, and the command exits zero.
 
-- [ ] **Step 5: Re-run web checks**
+- [x] **Step 5: Re-run web checks**
 
 ```bash
 npm run test --workspace @v0/web
@@ -1202,7 +1202,7 @@ npm run build --workspace @v0/web
 
 Expected: all checks pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/pages/V0Clone.tsx tests/smoke/workspace.spec.ts tests/smoke/run-smoke.ts
@@ -1215,7 +1215,7 @@ git commit -m "test: add browser agent smoke flow"
 
 - Modify: `docs/superpowers/plans/2026-07-25-typescript-agent-backend-phase-6.md` — check completed items.
 
-- [ ] **Step 1: Run unit, type, and build checks**
+- [x] **Step 1: Run unit, type, and build checks**
 
 ```bash
 npm run test --workspace @v0/server
@@ -1232,7 +1232,7 @@ Expected:
 - Web unit tests: zero failures.
 - Both type-checks and builds exit zero.
 
-- [ ] **Step 2: Run real integration checks**
+- [x] **Step 2: Run real integration checks**
 
 ```bash
 npm run test:integration --workspace @v0/server
@@ -1240,7 +1240,7 @@ npm run test:integration --workspace @v0/server
 
 Expected: real MongoDB/Redis route, SSE, create, repair, and cancellation tests pass with no open-handle warning.
 
-- [ ] **Step 3: Run deterministic Compose smoke**
+- [x] **Step 3: Run deterministic Compose smoke**
 
 ```bash
 npm run test:smoke
@@ -1248,7 +1248,7 @@ npm run test:smoke
 
 Expected: API and Playwright browser smoke both pass without `OPENAI_API_KEY`.
 
-- [ ] **Step 4: Review security and isolation**
+- [x] **Step 4: Review security and isolation**
 
 Confirm from code and test evidence:
 
@@ -1261,7 +1261,7 @@ Confirm from code and test evidence:
 - integration and smoke cleanup targets only their generated namespace/project name;
 - no smoke command deletes normal Docker volumes.
 
-- [ ] **Step 5: Check the tree and plan**
+- [x] **Step 5: Check the tree and plan**
 
 ```bash
 git diff --check
@@ -1271,7 +1271,7 @@ rg -n "^- \\[ \\]" docs/superpowers/plans/2026-07-25-typescript-agent-backend-ph
 
 Expected: no whitespace errors; only intentional Phase 6 files are changed; all implementation and verification boxes are checked before final commit.
 
-- [ ] **Step 6: Final commit**
+- [x] **Step 6: Final commit**
 
 ```bash
 git add \
@@ -1315,14 +1315,14 @@ git commit -m "docs: complete agent backend phase 6 plan"
 
 ## Completion Checklist
 
-- [ ] Normal workspace progress uses authenticated SSE.
-- [ ] SSE resumes from `Last-Event-ID` without duplicates or gaps.
-- [ ] Polling is used only after bounded stream recovery fails.
-- [ ] Integration tests use real MongoDB, Redis, BullMQ, auth, and routes.
-- [ ] Fake Worker create and repair paths complete end to end.
-- [ ] A cancelled queued Run remains cancelled when its job is consumed.
-- [ ] API smoke passes against Docker Compose.
-- [ ] Browser smoke observes progress, completion, files, active Snapshot, and reload restoration.
-- [ ] Smoke requires no OpenAI key.
-- [ ] Server/Web unit tests, type-checks, builds, integration tests, and smoke tests pass.
-- [ ] Independent review reports no unresolved Critical or Important findings.
+- [x] Normal workspace progress uses authenticated SSE.
+- [x] SSE resumes from `Last-Event-ID` without duplicates or gaps.
+- [x] Polling is used only after bounded stream recovery fails.
+- [x] Integration tests use real MongoDB, Redis, BullMQ, auth, and routes.
+- [x] Fake Worker create and repair paths complete end to end.
+- [x] A cancelled queued Run remains cancelled when its job is consumed.
+- [x] API smoke passes against Docker Compose.
+- [x] Browser smoke observes progress, completion, files, active Snapshot, and reload restoration.
+- [x] Smoke requires no OpenAI key.
+- [x] Server/Web unit tests, type-checks, builds, integration tests, and smoke tests pass.
+- [x] Independent review reports no unresolved Critical or Important findings.
