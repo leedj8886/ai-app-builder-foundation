@@ -17,13 +17,19 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page.getByTestId('agent-generation-status'))
     .toHaveAttribute('data-status', 'ready', { timeout: 90_000 });
   await expect(page).toHaveURL(/\/v0\/chats\/[a-f\d]{24}$/);
+  const chatUrl = page.url();
   await expect(page.getByText('Recent', { exact: true })).toHaveCount(0);
   await expect(timeline.locator('[data-testid^="conversation-turn-"]').first())
     .toContainText('Snapshot');
 
   const workspaceSidebar = page.getByTestId('workspace-sidebar');
+  const recentChats = page.getByTestId('recent-chats');
   const editComposer = page.getByTestId('workspace-edit-composer');
   await expect(workspaceSidebar).toBeVisible();
+  await expect(recentChats).toContainText(prompt);
+  await expect(
+    recentChats.getByRole('link', { name: `打开对话：${prompt}` }),
+  ).toHaveAttribute('aria-current', 'page');
   await editComposer.getByRole('textbox').fill('Draft preserved while collapsed');
 
   await workspaceSidebar.getByRole('button', { name: 'Collapse sidebar' }).click();
@@ -34,6 +40,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
 
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
+  await expect(page.getByTestId('recent-chats')).toContainText(prompt);
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveCount(0);
   await editComposer.getByRole('textbox').fill('');
 
@@ -93,4 +100,17 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
     page.frameLocator('[data-testid="snapshot-preview"] iframe')
       .getByTestId('generated-app'),
   ).toContainText('Generated app', { timeout: 30_000 });
+
+  await page.getByTestId('recent-chats').getByRole('link', { name: 'More' }).click();
+  await expect(page).toHaveURL('/v0/chats');
+  const historyList = page.getByTestId('chat-history-list');
+  await expect(historyList).toContainText(prompt);
+  await historyList.getByRole('link', { name: `打开对话：${prompt}` }).click();
+  await expect(page).toHaveURL(chatUrl);
+  await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
+
+  await page.getByTestId('recent-chats').getByRole('link', { name: 'More' }).click();
+  await expect(page).toHaveURL('/v0/chats');
+  await page.getByRole('link', { name: 'New chat' }).first().click();
+  await expect(page).toHaveURL('/');
 });

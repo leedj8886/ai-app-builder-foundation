@@ -2,6 +2,7 @@ import {
   FormEvent,
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -43,6 +44,7 @@ import row01 from '@/assets/v0/template-row01.png'
 import row02 from '@/assets/v0/template-row02.png'
 import iosLight from '@/assets/v0/ios-light.png'
 import { ConversationTimeline } from '@/components/ConversationTimeline'
+import { RecentChats } from '@/components/RecentChats'
 import { WorkspaceEditComposer } from '@/components/WorkspaceEditComposer'
 import { agentApi, authApi, chatApi, projectApi } from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
@@ -52,6 +54,12 @@ import {
   resolveRoutedProjectId,
 } from '@/lib/chatWorkspace'
 import { getSnapshotPreviewState } from '@/lib/snapshotPreview'
+import {
+  createChatHistoryState,
+  failChatHistory,
+  loadChatHistory,
+  type ChatHistoryState,
+} from '@/lib/chatHistory'
 import {
   applyTimelineEvent,
   createTimelineState,
@@ -196,6 +204,7 @@ export function V0Clone() {
   const [copied, setCopied] = useState(false)
   const [workspaceSidebarCollapsed, setWorkspaceSidebarCollapsed] = useState(false)
   const [timeline, setTimeline] = useState(createTimelineState)
+  const [chatHistory, setChatHistory] = useState(createChatHistoryState)
   const [projectId, setProjectId] = useState('')
   const refreshRequestRef = useRef(0)
   const routeRequestRef = useRef(0)
@@ -204,6 +213,7 @@ export function V0Clone() {
   const submissionInFlightRef = useRef(false)
   const submissionIdRef = useRef(0)
   const timelineRequestRef = useRef(0)
+  const chatHistoryRequestRef = useRef(0)
 
   const visibleTemplates = useMemo(
     () => templates.filter((template) => category === 'all' || template.category === category),
@@ -262,6 +272,25 @@ export function V0Clone() {
       setTimeline((state) => failTimelineLoading(state, getErrorMessage(error)))
     }
   }
+
+  const loadChatHistoryList = useCallback(async (): Promise<void> => {
+    const requestId = ++chatHistoryRequestRef.current
+    setChatHistory((state) => loadChatHistory(state))
+    try {
+      const response = await chatApi.getAll()
+      if (requestId !== chatHistoryRequestRef.current) return
+      setChatHistory((state) => loadChatHistory(state, response.data.chats))
+    } catch {
+      if (requestId !== chatHistoryRequestRef.current) return
+      setChatHistory((state) =>
+        failChatHistory(state, '无法加载最近聊天'),
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    if (chatId) void loadChatHistoryList()
+  }, [chatId, loadChatHistoryList])
 
   useEffect(() => {
     const requestId = ++routeRequestRef.current
@@ -733,6 +762,9 @@ export function V0Clone() {
           sidebarCollapsed={workspaceSidebarCollapsed}
           onCollapseSidebar={() => setWorkspaceSidebarCollapsed(true)}
           onExpandSidebar={() => setWorkspaceSidebarCollapsed(false)}
+          chatHistory={chatHistory}
+          activeChatId={chatId}
+          onRetryChatHistory={() => void loadChatHistoryList()}
         />
       )}
     </div>
@@ -847,6 +879,9 @@ function WorkspaceScreen({
   sidebarCollapsed,
   onCollapseSidebar,
   onExpandSidebar,
+  chatHistory,
+  activeChatId,
+  onRetryChatHistory,
 }: {
   prompt: string
   selectedTemplate: Template
@@ -876,6 +911,9 @@ function WorkspaceScreen({
   sidebarCollapsed: boolean
   onCollapseSidebar: () => void
   onExpandSidebar: () => void
+  chatHistory: ChatHistoryState
+  activeChatId?: string
+  onRetryChatHistory: () => void
 }) {
   return (
     <main
@@ -904,6 +942,11 @@ function WorkspaceScreen({
               <PanelLeftClose className="h-4 w-4" />
             </button>
           </div>
+          <RecentChats
+            state={chatHistory}
+            activeChatId={activeChatId}
+            onRetry={onRetryChatHistory}
+          />
           <div className="flex-1" />
           <div className="space-y-1 border-t border-neutral-200 p-2">
             <button className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100">
