@@ -47,6 +47,16 @@ export interface AgentRun {
   mode: 'create' | 'edit';
   baseSnapshotId?: string;
   resultSnapshotId?: string;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: ProjectSnapshot['validation'];
+  };
+  attempt?: number;
+  maxRepairAttempts?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
 }
 
 export interface AgentEvent {
@@ -66,6 +76,22 @@ export interface ProjectSnapshot {
   _id: string;
   summary: string;
   files: ProjectSnapshotFile[];
+  packageJson: {
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+    scripts: Record<string, string>;
+  };
+  validation: {
+    status: 'passed' | 'failed' | 'skipped';
+    checks: Array<{
+      name: 'install' | 'type-check' | 'build';
+      command: string;
+      exitCode: number;
+      stdout: string;
+      stderr: string;
+      durationMs: number;
+    }>;
+  };
 }
 
 export interface AgentRunDetailResponse {
@@ -83,6 +109,12 @@ export const agentApi = {
   }) => api.post<{ run: AgentRun }>('/api/agent/runs', data),
   getRun: (runId: string) =>
     api.get<AgentRunDetailResponse>(`/api/agent/runs/${runId}`),
+  getRuns: (projectId: string, limit = 30) =>
+    api.get<{ runs: AgentRun[] }>('/api/agent/runs', {
+      params: { projectId, limit },
+    }),
+  cancelRun: (runId: string) =>
+    api.post<{ run: AgentRun }>(`/api/agent/runs/${runId}/cancel`),
 };
 
 // Chat API
@@ -130,8 +162,15 @@ export const projectApi = {
       summary: string;
       fileCount: number;
       createdAt: string;
+      isActive: boolean;
+      packageJson: ProjectSnapshot['packageJson'];
+      validation: ProjectSnapshot['validation'];
     }> }>(`/api/projects/${id}/snapshots`),
   getSnapshot: (id: string, snapshotId: string) =>
     api.get<{ snapshot: ProjectSnapshot }>(`/api/projects/${id}/snapshots/${snapshotId}`),
+  rollbackSnapshot: (id: string, snapshotId: string) =>
+    api.post<{ snapshot: ProjectSnapshot }>(
+      `/api/projects/${id}/snapshots/${snapshotId}/rollback`,
+    ),
   delete: (id: string) => api.delete(`/api/projects/${id}`),
 };

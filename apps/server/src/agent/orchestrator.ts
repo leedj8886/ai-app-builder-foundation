@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { AgentRun } from '../models/AgentRun';
 import { AgentEvent } from '../models/AgentEvent';
 import { Chat } from '../models/Chat';
+import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { getAgentConfig } from './config';
 import { loadAgentContext } from './contextBuilder';
@@ -313,6 +314,28 @@ const transitionRun = async (
   Object.assign(run, fields);
 };
 
+const activateSnapshotIfBaseIsCurrent = async (
+  run: InstanceType<typeof AgentRun>,
+  snapshotId: Types.ObjectId
+): Promise<void> => {
+  await Project.updateOne(
+    {
+      _id: run.projectId,
+      userId: run.userId,
+      $or: [
+        { activeSnapshotRevision: run.baseSnapshotRevision },
+        ...(run.baseSnapshotRevision === 0
+          ? [{ activeSnapshotRevision: { $exists: false } }]
+          : [])
+      ]
+    },
+    {
+      $set: { activeSnapshotId: snapshotId },
+      $inc: { activeSnapshotRevision: 1 }
+    }
+  );
+};
+
 export const processAgentRun = async (
   job: AgentRunJobData,
   modelClient: ModelClient,
@@ -352,6 +375,7 @@ export const processAgentRun = async (
       resultSnapshotId: pendingSnapshot._id,
       completedAt: new Date()
     });
+    await activateSnapshotIfBaseIsCurrent(run, pendingSnapshot._id);
     await emitAgentEvent({
       runId: run._id,
       userId: run.userId,
@@ -367,6 +391,9 @@ export const processAgentRun = async (
   }
 
   if (run.status === 'completed') {
+    if (run.resultSnapshotId) {
+      await activateSnapshotIfBaseIsCurrent(run, run.resultSnapshotId);
+    }
     const completedEvent = await AgentEvent.exists({
       runId: run._id,
       type: 'run.completed'
@@ -476,6 +503,14 @@ export const processAgentRun = async (
       await ProjectSnapshot.deleteOne({ _id: snapshot._id });
       throw error;
     }
+    try {
+      await activateSnapshotIfBaseIsCurrent(run, snapshot._id);
+    } catch (error) {
+      throw Object.assign(new Error('Failed to activate completed project snapshot'), {
+        code: 'SNAPSHOT_ACTIVATION_FAILED',
+        cause: error
+      });
+    }
 
     if (run.chatId) {
       try {
@@ -520,7 +555,9 @@ export const processAgentRun = async (
       return;
     }
 
-    if ((error as { code?: string }).code === 'COMPLETION_EVENT_FAILED') {
+    if (['COMPLETION_EVENT_FAILED', 'SNAPSHOT_ACTIVATION_FAILED'].includes(
+      (error as { code?: string }).code ?? ''
+    )) {
       throw error;
     }
 

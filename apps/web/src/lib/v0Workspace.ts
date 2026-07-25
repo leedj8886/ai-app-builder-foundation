@@ -2,7 +2,7 @@ export type Screen = 'home' | 'workspace'
 
 export type Panel = 'preview' | 'code' | 'design' | 'deploy'
 
-export type GenerationStatus = 'idle' | 'running' | 'ready' | 'failed'
+export type GenerationStatus = 'idle' | 'running' | 'ready' | 'failed' | 'cancelled'
 
 export type StepStatus = 'done' | 'active' | 'pending'
 
@@ -34,6 +34,38 @@ export interface WorkspaceSnapshot {
   summary: string
   files: SnapshotFile[]
   selectedFilePath: string | null
+  packageJson: SnapshotPackageJson
+  validation: SnapshotValidation
+}
+
+export interface SnapshotPackageJson {
+  dependencies: Record<string, string>
+  devDependencies: Record<string, string>
+  scripts: Record<string, string>
+}
+
+export interface SnapshotValidationCheck {
+  name: 'install' | 'type-check' | 'build'
+  command: string
+  exitCode: number
+  stdout: string
+  stderr: string
+  durationMs: number
+}
+
+export interface SnapshotValidation {
+  status: 'passed' | 'failed' | 'skipped'
+  checks: SnapshotValidationCheck[]
+}
+
+export interface SnapshotSummary {
+  id: string
+  summary: string
+  fileCount: number
+  isActive: boolean
+  packageJson: SnapshotPackageJson
+  validation: SnapshotValidation
+  createdAt: string
 }
 
 export interface WorkspaceState {
@@ -48,12 +80,23 @@ export interface WorkspaceState {
     steps: GenerationStep[]
   }
   snapshot?: WorkspaceSnapshot
+  snapshots: SnapshotSummary[]
+  runHistory: AgentRunSummary[]
 }
 
 export interface AgentRunSummary {
   _id: string
   status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'failed' | 'cancelled'
   resultSnapshotId?: string
+  prompt?: string
+  createdAt?: string
+  completedAt?: string
+  attempt?: number
+  error?: {
+    code?: string
+    message?: string
+    details?: SnapshotValidation
+  }
 }
 
 export interface AgentEventSummary {
@@ -73,6 +116,8 @@ export interface AgentRunDetail {
     _id: string
     summary: string
     files: SnapshotFile[]
+    packageJson: SnapshotPackageJson
+    validation: SnapshotValidation
   } | null
 }
 
@@ -82,6 +127,9 @@ export const suggestionPrompts = [
   'Mini Game',
   'Finance Calculator',
 ] as const
+
+export const isCancellableRunId = (runId?: string): runId is string =>
+  /^[a-f\d]{24}$/i.test(runId ?? '')
 
 export const templates: Template[] = [
   {
@@ -140,6 +188,53 @@ export const createInitialWorkspaceState = (): WorkspaceState => ({
     status: 'idle',
     steps: [],
   },
+  snapshots: [],
+  runHistory: [],
+})
+
+const toWorkspaceSnapshot = (
+  snapshot: NonNullable<AgentRunDetail['resultSnapshot']>,
+): WorkspaceSnapshot => ({
+  id: snapshot._id,
+  summary: snapshot.summary,
+  files: snapshot.files,
+  selectedFilePath:
+    snapshot.files.find((file) => file.path === 'src/App.tsx')?.path ??
+    snapshot.files[0]?.path ??
+    null,
+  packageJson: snapshot.packageJson,
+  validation: snapshot.validation,
+})
+
+export const applySnapshotList = (
+  state: WorkspaceState,
+  snapshots: SnapshotSummary[],
+): WorkspaceState => ({
+  ...state,
+  snapshots,
+})
+
+export const applyRunHistory = (
+  state: WorkspaceState,
+  runs: AgentRunSummary[],
+): WorkspaceState => ({
+  ...state,
+  runHistory: [...runs].sort((left, right) =>
+    (right.createdAt ?? '').localeCompare(left.createdAt ?? ''),
+  ),
+})
+
+export const applyWorkspaceSnapshot = (
+  state: WorkspaceState,
+  snapshot: NonNullable<AgentRunDetail['resultSnapshot']>,
+): WorkspaceState => ({
+  ...state,
+  screen: 'workspace',
+  snapshot: toWorkspaceSnapshot(snapshot),
+  snapshots: state.snapshots.map((item) => ({
+    ...item,
+    isActive: item.id === snapshot._id,
+  })),
 })
 
 export const selectTemplate = (
@@ -209,7 +304,6 @@ export const startApiGeneration = (
         },
       ],
     },
-    snapshot: undefined,
   }
 }
 
@@ -265,18 +359,26 @@ export const applyAgentRunDetail = (
   state: WorkspaceState,
   detail: AgentRunDetail,
 ): WorkspaceState => {
+  if (
+    state.generation.runId &&
+    state.generation.runId !== detail.run._id
+  ) {
+    return state
+  }
+
   const terminal = ['completed', 'failed', 'cancelled'].includes(detail.run.status)
   const snapshot = detail.resultSnapshot
-    ? {
-        id: detail.resultSnapshot._id,
-        summary: detail.resultSnapshot.summary,
-        files: detail.resultSnapshot.files,
-        selectedFilePath:
-          detail.resultSnapshot.files.find((file) => file.path === 'src/App.tsx')?.path ??
-          detail.resultSnapshot.files[0]?.path ??
-          null,
-      }
+    ? toWorkspaceSnapshot(detail.resultSnapshot)
     : state.snapshot
+
+  const failedCheck = detail.run.error?.details?.checks.find(
+    (check) => check.exitCode !== 0,
+  )
+  const diagnostic = [failedCheck?.stderr, failedCheck?.stdout]
+    .flatMap((output) => output?.split('\n') ?? [])
+    .map((line) => line.trim())
+    .find(Boolean)
+  const isCancelled = detail.run.status === 'cancelled'
 
   return {
     ...state,
@@ -284,11 +386,15 @@ export const applyAgentRunDetail = (
       ...state.generation,
       status: detail.run.status === 'completed'
         ? 'ready'
+        : isCancelled
+          ? 'cancelled'
         : terminal
           ? 'failed'
           : 'running',
       runId: detail.run._id,
-      error: terminal && detail.run.status !== 'completed' ? detail.run.status : undefined,
+      error: detail.run.status === 'failed'
+        ? diagnostic ?? detail.run.error?.message ?? 'Generation failed'
+        : undefined,
       steps: detail.events.length > 0
         ? detail.events.map(mapEventToStep)
         : state.generation.steps,

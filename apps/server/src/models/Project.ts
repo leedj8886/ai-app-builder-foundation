@@ -5,6 +5,8 @@ export interface IProject extends Document {
   name: string;
   description?: string;
   chatIds: mongoose.Types.ObjectId[];
+  activeSnapshotId?: mongoose.Types.ObjectId;
+  activeSnapshotRevision: number;
   settings: {
     framework: 'react' | 'vue' | 'svelte';
     styling: 'tailwind' | 'css-modules' | 'styled-components';
@@ -33,6 +35,15 @@ const ProjectSchema = new Schema<IProject>({
     type: Schema.Types.ObjectId,
     ref: 'Chat'
   }],
+  activeSnapshotId: {
+    type: Schema.Types.ObjectId,
+    ref: 'ProjectSnapshot'
+  },
+  activeSnapshotRevision: {
+    type: Number,
+    required: true,
+    default: 0
+  },
   settings: {
     framework: {
       type: String,

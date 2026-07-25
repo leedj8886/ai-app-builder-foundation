@@ -7,7 +7,11 @@ import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { getAgentConfig } from '../agent/config';
-import { createAgentRunRequestSchema, objectIdParamSchema } from '../agent/schemas';
+import {
+  createAgentRunRequestSchema,
+  listAgentRunsQuerySchema,
+  objectIdParamSchema
+} from '../agent/schemas';
 import { emitAgentEvent, agentRunChannel } from '../agent/eventBus';
 import { enqueueAgentRun } from '../agent/queue';
 import { createRedisConnection } from '../agent/redis';
@@ -24,6 +28,28 @@ const requireUserId = (req: AuthRequest): string => {
 
   return req.userId;
 };
+
+router.get('/runs', async (req: AuthRequest, res, next) => {
+  try {
+    const userId = requireUserId(req);
+    const { projectId, limit } = listAgentRunsQuerySchema.parse(req.query);
+    const project = await Project.findOne({ _id: projectId, userId });
+
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const runs = await AgentRun.find({ projectId, userId })
+      .select('projectId prompt status mode baseSnapshotId resultSnapshotId attempt maxRepairAttempts error startedAt completedAt createdAt updatedAt')
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    res.json({ runs });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post('/runs', async (req: AuthRequest, res, next) => {
   try {
@@ -53,11 +79,19 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       }
     }
 
-    const baseSnapshot = await ProjectSnapshot.findOne({
-      projectId: body.projectId,
-      userId,
-      'validation.status': { $ne: 'failed' }
-    }).sort({ createdAt: -1 });
+    const activeSnapshot = project.activeSnapshotId
+      ? await ProjectSnapshot.findOne({
+          _id: project.activeSnapshotId,
+          projectId: body.projectId,
+          userId,
+          'validation.status': { $ne: 'failed' }
+        })
+      : null;
+    const baseSnapshot = activeSnapshot ?? await ProjectSnapshot.findOne({
+        projectId: body.projectId,
+        userId,
+        'validation.status': { $ne: 'failed' }
+      }).sort({ createdAt: -1 });
 
     if (body.mode === 'edit' && !baseSnapshot) {
       res.status(400).json({ error: 'Edit mode requires an existing project snapshot' });
@@ -72,6 +106,7 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       prompt: body.prompt,
       mode: body.mode,
       baseSnapshotId: baseSnapshot?._id,
+      baseSnapshotRevision: project.activeSnapshotRevision ?? 0,
       status: 'queued',
       model: config.model,
       maxRepairAttempts: config.maxRepairAttempts

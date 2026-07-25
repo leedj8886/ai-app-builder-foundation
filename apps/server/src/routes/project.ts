@@ -74,11 +74,52 @@ router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
         sourceRunId: snapshot.sourceRunId,
         parentSnapshotId: snapshot.parentSnapshotId,
         summary: snapshot.summary,
+        packageJson: snapshot.packageJson,
         validation: snapshot.validation,
+        isActive: project.activeSnapshotId?.toString() === snapshot._id.toString(),
         fileCount: snapshot.files.length,
         createdAt: snapshot.createdAt
       }))
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res, next) => {
+  try {
+    const userId = requireUserId(req);
+    const { id, snapshotId } = z.object({
+      id: objectIdParamSchema('id').shape.id,
+      snapshotId: objectIdParamSchema('snapshotId').shape.snapshotId
+    }).parse(req.params);
+    const snapshot = await ProjectSnapshot.findOne({
+      _id: snapshotId,
+      projectId: id,
+      userId,
+      'validation.status': { $ne: 'failed' }
+    });
+
+    if (!snapshot) {
+      res.status(404).json({ error: 'Snapshot not found' });
+      return;
+    }
+
+    const project = await Project.findOneAndUpdate(
+      { _id: id, userId },
+      {
+        $set: { activeSnapshotId: snapshot._id },
+        $inc: { activeSnapshotRevision: 1 }
+      },
+      { new: true }
+    );
+
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    res.json({ project, snapshot });
   } catch (error) {
     next(error);
   }

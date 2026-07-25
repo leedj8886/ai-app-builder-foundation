@@ -63,6 +63,11 @@ export const createAgentRunRequestSchema = z.object({
   mode: z.enum(agentRunModes).default('create')
 });
 
+export const listAgentRunsQuerySchema = z.object({
+  projectId: objectIdStringSchema,
+  limit: z.coerce.number().int().min(1).max(30).default(30)
+});
+
 export const streamTokenRequestSchema = z.object({
   runId: objectIdStringSchema,
   lastEventId: z.coerce.number().int().nonnegative().optional()

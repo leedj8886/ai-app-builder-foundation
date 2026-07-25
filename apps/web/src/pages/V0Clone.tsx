@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRight,
   CheckCircle2,
@@ -27,6 +27,7 @@ import {
   Settings2,
   SlidersHorizontal,
   Sparkles,
+  Square,
   Terminal,
   UploadCloud,
   Upload,
@@ -41,8 +42,12 @@ import iosLight from '@/assets/v0/ios-light.png'
 import { agentApi, authApi, projectApi } from '@/services/api'
 import {
   applyAgentRunDetail,
+  applyRunHistory,
+  applySnapshotList,
+  applyWorkspaceSnapshot,
   createInitialWorkspaceState,
   failApiGeneration,
+  isCancellableRunId,
   selectTemplate,
   startApiGeneration,
   switchPanel,
@@ -88,13 +93,6 @@ const promptIcons = {
   'Finance Calculator': LineChart,
 }
 
-const recentChats = [
-  'Realtime food delivery app',
-  'Portfolio with CMS sections',
-  'Accessible pricing table',
-  'SQL analytics dashboard',
-]
-
 const integrationItems = [
   'GitHub repo sync',
   'Supabase database',
@@ -137,14 +135,15 @@ const getErrorMessage = (error: unknown) => {
 }
 
 const createDemoProject = async (prompt: string) => {
-  const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  const authResponse = await authApi.register(
-    `phase2-${unique}@v0.local`,
-    'password123',
-    'Phase Two Demo',
-  )
-
-  localStorage.setItem('token', authResponse.data.token)
+  if (!localStorage.getItem('token')) {
+    const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const authResponse = await authApi.register(
+      `phase5-${unique}@v0.local`,
+      'password123',
+      'Phase Five Demo',
+    )
+    localStorage.setItem('token', authResponse.data.token)
+  }
 
   const projectResponse = await projectApi.create({
     name: `v0 Snapshot ${new Date().toLocaleTimeString()}`,
@@ -169,6 +168,11 @@ export function V0Clone() {
   const [designMode, setDesignMode] = useState(true)
   const [deployOpen, setDeployOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [projectId, setProjectId] = useState(
+    () => localStorage.getItem('v0.activeProjectId') ?? '',
+  )
+  const refreshRequestRef = useRef(0)
+  const rollbackInFlightRef = useRef(false)
 
   const visibleTemplates = useMemo(
     () => templates.filter((template) => category === 'all' || template.category === category),
@@ -187,13 +191,14 @@ export function V0Clone() {
   const currentCode = selectedSnapshotFile?.content ?? sampleCode
   const currentFileName = selectedSnapshotFile?.path ?? 'generated-app.tsx'
 
-  const pollRunUntilTerminal = async (runId: string) => {
+  const pollRunUntilTerminal = async (runId: string, activeProjectId: string) => {
     for (let attempt = 0; attempt < 60; attempt += 1) {
       const detailResponse = await agentApi.getRun(runId)
       const detail = detailResponse.data
       setWorkspace((state) => applyAgentRunDetail(state, detail))
 
       if (['completed', 'failed', 'cancelled'].includes(detail.run.status)) {
+        await refreshProjectData(activeProjectId)
         return detail
       }
 
@@ -203,6 +208,46 @@ export function V0Clone() {
     throw new Error('Timed out waiting for agent run')
   }
 
+  const refreshProjectData = async (id: string) => {
+    const requestId = ++refreshRequestRef.current
+    const [runsResponse, snapshotsResponse] = await Promise.all([
+      agentApi.getRuns(id),
+      projectApi.getSnapshots(id),
+    ])
+    if (requestId !== refreshRequestRef.current) {
+      return null
+    }
+    setWorkspace((state) =>
+      applySnapshotList(
+        applyRunHistory(state, runsResponse.data.runs),
+        snapshotsResponse.data.snapshots,
+      ),
+    )
+    return snapshotsResponse.data.snapshots
+  }
+
+  useEffect(() => {
+    if (!projectId || !localStorage.getItem('token')) return
+
+    void (async () => {
+      try {
+        const snapshots = await refreshProjectData(projectId)
+        const activeSnapshotId = snapshots?.find((snapshot) => snapshot.isActive)?.id
+        if (activeSnapshotId) {
+          const snapshotResponse = await projectApi.getSnapshot(projectId, activeSnapshotId)
+          setWorkspace((state) =>
+            state.snapshots.find((snapshot) => snapshot.isActive)?.id === activeSnapshotId
+              ? applyWorkspaceSnapshot(state, snapshotResponse.data.snapshot)
+              : state,
+          )
+        }
+      } catch {
+        localStorage.removeItem('v0.activeProjectId')
+        setProjectId('')
+      }
+    })()
+  }, [projectId])
+
   const submitPromptToAgent = async (rawPrompt: string) => {
     const prompt = rawPrompt.trim()
 
@@ -211,20 +256,57 @@ export function V0Clone() {
     }
 
     setDraftPrompt(prompt)
-    setWorkspace((state) => startApiGeneration(state, prompt))
+    setWorkspace((state) =>
+      startApiGeneration(state, prompt, `pending:${crypto.randomUUID()}`),
+    )
 
     try {
-      const projectId = await createDemoProject(prompt)
+      let activeProjectId = projectId
+      if (!activeProjectId) {
+        activeProjectId = await createDemoProject(prompt)
+        setProjectId(activeProjectId)
+        localStorage.setItem('v0.activeProjectId', activeProjectId)
+      }
+      let mode: 'create' | 'edit' = workspace.snapshot ? 'edit' : 'create'
+      if (mode === 'create' && projectId) {
+        const projectResponse = await projectApi.getById(activeProjectId)
+        mode = projectResponse.data.project.activeSnapshotId ? 'edit' : 'create'
+      }
       const runResponse = await agentApi.createRun({
-        projectId,
+        projectId: activeProjectId,
         prompt,
-        mode: 'create',
+        mode,
       })
 
       setWorkspace((state) => startApiGeneration(state, prompt, runResponse.data.run._id))
-      await pollRunUntilTerminal(runResponse.data.run._id)
+      await pollRunUntilTerminal(runResponse.data.run._id, activeProjectId)
     } catch (error) {
       setWorkspace((state) => failApiGeneration(state, getErrorMessage(error)))
+    }
+  }
+
+  const handleCancelRun = async () => {
+    const runId = workspace.generation.runId
+    if (!isCancellableRunId(runId)) return
+    const response = await agentApi.cancelRun(runId)
+    setWorkspace((state) => applyAgentRunDetail(state, {
+      run: response.data.run,
+      events: [],
+      resultSnapshot: null,
+    }))
+    if (projectId) await refreshProjectData(projectId)
+  }
+
+  const handleRollback = async (snapshotId: string) => {
+    if (!projectId || rollbackInFlightRef.current) return
+    rollbackInFlightRef.current = true
+    refreshRequestRef.current += 1
+    try {
+      const response = await projectApi.rollbackSnapshot(projectId, snapshotId)
+      setWorkspace((state) => applyWorkspaceSnapshot(state, response.data.snapshot))
+      await refreshProjectData(projectId)
+    } finally {
+      rollbackInFlightRef.current = false
     }
   }
 
@@ -433,7 +515,17 @@ export function V0Clone() {
           designMode={designMode}
           deployOpen={deployOpen}
           copied={copied}
-          onBackHome={() => setWorkspace(createInitialWorkspaceState())}
+          onBackHome={() =>
+            setWorkspace((state) => ({
+              ...state,
+              screen: 'home',
+              prompt: '',
+              generation: {
+                status: 'idle',
+                steps: [],
+              },
+            }))
+          }
           onSwitchPanel={(panel) => setWorkspace((state) => switchPanel(state, panel))}
           onSelectSnapshotFile={(filePath) =>
             setWorkspace((state) =>
@@ -452,6 +544,8 @@ export function V0Clone() {
           onToggleDeploy={() => setDeployOpen((open) => !open)}
           onCopy={handleCopy}
           onDownload={handleDownload}
+          onCancelRun={() => void handleCancelRun()}
+          onRollback={(snapshotId) => void handleRollback(snapshotId)}
           currentCode={currentCode}
           currentFileName={currentFileName}
         />
@@ -620,6 +714,8 @@ function WorkspaceScreen({
   onToggleDeploy,
   onCopy,
   onDownload,
+  onCancelRun,
+  onRollback,
   currentCode,
   currentFileName,
 }: {
@@ -636,6 +732,8 @@ function WorkspaceScreen({
   onToggleDeploy: () => void
   onCopy: () => void
   onDownload: () => void
+  onCancelRun: () => void
+  onRollback: (snapshotId: string) => void
   currentCode: string
   currentFileName: string
 }) {
@@ -643,12 +741,16 @@ function WorkspaceScreen({
     ? 'I am creating a project snapshot.'
     : state.generation.status === 'failed'
       ? 'The agent run needs attention.'
-      : 'I built a snapshot-backed preview.'
+      : state.generation.status === 'cancelled'
+        ? 'The agent run was cancelled.'
+        : 'I built a snapshot-backed preview.'
   const assistantDescription = state.generation.status === 'running'
     ? 'The prompt is running through the local API, Redis queue, worker, and MongoDB snapshot store.'
     : state.generation.status === 'failed'
       ? state.generation.error ?? 'The run did not complete.'
-      : state.snapshot?.summary ?? 'The app includes responsive layout, structured files, code export, repo sync, and a publish flow.'
+      : state.generation.status === 'cancelled'
+        ? 'You can revise the prompt and start another run.'
+        : state.snapshot?.summary ?? 'The app includes responsive layout, structured files, code export, repo sync, and a publish flow.'
 
   return (
     <main className="grid min-h-[calc(100vh-48px)] grid-cols-1 bg-white lg:grid-cols-[272px_1fr]">
@@ -673,15 +775,16 @@ function WorkspaceScreen({
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
           <p className="px-2 pb-2 pt-1 text-xs font-medium uppercase text-neutral-400">Recent</p>
-          {recentChats.map((chat, index) => (
+          {state.runHistory.map((run, index) => (
             <button
-              key={chat}
+              key={run._id}
               className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
                 index === 0 ? 'bg-neutral-200 text-neutral-950' : 'text-neutral-600 hover:bg-neutral-100'
               }`}
             >
               <Terminal className="h-4 w-4 shrink-0" />
-              <span className="truncate">{chat}</span>
+              <span className="min-w-0 flex-1 truncate">{run.prompt ?? 'Untitled run'}</span>
+              <span className="text-[10px] uppercase text-neutral-400">{run.status}</span>
             </button>
           ))}
         </nav>
@@ -735,6 +838,16 @@ function WorkspaceScreen({
                     <p className="text-sm font-medium">{assistantTitle}</p>
                     <p className="mt-2 text-sm leading-6 text-neutral-600">{assistantDescription}</p>
                   </div>
+                  {state.generation.status === 'running' &&
+                  isCancellableRunId(state.generation.runId) ? (
+                    <button
+                      className="mt-2 inline-flex h-8 items-center gap-2 rounded-md border border-red-200 px-3 text-xs font-medium text-red-700 hover:bg-red-50"
+                      onClick={onCancelRun}
+                    >
+                      <Square className="h-3 w-3 fill-current" />
+                      Stop run
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
@@ -792,6 +905,46 @@ function WorkspaceScreen({
                         <FileCode2 className="h-4 w-4 shrink-0" />
                         <span className="truncate">{file.path}</span>
                       </button>
+                    ))}
+                  </div>
+                  <div className="border-t border-neutral-200 p-3 text-xs text-neutral-600">
+                    <p className="font-medium text-neutral-800">
+                      Validation: {state.snapshot.validation.status}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {Object.entries(state.snapshot.packageJson.dependencies).map(([name, version]) => (
+                        <span key={name} className="rounded bg-neutral-100 px-2 py-1">{name} {version}</span>
+                      ))}
+                      {Object.entries(state.snapshot.packageJson.devDependencies).map(([name, version]) => (
+                        <span key={name} className="rounded bg-blue-50 px-2 py-1 text-blue-700">{name} {version} (dev)</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {state.snapshots.length > 0 ? (
+                <div className="rounded-lg border border-neutral-200 bg-white">
+                  <div className="border-b border-neutral-200 px-4 py-3 text-sm font-medium">Snapshot history</div>
+                  <div className="space-y-2 p-2">
+                    {state.snapshots.map((snapshot) => (
+                      <div key={snapshot.id} className="flex items-center justify-between gap-2 rounded-md p-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{snapshot.summary}</p>
+                          <p className="text-xs text-neutral-500">
+                            {snapshot.fileCount} files · {snapshot.validation.status}
+                            {snapshot.isActive ? ' · active' : ''}
+                          </p>
+                        </div>
+                        {!snapshot.isActive ? (
+                          <button
+                            className="rounded-md border border-neutral-200 px-2 py-1 text-xs hover:bg-neutral-50"
+                            onClick={() => onRollback(snapshot.id)}
+                          >
+                            Restore
+                          </button>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 </div>

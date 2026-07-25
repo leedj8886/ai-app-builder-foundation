@@ -15,6 +15,7 @@ export interface IAgentRun {
   status: AgentRunStatus;
   mode: AgentRunMode;
   baseSnapshotId?: Types.ObjectId;
+  baseSnapshotRevision: number;
   resultSnapshotId?: Types.ObjectId;
   attempt: number;
   maxRepairAttempts: number;
@@ -50,6 +51,7 @@ const AgentRunSchema = new Schema<IAgentRun>(
       default: 'create'
     },
     baseSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
+    baseSnapshotRevision: { type: Number, required: true, default: 0 },
     resultSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     attempt: { type: Number, required: true, default: 0 },
     maxRepairAttempts: { type: Number, required: true, default: 2 },

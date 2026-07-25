@@ -22,6 +22,14 @@ test('POST /api/agent/runs requires authentication', async () => {
   assert.equal(response.body.error, 'No token provided');
 });
 
+test('GET /api/agent/runs requires authentication', async () => {
+  const response = await request(createApp())
+    .get('/api/agent/runs')
+    .query({ projectId: '64b7f5086f1f8e9f0f000001' });
+
+  assert.equal(response.status, 401);
+});
+
 test('GET /api/projects/:projectId/snapshots requires authentication', async () => {
   const response = await request(createApp())
     .get('/api/projects/64b7f5086f1f8e9f0f000001/snapshots')
@@ -36,4 +44,11 @@ test('GET /api/projects/:projectId/snapshots/:snapshotId requires authentication
     .expect(401);
 
   assert.equal(response.body.error, 'No token provided');
+});
+
+test('POST /api/projects/:projectId/snapshots/:snapshotId/rollback requires authentication', async () => {
+  const response = await request(createApp())
+    .post('/api/projects/64b7f5086f1f8e9f0f000001/snapshots/64b7f5086f1f8e9f0f000002/rollback');
+
+  assert.equal(response.status, 401);
 });

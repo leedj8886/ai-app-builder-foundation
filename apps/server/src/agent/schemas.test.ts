@@ -4,6 +4,7 @@ import {
   agentPlanSchema,
   createAgentRunRequestSchema,
   generationResultSchema,
+  listAgentRunsQuerySchema,
   objectIdParamSchema,
   streamTokenRequestSchema
 } from './schemas';
@@ -39,6 +40,22 @@ test('streamTokenRequestSchema accepts run and event ids', () => {
   });
 
   assert.equal(parsed.lastEventId, 12);
+});
+
+test('listAgentRunsQuerySchema validates project ids and bounds limits', () => {
+  const parsed = listAgentRunsQuerySchema.parse({
+    projectId: '64b7f5086f1f8e9f0f000001',
+    limit: '12'
+  });
+
+  assert.equal(parsed.limit, 12);
+  assert.throws(() => listAgentRunsQuerySchema.parse({
+    projectId: 'not-an-id'
+  }));
+  assert.throws(() => listAgentRunsQuerySchema.parse({
+    projectId: '64b7f5086f1f8e9f0f000001',
+    limit: '31'
+  }));
 });
 
 test('agentPlanSchema accepts a structured implementation plan', () => {
