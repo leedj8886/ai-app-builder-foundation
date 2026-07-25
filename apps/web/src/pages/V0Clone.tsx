@@ -28,6 +28,8 @@ import {
   Mic,
   Monitor,
   Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Rocket,
   Settings2,
@@ -189,6 +191,7 @@ export function V0Clone() {
   const [designMode, setDesignMode] = useState(true)
   const [deployOpen, setDeployOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [workspaceSidebarCollapsed, setWorkspaceSidebarCollapsed] = useState(false)
   const [projectId, setProjectId] = useState('')
   const refreshRequestRef = useRef(0)
   const routeRequestRef = useRef(0)
@@ -662,6 +665,9 @@ export function V0Clone() {
           submissionPending={submissionPending}
           onEditDraftChange={setEditDraft}
           onSubmitEdit={() => void submitPromptToAgent(editDraft)}
+          sidebarCollapsed={workspaceSidebarCollapsed}
+          onCollapseSidebar={() => setWorkspaceSidebarCollapsed(true)}
+          onExpandSidebar={() => setWorkspaceSidebarCollapsed(false)}
         />
       )}
     </div>
@@ -769,6 +775,9 @@ function WorkspaceScreen({
   submissionPending,
   onEditDraftChange,
   onSubmitEdit,
+  sidebarCollapsed,
+  onCollapseSidebar,
+  onExpandSidebar,
 }: {
   prompt: string
   selectedTemplate: Template
@@ -791,6 +800,9 @@ function WorkspaceScreen({
   submissionPending: boolean
   onEditDraftChange: (value: string) => void
   onSubmitEdit: () => void
+  sidebarCollapsed: boolean
+  onCollapseSidebar: () => void
+  onExpandSidebar: () => void
 }) {
   const assistantTitle = state.generation.status === 'running'
     ? 'I am creating a project snapshot.'
@@ -808,29 +820,53 @@ function WorkspaceScreen({
         : state.snapshot?.summary ?? 'The app includes responsive layout, structured files, code export, repo sync, and a publish flow.'
 
   return (
-    <main className="grid min-h-[calc(100vh-48px)] grid-cols-1 bg-white lg:grid-cols-[272px_1fr]">
-      <aside className="hidden border-r border-neutral-200 bg-[#fafafa] lg:flex lg:flex-col">
-        <div className="p-3">
-          <button
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-md bg-neutral-950 text-sm font-medium text-white hover:bg-neutral-800"
-            onClick={onBackHome}
-          >
-            <Sparkles className="h-4 w-4" />
-            New chat
-          </button>
-        </div>
-        <div className="flex-1" />
-        <div className="space-y-1 border-t border-neutral-200 p-2">
-          <button className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100">
-            <Github className="h-4 w-4" />
-            Sync with repo
-          </button>
-          <button className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100">
-            <Settings2 className="h-4 w-4" />
-            Settings
-          </button>
-        </div>
-      </aside>
+    <main
+      className={`grid min-h-[calc(100vh-48px)] grid-cols-1 bg-white ${
+        sidebarCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-[272px_1fr]'
+      }`}
+    >
+      {!sidebarCollapsed ? (
+        <aside
+          className="hidden border-r border-neutral-200 bg-[#fafafa] lg:flex lg:flex-col"
+          data-testid="workspace-sidebar"
+        >
+          <div className="flex items-center gap-2 p-3">
+            <button
+              className="flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-neutral-950 text-sm font-medium text-white hover:bg-neutral-800"
+              onClick={onBackHome}
+            >
+              <Sparkles className="h-4 w-4" />
+              New chat
+            </button>
+            <button
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100"
+              aria-label="Collapse sidebar"
+              onClick={onCollapseSidebar}
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1" />
+          <div className="space-y-1 border-t border-neutral-200 p-2">
+            <button className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100">
+              <Github className="h-4 w-4" />
+              Sync with repo
+            </button>
+            <button className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100">
+              <Settings2 className="h-4 w-4" />
+              Settings
+            </button>
+          </div>
+        </aside>
+      ) : (
+        <button
+          className="fixed left-2 top-14 z-40 hidden h-9 w-9 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 shadow-md hover:bg-neutral-50 lg:inline-flex"
+          aria-label="Expand sidebar"
+          onClick={onExpandSidebar}
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+      )}
 
       <section className="flex min-w-0 flex-col">
         <div className="flex h-13 min-h-13 items-center justify-between border-b border-neutral-200 px-3 py-2 sm:px-4">

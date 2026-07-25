@@ -17,6 +17,22 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page).toHaveURL(/\/v0\/chats\/[a-f\d]{24}$/);
   await expect(page.getByText('Recent', { exact: true })).toHaveCount(0);
 
+  const workspaceSidebar = page.getByTestId('workspace-sidebar');
+  const editComposer = page.getByTestId('workspace-edit-composer');
+  await expect(workspaceSidebar).toBeVisible();
+  await editComposer.getByRole('textbox').fill('Draft preserved while collapsed');
+
+  await workspaceSidebar.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect(workspaceSidebar).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
+  await expect(editComposer.getByRole('textbox')).toHaveValue('Draft preserved while collapsed');
+  await expect(page.getByTestId('snapshot-preview')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Expand sidebar' }).click();
+  await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveCount(0);
+  await editComposer.getByRole('textbox').fill('');
+
   const generatedPreview = page.frameLocator(
     '[data-testid="snapshot-preview"] iframe',
   );
@@ -29,7 +45,6 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page.getByTestId('snapshot-history')).toContainText('active');
   await expect(page.getByTestId('snapshot-history')).toContainText('passed');
 
-  const editComposer = page.getByTestId('workspace-edit-composer');
   await expect(editComposer).toBeVisible();
   await page.route('**/api/agent/runs', async (route) => {
     const request = route.request();
