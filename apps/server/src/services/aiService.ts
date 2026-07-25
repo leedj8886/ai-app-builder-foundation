@@ -1,10 +1,35 @@
-import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { IMessage, ICodeBlock } from '../models/Chat';
+import {
+  createDeepSeekClient,
+  getDeepSeekConfig
+} from './modelProvider';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || ''
-});
+interface CompletionResponse {
+  choices: Array<{
+    message: { content: string | null };
+  }>;
+}
+
+export interface AIServiceDependencies {
+  model: string;
+  createCompletion(
+    request: Record<string, unknown>
+  ): Promise<CompletionResponse>;
+}
+
+const createDefaultDependencies = (): AIServiceDependencies => {
+  const config = getDeepSeekConfig();
+  const client = createDeepSeekClient(config);
+
+  return {
+    model: config.model,
+    createCompletion: async request =>
+      client.chat.completions.create(
+        request as unknown as Parameters<typeof client.chat.completions.create>[0]
+      ) as unknown as Promise<CompletionResponse>
+  };
+};
 
 export interface GenerateCodeOptions {
   framework?: 'react' | 'vue' | 'svelte';
@@ -59,7 +84,8 @@ export const Button: React.FC<ButtonProps> = ({ children, variant = 'primary', o
 
 export const generateCode = async (
   messages: IMessage[],
-  options: GenerateCodeOptions = {}
+  options: GenerateCodeOptions = {},
+  dependencies: AIServiceDependencies = createDefaultDependencies()
 ): Promise<{ content: string; codeBlocks: ICodeBlock[] }> => {
   const { framework = 'react', styling = 'tailwind', uiLibrary = 'shadcn' } = options;
 
@@ -72,9 +98,9 @@ export const generateCode = async (
   ];
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages: formattedMessages as any,
+    const response = await dependencies.createCompletion({
+      model: dependencies.model,
+      messages: formattedMessages,
       temperature: 0.7,
       max_tokens: 4000
     });
@@ -84,7 +110,7 @@ export const generateCode = async (
 
     return { content, codeBlocks };
   } catch (error) {
-    console.error('OpenAI API error:', error);
+    console.error('Model request failed while generating code');
     throw new Error('Failed to generate code');
   }
 };
@@ -130,14 +156,17 @@ const extractDependencies = (code: string): string[] => {
   return dependencies;
 };
 
-export const generateChatTitle = async (firstMessage: string): Promise<string> => {
+export const generateChatTitle = async (
+  firstMessage: string,
+  dependencies: AIServiceDependencies = createDefaultDependencies()
+): Promise<string> => {
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+    const response = await dependencies.createCompletion({
+      model: dependencies.model,
       messages: [
         {
           role: 'system',
-          content: 'Generate a short, concise title (max 5 words) for a chat based on the user\'s first message. Just return the title, no quotes.'
+          content: 'Generate a short, concise title (max 5 words) for a chat based on the user input. Return only the title.'
         },
         { role: 'user', content: firstMessage }
       ],
@@ -146,8 +175,7 @@ export const generateChatTitle = async (firstMessage: string): Promise<string> =
     });
 
     return response.choices[0]?.message?.content?.trim() || 'New Chat';
-  } catch (error) {
-    console.error('Error generating title:', error);
+  } catch {
     return 'New Chat';
   }
 };
