@@ -77,6 +77,7 @@ const AgentRunSchema = new Schema<IAgentRun>(
 AgentRunSchema.index({ userId: 1, updatedAt: -1 });
 AgentRunSchema.index({ projectId: 1, updatedAt: -1 });
 AgentRunSchema.index({ status: 1, updatedAt: 1 });
+AgentRunSchema.index({ userId: 1, chatId: 1, createdAt: -1 });
 
 export const AgentRun =
   (mongoose.models.AgentRun as mongoose.Model<IAgentRun> | undefined) ||
