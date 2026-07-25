@@ -3,7 +3,6 @@ version: '3.8'
 services:
   mongodb:
     image: mongo:7
-    container_name: v0-mongodb
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -18,7 +17,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: v0-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -29,7 +27,6 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
-    container_name: v0-server
     restart: unless-stopped
     ports:
       - "3001:3001"
@@ -56,7 +53,6 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
-    container_name: v0-worker
     restart: unless-stopped
     command: npm run start:worker --workspace @v0/server
     environment:
@@ -80,7 +76,6 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    container_name: v0-web
     restart: unless-stopped
     ports:
       - "80:80"

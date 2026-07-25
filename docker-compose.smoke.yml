@@ -1,0 +1,44 @@
+services:
+  mongodb:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  redis:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  server:
+    ports: !override
+      - "${SMOKE_API_PORT:-43001}:3001"
+    environment:
+      JWT_SECRET: phase6-smoke-secret
+      AGENT_QUEUE_NAME: phase6-smoke-runs
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  worker:
+    command: npm run start:smoke-worker --workspace @v0/server
+    environment:
+      JWT_SECRET: phase6-smoke-secret
+      AGENT_QUEUE_NAME: phase6-smoke-runs
+      OPENAI_API_KEY: null
+
+  web:
+    ports: !override
+      - "${SMOKE_WEB_PORT:-4173}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
