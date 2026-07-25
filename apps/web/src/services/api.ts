@@ -2,10 +2,14 @@ import axios from 'axios';
 
 const API_URL = import.meta.env?.VITE_API_URL || '';
 
-export const agentEventStreamUrl = (runId: string): string => {
-  const path = `/api/agent/runs/${encodeURIComponent(runId)}/events`;
-  return API_URL ? `${API_URL.replace(/\/+$/, '')}${path}` : path;
+export const buildAgentEventStreamUrl = (apiBase: string, runId: string): string => {
+  const path = `api/agent/runs/${encodeURIComponent(runId)}/events`;
+  const normalizedBase = apiBase.replace(/\/+$/, '');
+  return normalizedBase ? `${normalizedBase}/${path}` : `/${path}`;
 };
+
+export const agentEventStreamUrl = (runId: string): string =>
+  buildAgentEventStreamUrl(API_URL, runId);
 
 export const api = axios.create({
   baseURL: API_URL,

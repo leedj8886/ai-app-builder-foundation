@@ -6,23 +6,23 @@ const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'run.cancel
 export type AgentStreamState = 'connected' | 'retrying'
 
 type FetchImplementation = typeof fetch
-type Sleep = (delayMs: number, signal?: AbortSignal) => Promise<void>
+type Sleep = (durationMs: number, signal: AbortSignal) => Promise<void>
 
 export interface StreamAgentEventsOptions {
   runId: string
   token: string
-  signal?: AbortSignal
-  lastEventId?: string
+  signal: AbortSignal
+  lastEventId?: number
   maxReconnectAttempts?: number
   fetchImpl?: FetchImplementation
-  sleep?: Sleep
-  onEvent: (event: AgentEvent) => void
+  sleep: Sleep
+  onEvent: (event: AgentEvent) => void | Promise<void>
   onState?: (state: AgentStreamState) => void
 }
 
 export type StreamAgentEventsResult =
-  | { status: 'terminal'; lastEventId: string }
-  | { status: 'exhausted'; attempts: number; lastEventId?: string }
+  | { outcome: 'terminal'; lastEventId: number }
+  | { outcome: 'exhausted'; lastEventId?: number }
 
 export class AgentStreamHttpError extends Error {
   readonly status: number
@@ -87,10 +87,6 @@ const waitForAbort = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> 
   })
 }
 
-const defaultSleep: Sleep = (delayMs, signal) => waitForAbort(new Promise<void>((resolve) => {
-  setTimeout(resolve, delayMs)
-}), signal)
-
 const normalizeReconnectAttempts = (value: number | undefined): number => {
   if (value === undefined) return 3
   if (!Number.isFinite(value) || value < 0) return 0
@@ -100,12 +96,12 @@ const normalizeReconnectAttempts = (value: number | undefined): number => {
 const retryDelay = (retryNumber: number): number =>
   RETRY_DELAYS_MS[Math.min(retryNumber - 1, RETRY_DELAYS_MS.length - 1)] ?? 1000
 
-const isNumericId = (id: string): boolean => id.trim() !== '' && Number.isFinite(Number(id))
+const isNonNegativeInteger = (value: string): boolean => /^\d+$/.test(value)
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: string } | undefined => {
+const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: number } | undefined => {
   if (frame.data.length === 0) return undefined
 
   let value: unknown
@@ -123,6 +119,7 @@ const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: string } | u
   if (
     typeof sequence !== 'number' ||
     !Number.isFinite(sequence) ||
+    !Number.isInteger(sequence) ||
     sequence < 0 ||
     typeof type !== 'string' ||
     typeof message !== 'string'
@@ -134,8 +131,7 @@ const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: string } | u
     throw new AgentStreamProtocolError('Invalid agent event stream frame: event type does not match data')
   }
 
-  const id = frame.id ?? String(sequence)
-  if (isNumericId(id) && Number(id) !== sequence) {
+  if (frame.id === undefined || !isNonNegativeInteger(frame.id) || Number(frame.id) !== sequence) {
     throw new AgentStreamProtocolError('Invalid agent event stream frame: id does not match sequence')
   }
 
@@ -146,7 +142,7 @@ const parseAgentEvent = (frame: SseFrame): { event: AgentEvent; id: string } | u
       message,
       ...(isRecord(payload) ? { payload } : {}),
     },
-    id,
+    id: Number(frame.id),
   }
 }
 
@@ -163,7 +159,7 @@ const processLine = (frame: SseFrame, line: string): void => {
 
 interface ConsumeResult {
   terminal: boolean
-  lastEventId?: string
+  lastEventId?: number
   lastSequence?: number
 }
 
@@ -176,7 +172,7 @@ const consumeResponse = async ({
   response: Response
   signal?: AbortSignal
   lastSequence?: number
-  onEvent: (event: AgentEvent) => void
+  onEvent: (event: AgentEvent) => void | Promise<void>
 }): Promise<ConsumeResult> => {
   if (!response.body) {
     throw new AgentStreamProtocolError('Agent event stream response has no body')
@@ -191,28 +187,28 @@ const consumeResponse = async ({
   let buffer = ''
   let frame: SseFrame = { data: [] }
   let acceptedSequence = lastSequence
-  let acceptedId: string | undefined
+  let acceptedId: number | undefined
   let terminal = false
   let reachedEof = false
 
-  const dispatchFrame = (): void => {
+  const dispatchFrame = async (): Promise<void> => {
     const parsed = parseAgentEvent(frame)
     frame = { data: [] }
     if (!parsed || (acceptedSequence !== undefined && parsed.event.sequence <= acceptedSequence)) return
 
     acceptedSequence = parsed.event.sequence
     acceptedId = parsed.id
-    onEvent(parsed.event)
+    await onEvent(parsed.event)
     if (TERMINAL_EVENT_TYPES.has(parsed.event.type)) terminal = true
   }
 
-  const processBufferedLines = (): void => {
+  const processBufferedLines = async (): Promise<void> => {
     let newlineIndex = buffer.indexOf('\n')
     while (newlineIndex !== -1) {
       const rawLine = buffer.slice(0, newlineIndex)
       buffer = buffer.slice(newlineIndex + 1)
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-      if (line === '') dispatchFrame()
+      if (line === '') await dispatchFrame()
       else processLine(frame, line)
       if (terminal) return
       newlineIndex = buffer.indexOf('\n')
@@ -225,12 +221,12 @@ const consumeResponse = async ({
       const { done, value } = await waitForAbort(reader.read(), signal)
       if (done) {
         buffer += decoder.decode()
-        processBufferedLines()
+        await processBufferedLines()
         reachedEof = true
         break
       }
       buffer += decoder.decode(value, { stream: true })
-      processBufferedLines()
+      await processBufferedLines()
     }
   } finally {
     if (!reachedEof) void reader.cancel().catch(() => undefined)
@@ -253,28 +249,23 @@ export const streamAgentEvents = async ({
   lastEventId: initialLastEventId,
   maxReconnectAttempts,
   fetchImpl = fetch,
-  sleep = defaultSleep,
+  sleep,
   onEvent,
   onState,
 }: StreamAgentEventsOptions): Promise<StreamAgentEventsResult> => {
   let lastEventId = initialLastEventId
-  let lastSequence = initialLastEventId !== undefined && isNumericId(initialLastEventId)
-    ? Number(initialLastEventId)
-    : undefined
-  let attempts = 0
+  let lastSequence = initialLastEventId
   let reconnects = 0
   const maximumReconnects = normalizeReconnectAttempts(maxReconnectAttempts)
 
   while (true) {
     throwIfAborted(signal)
-    attempts += 1
-
     try {
       const headers: Record<string, string> = {
         Accept: 'text/event-stream',
         Authorization: `Bearer ${token}`,
       }
-      if (lastEventId !== undefined) headers['Last-Event-ID'] = lastEventId
+      if (lastEventId !== undefined) headers['Last-Event-ID'] = String(lastEventId)
 
       const response = await waitForAbort(fetchImpl(agentEventStreamUrl(runId), {
         headers,
@@ -292,13 +283,13 @@ export const streamAgentEvents = async ({
       const result = await consumeResponse({ response, signal, lastSequence, onEvent })
       lastSequence = result.lastSequence
       if (result.lastEventId !== undefined) lastEventId = result.lastEventId
-      if (result.terminal) return { status: 'terminal', lastEventId: lastEventId ?? String(lastSequence) }
+      if (result.terminal) return { outcome: 'terminal', lastEventId: lastEventId as number }
       throw new AgentStreamRetryableError('Agent event stream ended before a terminal event')
     } catch (error) {
       if (isAbortError(error) || signal?.aborted) throw abortError()
       if (isControlledFailure(error)) throw error
       if (reconnects >= maximumReconnects) {
-        return { status: 'exhausted', attempts, ...(lastEventId !== undefined ? { lastEventId } : {}) }
+        return { outcome: 'exhausted', ...(lastEventId !== undefined ? { lastEventId } : {}) }
       }
 
       reconnects += 1
