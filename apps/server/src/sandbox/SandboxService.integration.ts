@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import type { ArtifactService } from '../artifacts/artifactService';
 import type { ProjectArtifactBundleV1 } from '../artifacts/types';
 import { SandboxLease } from '../models/SandboxLease';
+import { Workspace } from '../models/Workspace';
 import { createIntegrationEnvironment, type IntegrationEnvironment } from '../testing/integrationEnvironment';
 import { getSandboxConfig } from './config';
 import { createSandboxPolicy } from './policy';
@@ -166,4 +167,99 @@ test('SandboxService rejects unavailable source before reserving capacity', asyn
   );
   assert.equal(await SandboxLease.countDocuments(), 0);
   void service;
+});
+
+test('SandboxService executes only policy-built commands and enters running', async () => {
+  const withLockfile: ProjectArtifactBundleV1 = {
+    ...bundle,
+    files: [
+      ...bundle.files,
+      { path: 'package-lock.json', content: '{}', language: 'json' }
+    ]
+  };
+  const { service, state } = harness(withLockfile);
+  const request = input();
+  await Workspace.create({
+    _id: request.workspaceId,
+    slug: `command-${crypto.randomUUID()}`,
+    name: 'Command Workspace',
+    createdByUserId: request.requestedByUserId
+  });
+  const lease = await service.createBuildSandbox(request);
+  const ownership = {
+    workspaceId: request.workspaceId.toString(),
+    projectId: request.projectId.toString(),
+    branchId: request.branchId.toString(),
+    runId: request.runId.toString(),
+    purpose: 'build' as const
+  };
+  const result = await service.runBuildCommand({
+    leaseId: lease._id,
+    expectedOwnership: ownership,
+    command: 'install'
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal((await SandboxLease.findById(lease._id).orFail()).state, 'running');
+  assert.deepEqual(state.resources()[0].commands[0].args, ['ci']);
+
+  state.setNextCommandResult({
+    exitCode: null,
+    stdout: '',
+    stderr: '',
+    durationMs: 100,
+    timedOut: true,
+    outputTruncated: false
+  });
+  await assert.rejects(
+    service.runBuildCommand({
+      leaseId: lease._id,
+      expectedOwnership: ownership,
+      command: 'build'
+    }),
+    /SANDBOX_COMMAND_TIMEOUT/
+  );
+});
+
+test('SandboxService termination is ownership-safe and idempotent', async () => {
+  const { service, state } = harness();
+  const request = input();
+  const lease = await service.createBuildSandbox(request);
+  const ownership = {
+    workspaceId: request.workspaceId.toString(),
+    projectId: request.projectId.toString(),
+    branchId: request.branchId.toString(),
+    runId: request.runId.toString(),
+    purpose: 'build' as const
+  };
+  await assert.rejects(
+    service.terminate({
+      leaseId: lease._id,
+      expectedOwnership: { ...ownership, branchId: new Types.ObjectId().toString() }
+    }),
+    /SANDBOX_OWNERSHIP_MISMATCH/
+  );
+
+  const ref = state.resources()[0].ref;
+  state.delayDestroy(ref, 1);
+  assert.equal(
+    (await service.terminate({ leaseId: lease._id, expectedOwnership: ownership }))
+      .state,
+    'terminating'
+  );
+  state.advanceDestroy(ref);
+  const terminated = await service.terminate({
+    leaseId: lease._id,
+    expectedOwnership: ownership
+  });
+  assert.equal(terminated.state, 'terminated');
+  assert.equal(
+    (
+      await service.terminate({
+        leaseId: lease._id,
+        expectedOwnership: ownership
+      })
+    ).state,
+    'terminated'
+  );
 });

@@ -46,9 +46,20 @@ export class FakeSandboxState {
   private readonly entries = new Map<string, MutableFakeSandboxResource>();
   private sequence = 0;
   private nextCreateFailure?: NextCreateFailure;
+  private nextCommandResult?: SandboxCommandResult;
 
   failNextCreate(input: NextCreateFailure): void {
     this.nextCreateFailure = input;
+  }
+
+  setNextCommandResult(result: SandboxCommandResult): void {
+    this.nextCommandResult = structuredClone(result);
+  }
+
+  takeCommandResult(): SandboxCommandResult | undefined {
+    const result = this.nextCommandResult;
+    this.nextCommandResult = undefined;
+    return result;
   }
 
   setReadiness(ref: SandboxRef, value: 'ready' | 'timeout'): void {
@@ -238,7 +249,7 @@ export class FakeSandboxProvider implements SandboxProvider {
       processes: {
         run: async (command): Promise<SandboxCommandResult> => {
           ensurePresent().commands.push(structuredClone(command));
-          return {
+          return this.state.takeCommandResult() ?? {
             exitCode: 0,
             stdout: '',
             stderr: '',

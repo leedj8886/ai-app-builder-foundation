@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import type { ArtifactService } from '../artifacts/artifactService';
 import type { ProjectArtifactBundleV1 } from '../artifacts/types';
 import type { SandboxLeaseDocument } from '../models/SandboxLease';
+import { Workspace } from '../models/Workspace';
 import {
   SandboxCreateError,
   SandboxError,
@@ -11,6 +12,8 @@ import type { SandboxPolicy } from './policy';
 import type { SandboxProvider } from './provider/SandboxProvider';
 import type {
   ResourceProfile,
+  SandboxCommandResult,
+  SandboxOwnership,
   SandboxProviderDescriptor,
   SandboxSpec
 } from './types';
@@ -209,6 +212,136 @@ export class SandboxService {
     }
   }
 
+  async runBuildCommand(input: {
+    leaseId: Types.ObjectId;
+    expectedOwnership: SandboxOwnership;
+    command: 'install' | 'type-check' | 'build';
+  }): Promise<SandboxCommandResult> {
+    let lease = await this.requireLease(input.leaseId);
+    this.assertOwnership(lease, input.expectedOwnership);
+    if (
+      (lease.state !== 'ready' && lease.state !== 'running') ||
+      !lease.externalId
+    ) {
+      throw new SandboxError(
+        'SANDBOX_INVALID_STATE',
+        'Sandbox Lease cannot execute commands'
+      );
+    }
+    const provider = this.provider(lease.provider);
+    let handle;
+    try {
+      handle = await provider.connect({
+        provider: lease.provider,
+        externalId: lease.externalId
+      });
+    } catch (error) {
+      if (
+        error instanceof SandboxError &&
+        error.code === 'SANDBOX_NOT_FOUND'
+      ) {
+        await this.options.repository.transition({
+          leaseId: lease._id,
+          from: [lease.state],
+          to: 'lost'
+        });
+        throw new SandboxError(
+          'SANDBOX_LOST',
+          'Sandbox Provider resource was lost',
+          false,
+          error
+        );
+      }
+      throw error;
+    }
+
+    const workspace = await Workspace.findById(lease.workspaceId).lean();
+    if (!workspace) {
+      throw new SandboxError(
+        'SANDBOX_POLICY_DENIED',
+        'Sandbox Workspace is unavailable'
+      );
+    }
+    const command = this.options.policy.buildCommand(input.command, {
+      hasPackageLock: await handle.files.exists('package-lock.json'),
+      maxOutputBytes: workspace.executionLimits.maxLogBytesPerCommand
+    });
+    if (lease.state === 'ready') {
+      lease =
+        (await this.options.repository.transition({
+          leaseId: lease._id,
+          from: ['ready'],
+          to: 'running',
+          set: { lastHeartbeatAt: this.now() }
+        })) ??
+        (await this.requireLease(lease._id));
+      if (lease.state !== 'running') {
+        throw new SandboxError(
+          'SANDBOX_INVALID_STATE',
+          'Sandbox Lease did not enter running state'
+        );
+      }
+    }
+    const result = await handle.processes.run(command);
+    if (result.timedOut) {
+      throw new SandboxError(
+        'SANDBOX_COMMAND_TIMEOUT',
+        'Sandbox command timed out',
+        true
+      );
+    }
+    return result;
+  }
+
+  async terminate(input: {
+    leaseId: Types.ObjectId;
+    expectedOwnership: SandboxOwnership;
+  }): Promise<SandboxLeaseDocument> {
+    let lease = await this.requireLease(input.leaseId);
+    this.assertOwnership(lease, input.expectedOwnership);
+    if (lease.state === 'terminated') return lease;
+
+    if (lease.state !== 'terminating') {
+      const next = await this.options.repository.transition({
+        leaseId: lease._id,
+        from: [lease.state],
+        to: 'terminating'
+      });
+      lease = next ?? (await this.requireLease(lease._id));
+    }
+    if (lease.state !== 'terminating') {
+      throw new SandboxError(
+        'SANDBOX_INVALID_STATE',
+        'Sandbox Lease cannot be terminated'
+      );
+    }
+    if (!lease.externalId) {
+      return (
+        (await this.options.repository.transition({
+          leaseId: lease._id,
+          from: ['terminating'],
+          to: 'terminated',
+          set: { terminatedAt: this.now() }
+        })) ?? (await this.requireLease(lease._id))
+      );
+    }
+
+    const provider = this.provider(lease.provider);
+    const ref = { provider: lease.provider, externalId: lease.externalId };
+    const receipt = await provider.destroy(ref);
+    if (receipt.pending) return this.requireLease(lease._id);
+    const inspection = await provider.inspect(ref);
+    if (inspection.status !== 'missing') return this.requireLease(lease._id);
+    return (
+      (await this.options.repository.transition({
+        leaseId: lease._id,
+        from: ['terminating'],
+        to: 'terminated',
+        set: { terminatedAt: this.now() }
+      })) ?? (await this.requireLease(lease._id))
+    );
+  }
+
   private buildSpec(input: CreateBuildSandboxInput): SandboxSpec {
     return {
       provisioningKey: `build:${input.runId.toString()}:${input.attempt}`,
@@ -301,6 +434,25 @@ export class SandboxService {
       );
     }
     return provider;
+  }
+
+  private assertOwnership(
+    lease: SandboxLeaseDocument,
+    expected: SandboxOwnership
+  ): void {
+    if (
+      lease.workspaceId.toString() !== expected.workspaceId ||
+      lease.projectId.toString() !== expected.projectId ||
+      lease.branchId.toString() !== expected.branchId ||
+      lease.runId?.toString() !== expected.runId ||
+      lease.snapshotId?.toString() !== expected.snapshotId ||
+      lease.purpose !== expected.purpose
+    ) {
+      throw new SandboxError(
+        'SANDBOX_OWNERSHIP_MISMATCH',
+        'Sandbox Lease ownership does not match'
+      );
+    }
   }
 
   private async requireLease(

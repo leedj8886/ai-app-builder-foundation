@@ -213,7 +213,11 @@ export class LocalProcessProvider implements SandboxProvider {
   }
 
   async inspect(ref: SandboxRef): Promise<SandboxInspection> {
-    const resource = this.require(ref);
+    this.assertProvider(ref);
+    const resource = this.resources.get(keyOf(ref));
+    if (!resource) {
+      throw new SandboxError('SANDBOX_NOT_FOUND', 'Sandbox resource not found');
+    }
     return {
       ref: { ...resource.ref },
       status: resource.status,
