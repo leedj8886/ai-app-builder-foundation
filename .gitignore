@@ -42,3 +42,4 @@ playwright-report/
 temp/
 tmp/
 work/
+.worktrees/
