@@ -91,4 +91,13 @@ test('applyFileOperations does not delete required template files', () => {
       ),
     /required file/
   );
+  for (const path of ['tailwind.config.js', 'postcss.config.cjs']) {
+    assert.throws(
+      () => applyFileOperations(
+        [{ path, content: '', language: 'js' }],
+        [{ type: 'delete', path }]
+      ),
+      /required file/
+    );
+  }
 });

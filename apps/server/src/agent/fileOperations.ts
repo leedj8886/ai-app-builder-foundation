@@ -21,6 +21,8 @@ const supportedExtensions: Record<string, ProjectFileLanguage> = {
 const requiredTemplateFiles = new Set([
   'package.json',
   'index.html',
+  'postcss.config.cjs',
+  'tailwind.config.js',
   'src/main.tsx'
 ]);
 
