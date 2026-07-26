@@ -153,10 +153,15 @@ AGENT_MODEL=
 ## 当前限制
 
 - 当前生产 Provider 配置仍以 DeepSeek 命名。
-- 生成目标聚焦 React + TypeScript + Tailwind。
+- 生成目标聚焦 React + TypeScript；样式能力会从文件、依赖和配置自动识别，
+  项目元数据只作为弱提示。
 - 构建通过不代表生成代码已通过业务、安全或合规审计。
 - 尚未提供公开在线 Demo 和一键云部署。
 - 本阶段仍使用开发代号，项目与 Vercel 无官方关系。
+
+Preview 会为缺少配置的旧 Tailwind Snapshot 只读编译 CSS，并在内存中补齐
+Tailwind/PostCSS 配置和依赖，不会改写持久化文件。新项目会持久化完整配置；
+生产验证还会检查构建后的 CSS，避免只通过 Vite 退出码却没有实际生成样式。
 
 ## 文档
 

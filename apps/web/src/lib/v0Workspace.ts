@@ -36,6 +36,7 @@ export interface WorkspaceSnapshot {
   selectedFilePath: string | null
   packageJson: SnapshotPackageJson
   validation: SnapshotValidation
+  previewCss?: string
 }
 
 export interface SnapshotPackageJson {
@@ -124,6 +125,7 @@ export interface AgentRunDetail {
     files: SnapshotFile[]
     packageJson: SnapshotPackageJson
     validation: SnapshotValidation
+    previewCss?: string
   } | null
 }
 
@@ -218,6 +220,7 @@ const toWorkspaceSnapshot = (
     null,
   packageJson: snapshot.packageJson,
   validation: snapshot.validation,
+  previewCss: snapshot.previewCss,
 })
 
 export const applySnapshotList = (

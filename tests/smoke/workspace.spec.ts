@@ -1,4 +1,44 @@
 import { expect, test } from '@playwright/test';
+import {
+  legacyStylingSmoke
+} from '../../apps/server/src/testing/seedLegacyStylingSmoke';
+
+const apiUrl = process.env.SMOKE_API_URL ?? 'http://127.0.0.1:43001';
+
+test('legacy Tailwind Snapshot compiles Preview-only compatibility', async ({ page }) => {
+  const response = await page.request.post(`${apiUrl}/api/auth/login`, {
+    data: {
+      email: legacyStylingSmoke.email,
+      password: legacyStylingSmoke.password
+    }
+  });
+  expect(response.ok()).toBe(true);
+  const { token } = await response.json() as { token: string };
+  await page.addInitScript(value => {
+    localStorage.setItem('token', value);
+  }, token);
+
+  await page.goto(`/v0/chats/${legacyStylingSmoke.chatId}`);
+  await expect(page.getByTestId('snapshot-preview')).toBeVisible();
+  const generatedPreview = page.frameLocator(
+    '[data-testid="snapshot-preview"] iframe[title="Sandpack Preview"]'
+  );
+  await expect(generatedPreview.getByTestId('tailwind-background')).toHaveCSS(
+    'background-color',
+    'rgb(219, 234, 254)',
+    { timeout: 30_000 }
+  );
+
+  await page.getByRole('button', { name: 'Code', exact: true }).click();
+  await expect(page.getByRole('button', {
+    name: 'tailwind.config.js',
+    exact: true
+  })).toHaveCount(0);
+  await expect(page.getByRole('button', {
+    name: 'postcss.config.cjs',
+    exact: true
+  })).toHaveCount(0);
+});
 
 test('workspace completes a streamed run and restores its active snapshot', async ({ page }) => {
   const prompt = `Phase 6 browser smoke ${Date.now()}`;
@@ -53,7 +93,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await editComposer.getByRole('textbox').fill('');
 
   const generatedPreview = page.frameLocator(
-    '[data-testid="snapshot-preview"] iframe',
+    '[data-testid="snapshot-preview"] iframe[title="Sandpack Preview"]',
   );
   await expect(
     generatedPreview.getByTestId('generated-app'),
@@ -106,7 +146,9 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
 
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(
-    page.frameLocator('[data-testid="snapshot-preview"] iframe')
+    page.frameLocator(
+      '[data-testid="snapshot-preview"] iframe[title="Sandpack Preview"]'
+    )
       .getByTestId('generated-app'),
   ).toContainText('Generated app', { timeout: 30_000 });
 

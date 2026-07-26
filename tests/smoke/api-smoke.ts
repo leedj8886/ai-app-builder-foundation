@@ -120,7 +120,10 @@ const main = async (): Promise<void> => {
     snapshot: {
       _id: string;
       files: Array<{ path: string }>;
-      validation: { status: string };
+      validation: {
+        status: string;
+        checks: Array<{ category?: string }>;
+      };
     };
   }>(
     `/api/projects/${projectId}/snapshots/${snapshotId}`,
@@ -134,7 +137,16 @@ const main = async (): Promise<void> => {
   );
 
   assert.equal(snapshotResponse.snapshot.validation.status, 'passed');
+  assert.ok(!snapshotResponse.snapshot.validation.checks.some(
+    check => check.category === 'STYLING_CONFIGURATION_ERROR'
+  ));
   assert.ok(snapshotResponse.snapshot.files.some((file) => file.path === 'src/App.tsx'));
+  assert.ok(snapshotResponse.snapshot.files.some(
+    file => file.path === 'tailwind.config.js'
+  ));
+  assert.ok(snapshotResponse.snapshot.files.some(
+    file => file.path === 'postcss.config.cjs'
+  ));
   assert.ok(listed.snapshots.some((snapshot) =>
     snapshot.id === snapshotId && snapshot.isActive
   ));

@@ -4,6 +4,7 @@ import { augmentPreviewStyling } from './stylingCapabilities'
 
 test('augments old Tailwind files without mutating inputs', () => {
   const files = {
+    '/index.html': '<div id="root"></div>',
     '/src/App.tsx': '<main className="bg-blue-100" />',
     '/src/index.css': '@tailwind base;\n@tailwind utilities;',
     '/src/main.tsx': "import './index.css';",

@@ -76,6 +76,14 @@ export const createSnapshotPreviewModel = (
     sortedRecord(fileEntries),
     snapshot.packageJson,
   )
+  if (snapshot.previewCss) {
+    const cssPath = Object.keys(styling.files).find(path => path.endsWith('.css'))
+    if (cssPath) {
+      styling.files[cssPath] = styling.files[cssPath]!
+        .replace(/@tailwind\s+(?:base|components|utilities)\s*;/g, '')
+        .concat('\n', snapshot.previewCss)
+    }
+  }
 
   return {
     files: sortedRecord(Object.entries(styling.files)),

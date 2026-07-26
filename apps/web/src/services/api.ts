@@ -100,6 +100,7 @@ export interface ProjectSnapshot {
   _id: string;
   summary: string;
   files: ProjectSnapshotFile[];
+  previewCss?: string;
   packageJson: {
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
