@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-26
 
-**状态：** 已完成会话设计确认，等待书面规格复核
+**状态：** 已批准
 
 **上层设计：** `2026-07-26-daytona-sandbox-provider-design.md`
 
@@ -632,6 +632,8 @@ runBuildCommand(
 Reconciler 是单次、分批、顺序扫描函数，无内置 interval。
 
 - 过期 `reserved`：CAS → `failed`。
+- 过期 `provisioning/ready/running/lost/failed`：CAS → `terminating`；没有
+  Provider 资源时直接确认 missing 并进入 `terminated`。
 - `provisioning + externalId`：inspect；存在则继续 readiness，missing 则按
   provisioningKey 查找。
 - `provisioning + 无 externalId`：按 provisioningKey 和 ownership labels 查找。
@@ -639,6 +641,8 @@ Reconciler 是单次、分批、顺序扫描函数，无内置 interval。
   - 零命中：调用幂等 create。
   - 多个命中：选择创建时间最早的一个，其余进入 destroy；Lease 绑定保留资源。
 - `ready/running`：inspect missing 时 CAS → `lost`。
+- 未过期的 `failed/lost`：如果存在 Provider 资源则进入 `terminating`；没有资源
+  则进入 `terminated`。
 - `terminating`：重复 destroy；确认 missing 后 → `terminated`。
 - Provider 中超过 orphan grace period、携带 `managed-by=open-v0` 且无 Lease 的
   资源：destroy。
