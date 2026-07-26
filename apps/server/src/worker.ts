@@ -21,8 +21,7 @@ const startWorker = async () => {
   });
   const validator = createProjectValidator({
     workspaceRoot: config.workspaceRoot,
-    commandTimeoutMs: config.commandTimeoutMs,
-    maxOutputChars: config.maxValidationOutputChars
+    validation: config.validation
   });
   const worker = createAgentWorker({
     queueName: config.queueName,
