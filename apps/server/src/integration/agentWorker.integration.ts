@@ -16,6 +16,7 @@ import { AgentRun } from '../models/AgentRun';
 import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
+import { ProjectBranch } from '../models/ProjectBranch';
 import { User } from '../models/User';
 import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
 import { ensureMainBranch } from '../branches/branchService';
@@ -180,6 +181,78 @@ test('two Runs on one Branch never execute their models concurrently', async () 
   });
 
   assert.equal(maxActive, 1);
+});
+
+test('completed Run advances only its Branch Head', async () => {
+  const { project, run } = await createQueuedRun();
+  const main = await ensureMainBranch(project);
+  const other = await ProjectBranch.create({
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    name: 'other',
+    headVersion: 0
+  });
+
+  await enqueueAgentRun(run._id.toString());
+  await withWorker(
+    createFakeModelClient(),
+    createPassingValidator(),
+    async () => {
+      await waitForTerminalRun(run._id.toString());
+    }
+  );
+
+  const [completed, refreshedMain, refreshedOther] = await Promise.all([
+    AgentRun.findById(run._id),
+    ProjectBranch.findById(main._id),
+    ProjectBranch.findById(other._id)
+  ]);
+  assert.equal(completed?.status, 'completed');
+  assert.equal(
+    refreshedMain?.headSnapshotId?.toString(),
+    completed?.resultSnapshotId?.toString()
+  );
+  assert.equal(refreshedMain?.headVersion, 1);
+  assert.equal(refreshedOther?.headVersion, 0);
+});
+
+test('stale Run keeps its Snapshot and completes with conflict', async () => {
+  const fixture = await createQueuedRun();
+  const branch = await ensureMainBranch(fixture.project);
+  const winningSnapshot = await ProjectSnapshot.create({
+    userId: fixture.user._id,
+    projectId: fixture.project._id,
+    sourceRunId: fixture.run._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Winning snapshot'
+  });
+  branch.headSnapshotId = winningSnapshot._id;
+  branch.headVersion = 1;
+  await branch.save();
+
+  await processAgentRun(
+    { runId: fixture.run._id.toString() },
+    createFakeModelClient(),
+    createPassingValidator(),
+    { assertHeld: async () => undefined }
+  );
+
+  const [run, refreshedBranch, resultSnapshot] = await Promise.all([
+    AgentRun.findById(fixture.run._id),
+    ProjectBranch.findById(branch._id),
+    ProjectSnapshot.findOne({ sourceRunId: fixture.run._id }).sort({
+      createdAt: -1
+    })
+  ]);
+  assert.equal(run?.status, 'completed_with_conflict');
+  assert.ok(run?.resultSnapshotId);
+  assert.ok(resultSnapshot);
+  assert.equal(
+    refreshedBranch?.headSnapshotId?.toString(),
+    winningSnapshot._id.toString()
+  );
 });
 
 test('BullMQ Create run seeds required files when the model only updates App', async () => {

@@ -92,3 +92,40 @@ export const setBranchHead = async (input: {
   },
   { new: true }
 );
+
+export type BranchHeadCommitResult =
+  | { outcome: 'advanced'; headVersion: number }
+  | { outcome: 'already_advanced'; headVersion: number }
+  | { outcome: 'conflict'; headVersion: number };
+
+export const commitBranchHead = async (input: {
+  branchId: Types.ObjectId;
+  expectedHeadVersion: number;
+  snapshotId: Types.ObjectId;
+}): Promise<BranchHeadCommitResult> => {
+  const advanced = await setBranchHead(input);
+  if (advanced) {
+    return {
+      outcome: 'advanced',
+      headVersion: advanced.headVersion
+    };
+  }
+
+  const current = await ProjectBranch.findById(input.branchId)
+    .select('headSnapshotId headVersion');
+  if (!current) {
+    throw Object.assign(new Error('Project branch not found'), {
+      code: 'PROJECT_BRANCH_NOT_FOUND'
+    });
+  }
+  if (current.headSnapshotId?.equals(input.snapshotId)) {
+    return {
+      outcome: 'already_advanced',
+      headVersion: current.headVersion
+    };
+  }
+  return {
+    outcome: 'conflict',
+    headVersion: current.headVersion
+  };
+};

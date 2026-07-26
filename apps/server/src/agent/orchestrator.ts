@@ -25,6 +25,8 @@ import {
   ProjectSnapshotPackageJson
 } from './types';
 import { ProjectValidator } from './validator';
+import { commitBranchHead } from '../branches/branchService';
+import { ProjectBranch } from '../models/ProjectBranch';
 
 interface WorkerEvent {
   type: AgentEventType;
@@ -405,26 +407,46 @@ const transitionRun = async (
   Object.assign(run, fields);
 };
 
-const activateSnapshotIfBaseIsCurrent = async (
+const completeRunWithSnapshot = async (
   run: InstanceType<typeof AgentRun>,
-  snapshotId: Types.ObjectId
-): Promise<void> => {
-  await Project.updateOne(
-    {
-      _id: run.projectId,
-      userId: run.userId,
-      $or: [
-        { activeSnapshotRevision: run.baseSnapshotRevision },
-        ...(run.baseSnapshotRevision === 0
-          ? [{ activeSnapshotRevision: { $exists: false } }]
-          : [])
-      ]
-    },
-    {
-      $set: { activeSnapshotId: snapshotId },
-      $inc: { activeSnapshotRevision: 1 }
+  snapshot: InstanceType<typeof ProjectSnapshot>,
+  fields: Record<string, unknown> = {}
+): Promise<'completed' | 'completed_with_conflict'> => {
+  if (!run.branchId || run.baseHeadVersion === undefined) {
+    throw Object.assign(new Error('AgentRun is missing Branch baseline'), {
+      code: 'INVALID_BRANCH_BASELINE'
+    });
+  }
+  const committed = await commitBranchHead({
+    branchId: run.branchId,
+    expectedHeadVersion: run.baseHeadVersion,
+    snapshotId: snapshot._id
+  });
+  const status = committed.outcome === 'conflict'
+    ? 'completed_with_conflict'
+    : 'completed';
+  await transitionRun(run, 'persisting', status, {
+    resultSnapshotId: snapshot._id,
+    completedAt: new Date(),
+    ...fields
+  });
+
+  if (committed.outcome === 'advanced') {
+    const branch = await ProjectBranch.findById(run.branchId).select('name');
+    if (branch?.name === 'main') {
+      await Project.updateOne(
+        { _id: run.projectId, userId: run.userId },
+        {
+          $set: {
+            activeSnapshotId: snapshot._id,
+            activeSnapshotRevision: committed.headVersion
+          }
+        }
+      );
     }
-  );
+  }
+
+  return status;
 };
 
 interface BranchExecutionContext {
@@ -467,11 +489,7 @@ export const processAgentRun = async (
       return;
     }
 
-    await transitionRun(run, 'persisting', 'completed', {
-      resultSnapshotId: pendingSnapshot._id,
-      completedAt: new Date()
-    });
-    await activateSnapshotIfBaseIsCurrent(run, pendingSnapshot._id);
+    const status = await completeRunWithSnapshot(run, pendingSnapshot);
     await emitAgentEvent({
       runId: run._id,
       userId: run.userId,
@@ -480,16 +498,19 @@ export const processAgentRun = async (
       message: 'Agent run completed with a project snapshot',
       payload: {
         snapshotId: pendingSnapshot._id.toString(),
-        fileCount: pendingSnapshot.files.length
+        fileCount: pendingSnapshot.files.length,
+        branchId: run.branchId?.toString(),
+        branchAdvanced: status === 'completed',
+        conflict: status === 'completed_with_conflict'
       }
     });
     return;
   }
 
-  if (run.status === 'completed') {
-    if (run.resultSnapshotId) {
-      await activateSnapshotIfBaseIsCurrent(run, run.resultSnapshotId);
-    }
+  if (
+    run.status === 'completed' ||
+    run.status === 'completed_with_conflict'
+  ) {
     const completedEvent = await AgentEvent.exists({
       runId: run._id,
       type: 'run.completed'
@@ -506,7 +527,10 @@ export const processAgentRun = async (
         message: 'Agent run completed with a project snapshot',
         payload: {
           snapshotId: run.resultSnapshotId.toString(),
-          fileCount: snapshot?.files.length ?? 0
+          fileCount: snapshot?.files.length ?? 0,
+          branchId: run.branchId?.toString(),
+          branchAdvanced: run.status === 'completed',
+          conflict: run.status === 'completed_with_conflict'
         }
       });
     }
@@ -600,24 +624,9 @@ export const processAgentRun = async (
         summary: generation.summary
       });
 
-    try {
-      await transitionRun(run, 'persisting', 'completed', {
-        resultSnapshotId: snapshot._id,
-        usage: generation.usage,
-        completedAt: new Date()
-      });
-    } catch (error) {
-      await ProjectSnapshot.deleteOne({ _id: snapshot._id });
-      throw error;
-    }
-    try {
-      await activateSnapshotIfBaseIsCurrent(run, snapshot._id);
-    } catch (error) {
-      throw Object.assign(new Error('Failed to activate completed project snapshot'), {
-        code: 'SNAPSHOT_ACTIVATION_FAILED',
-        cause: error
-      });
-    }
+    const status = await completeRunWithSnapshot(run, snapshot, {
+      usage: generation.usage
+    });
 
     if (run.chatId) {
       try {
@@ -648,7 +657,10 @@ export const processAgentRun = async (
         message: 'Agent run completed with a project snapshot',
         payload: {
           snapshotId: snapshot._id.toString(),
-          fileCount: generation.files.length
+          fileCount: generation.files.length,
+          branchId: run.branchId?.toString(),
+          branchAdvanced: status === 'completed',
+          conflict: status === 'completed_with_conflict'
         }
       });
     } catch (error) {
@@ -664,7 +676,7 @@ export const processAgentRun = async (
 
     console.error(`AgentRun ${run._id.toString()} failed`, error);
 
-    if (['COMPLETION_EVENT_FAILED', 'SNAPSHOT_ACTIVATION_FAILED'].includes(
+    if (['COMPLETION_EVENT_FAILED'].includes(
       (error as { code?: string }).code ?? ''
     )) {
       throw error;
@@ -805,12 +817,9 @@ export const processValidationCandidate = async (
       validation,
       summary: candidate.summary
     });
-    await transitionRun(run, 'persisting', 'completed', {
-      resultSnapshotId: snapshot._id,
-      completedAt: new Date(),
+    const status = await completeRunWithSnapshot(run, snapshot, {
       retryable: false
     });
-    await activateSnapshotIfBaseIsCurrent(run, snapshot._id);
     await ValidationCandidate.deleteOne({ _id: candidate._id });
     await emitAgentEvent({
       runId: run._id,
@@ -820,14 +829,27 @@ export const processValidationCandidate = async (
       message: 'Agent run completed with a project snapshot',
       payload: {
         snapshotId: snapshot._id.toString(),
-        fileCount: candidate.files.length
+        fileCount: candidate.files.length,
+        branchId: run.branchId?.toString(),
+        branchAdvanced: status === 'completed',
+        conflict: status === 'completed_with_conflict'
       }
     });
   } catch (error) {
     const publicError = publicAgentError(error);
     const retryable = publicError.code === 'VALIDATION_INFRA_ERROR';
     await AgentRun.updateOne(
-      { _id: run._id, status: { $nin: ['completed', 'failed', 'cancelled'] } },
+      {
+        _id: run._id,
+        status: {
+          $nin: [
+            'completed',
+            'completed_with_conflict',
+            'failed',
+            'cancelled'
+          ]
+        }
+      },
       {
         $set: {
           status: 'failed',
