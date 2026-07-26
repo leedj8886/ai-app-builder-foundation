@@ -226,6 +226,44 @@ describe('v0 workspace state', () => {
     assert.equal(state.generation.error, 'src/App.tsx(4,2): error TS2322: Type mismatch')
   })
 
+  it('prefers structured styling diagnostics over raw build output', () => {
+    const state = applyAgentRunDetail(
+      startApiGeneration(createInitialWorkspaceState(), 'Use blue background', 'run_styling'),
+      {
+        run: {
+          _id: 'run_styling',
+          status: 'failed',
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Project validation failed',
+            details: {
+              status: 'failed',
+              checks: [{
+                name: 'build',
+                status: 'failed',
+                category: 'STYLING_CONFIGURATION_ERROR',
+                stdout: '',
+                stderr: 'long raw build output',
+                durationMs: 20,
+                stylingIssues: [{
+                  capability: 'tailwind',
+                  code: 'MISSING_BUILD_OUTPUT',
+                  phase: 'build-evidence',
+                  message: 'Tailwind utility bg-blue-100 was not emitted',
+                  previewRecoverable: false,
+                }],
+              }],
+            },
+          },
+        },
+        events: [],
+        resultSnapshot: null,
+      },
+    )
+
+    assert.equal(state.generation.error, 'Tailwind utility bg-blue-100 was not emitted')
+  })
+
   it('stores run history newest first', () => {
     const state = applyRunHistory(createInitialWorkspaceState(), [
       {

@@ -48,7 +48,7 @@ export interface SnapshotValidationCheck {
   name: 'structure' | 'install' | 'type-check' | 'build'
   phase?: 'structure' | 'dependencies' | 'type-check' | 'build'
   status?: 'passed' | 'failed' | 'retrying' | 'skipped'
-  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR'
+  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR'
   command?: string
   exitCode?: number
   stdout: string
@@ -56,6 +56,7 @@ export interface SnapshotValidationCheck {
   durationMs: number
   cache?: 'hit' | 'miss' | 'not-applicable'
   attempt?: number
+  stylingIssues?: import('@/services/api').StylingIssue[]
 }
 
 export interface SnapshotValidation {
@@ -441,7 +442,7 @@ export const applyAgentRunDetail = (
     (check) => check.status === 'failed'
       || (check.exitCode !== undefined && check.exitCode !== 0),
   )
-  const diagnostic = [failedCheck?.stderr, failedCheck?.stdout]
+  const diagnostic = failedCheck?.stylingIssues?.[0]?.message ?? [failedCheck?.stderr, failedCheck?.stdout]
     .flatMap((output) => output?.split('\n') ?? [])
     .map((line) => line.trim())
     .find(Boolean)

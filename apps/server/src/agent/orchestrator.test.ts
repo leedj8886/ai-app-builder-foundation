@@ -300,13 +300,22 @@ test('runAgentGenerationWithValidation repairs once and then passes', async () =
   };
   const failedValidation = {
     status: 'failed' as const,
+    category: 'STYLING_CONFIGURATION_ERROR' as const,
     checks: [{
-      name: 'type-check' as const,
-      command: 'npm run type-check',
-      exitCode: 2,
+      name: 'build' as const,
+      phase: 'build' as const,
+      status: 'failed' as const,
+      category: 'STYLING_CONFIGURATION_ERROR' as const,
       stdout: '',
-      stderr: 'type error',
-      durationMs: 5
+      stderr: 'Tailwind utility bg-blue-100 was not emitted',
+      durationMs: 5,
+      stylingIssues: [{
+        capability: 'tailwind' as const,
+        code: 'MISSING_BUILD_OUTPUT' as const,
+        phase: 'build-evidence' as const,
+        message: 'Tailwind utility bg-blue-100 was not emitted',
+        previewRecoverable: false
+      }]
     }]
   };
   const passedValidation = {

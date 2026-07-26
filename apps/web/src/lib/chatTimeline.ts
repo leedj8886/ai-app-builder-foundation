@@ -4,6 +4,7 @@ import type {
   ChatTimelinePlan,
   ChatTimelineResponse,
   ChatTimelineTurn,
+  StylingIssue,
 } from '@/services/api'
 
 export interface ChatTimelineState {
@@ -65,15 +66,31 @@ export const canToggleTurn = (turn: ChatTimelineTurn): boolean =>
 export interface ValidationEventPayload {
   phase: 'structure' | 'dependencies' | 'type-check' | 'build'
   status: 'passed' | 'failed' | 'retrying' | 'skipped'
-  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR'
+  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR'
   attempt: number
   retryDelayMs?: number
   cache?: 'hit' | 'miss' | 'not-applicable'
+  stylingIssues?: StylingIssue[]
 }
 
 export const validationEventLabel = (
   payload: ValidationEventPayload,
 ): string => {
+  if (
+    payload.status === 'failed'
+    && payload.category === 'STYLING_CONFIGURATION_ERROR'
+    && payload.stylingIssues?.[0]
+  ) {
+    const issueLabel = {
+      MISSING_CONFIGURATION: '缺少样式配置',
+      MISSING_ENTRY_IMPORT: '样式入口未导入',
+      UNEXPANDED_DIRECTIVE: 'Tailwind 指令未展开',
+      MISSING_BUILD_OUTPUT: '样式产物未生成',
+      MISSING_DEPENDENCY: '缺少样式依赖',
+      METADATA_CONFLICT: '样式配置冲突',
+    }[payload.stylingIssues[0].code]
+    return `样式构建未生效 · ${issueLabel}`
+  }
   if (
     payload.phase === 'dependencies'
     && payload.status === 'retrying'

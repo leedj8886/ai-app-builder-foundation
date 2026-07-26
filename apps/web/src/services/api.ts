@@ -86,6 +86,16 @@ export interface ProjectSnapshotFile {
   language: 'ts' | 'tsx' | 'js' | 'css' | 'json' | 'html' | 'md';
 }
 
+export interface StylingIssue {
+  capability: 'plain-css' | 'tailwind' | 'css-modules' | 'styled-components';
+  code: 'MISSING_DEPENDENCY' | 'MISSING_CONFIGURATION' | 'MISSING_ENTRY_IMPORT'
+    | 'UNEXPANDED_DIRECTIVE' | 'MISSING_BUILD_OUTPUT' | 'METADATA_CONFLICT';
+  phase: 'source-contract' | 'build-evidence';
+  message: string;
+  file?: string;
+  previewRecoverable: boolean;
+}
+
 export interface ProjectSnapshot {
   _id: string;
   summary: string;
@@ -101,7 +111,7 @@ export interface ProjectSnapshot {
       name: 'structure' | 'install' | 'type-check' | 'build';
       phase?: 'structure' | 'dependencies' | 'type-check' | 'build';
       status?: 'passed' | 'failed' | 'retrying' | 'skipped';
-      category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR';
+      category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR';
       command?: string;
       exitCode?: number;
       stdout: string;
@@ -109,7 +119,10 @@ export interface ProjectSnapshot {
       durationMs: number;
       cache?: 'hit' | 'miss' | 'not-applicable';
       attempt?: number;
+      stylingIssues?: StylingIssue[];
     }>;
+    category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR';
+    retryable?: boolean;
   };
 }
 
