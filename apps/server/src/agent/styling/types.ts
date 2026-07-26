@@ -24,3 +24,12 @@ export interface StylingResolution {
   evidence: Partial<Record<StylingCapability, string[]>>;
   issues: StylingIssue[];
 }
+
+export interface StylingAdapter {
+  capability: StylingCapability;
+  validateSource(files: import('../types').ProjectFile[]): StylingIssue[];
+  validateBuild?(input: {
+    files: import('../types').ProjectFile[];
+    cssAssets: Array<{ path: string; content: string }>;
+  }): StylingIssue[];
+}
