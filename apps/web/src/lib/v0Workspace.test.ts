@@ -17,6 +17,39 @@ import {
 } from './v0Workspace'
 
 describe('v0 workspace state', () => {
+  it('completed_with_conflict keeps the validated Snapshot ready', () => {
+    const state = applyAgentRunDetail(
+      startApiGeneration(
+        createInitialWorkspaceState(),
+        'Build competing version',
+        'run_conflict',
+      ),
+      {
+        run: {
+          _id: 'run_conflict',
+          status: 'completed_with_conflict',
+          resultSnapshotId: 'snapshot_conflict',
+        },
+        events: [],
+        resultSnapshot: {
+          _id: 'snapshot_conflict',
+          summary: 'Validated conflicting version',
+          files: [],
+          packageJson: {
+            dependencies: {},
+            devDependencies: {},
+            scripts: {},
+          },
+          validation: { status: 'passed', checks: [] },
+        },
+      },
+    )
+
+    assert.equal(state.generation.status, 'ready')
+    assert.equal(state.snapshot?.id, 'snapshot_conflict')
+    assert.match(state.generation.warning ?? '', /未更新当前分支/)
+  })
+
   it('only treats persisted ObjectId run ids as cancellable', () => {
     assert.equal(isCancellableRunId('64b7f5086f1f8e9f0f000001'), true)
     assert.equal(isCancellableRunId('pending:local-request'), false)

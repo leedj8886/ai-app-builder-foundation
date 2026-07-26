@@ -82,6 +82,7 @@ export interface WorkspaceState {
     status: GenerationStatus
     runId?: string
     error?: string
+    warning?: string
     steps: GenerationStep[]
   }
   snapshot?: WorkspaceSnapshot
@@ -91,7 +92,7 @@ export interface WorkspaceState {
 
 export interface AgentRunSummary {
   _id: string
-  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'failed' | 'cancelled'
+  status: 'waiting_for_capacity' | 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'completed_with_conflict' | 'failed' | 'cancelled'
   resultSnapshotId?: string
   prompt?: string
   createdAt?: string
@@ -432,7 +433,11 @@ export const applyAgentRunDetail = (
     return state
   }
 
-  const terminal = ['completed', 'failed', 'cancelled'].includes(detail.run.status)
+  const completed = detail.run.status === 'completed'
+    || detail.run.status === 'completed_with_conflict'
+  const terminal = completed
+    || detail.run.status === 'failed'
+    || detail.run.status === 'cancelled'
   const snapshot = detail.resultSnapshot
     ? toWorkspaceSnapshot(detail.resultSnapshot)
     : state.snapshot
@@ -451,7 +456,7 @@ export const applyAgentRunDetail = (
     ...state,
     generation: {
       ...state.generation,
-      status: detail.run.status === 'completed'
+      status: completed
         ? 'ready'
         : isCancelled
           ? 'cancelled'
@@ -461,6 +466,9 @@ export const applyAgentRunDetail = (
       runId: detail.run._id,
       error: detail.run.status === 'failed'
         ? diagnostic ?? detail.run.error?.message ?? 'Generation failed'
+        : undefined,
+      warning: detail.run.status === 'completed_with_conflict'
+        ? '代码已通过验证并保存，但当前分支已变化，因此未更新当前分支。'
         : undefined,
       steps: detail.events.length > 0
         ? detail.events.map(mapEventToStep)

@@ -50,12 +50,15 @@ export const authApi = {
 
 export interface AgentRun {
   _id: string;
+  workspaceId?: string;
   projectId: string;
+  branchId?: string;
   prompt: string;
-  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'failed' | 'cancelled';
+  status: 'waiting_for_capacity' | 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'completed_with_conflict' | 'failed' | 'cancelled';
   mode: 'create' | 'edit';
   model?: string;
   baseSnapshotId?: string;
+  baseHeadVersion?: number;
   resultSnapshotId?: string;
   retryOfRunId?: string;
   validationCandidateId?: string;
@@ -123,6 +126,7 @@ export interface RoutedChat {
   _id: string;
   userId: string;
   projectId?: string;
+  branchId?: string;
   title: string;
   messages: Array<{
     id: string;
@@ -137,6 +141,7 @@ export interface RoutedChat {
 export interface ChatListItem {
   _id: string;
   projectId?: string;
+  branchId?: string;
   title: string;
   preview?: string;
   createdAt: string;

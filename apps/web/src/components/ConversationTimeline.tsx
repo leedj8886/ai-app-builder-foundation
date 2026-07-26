@@ -42,6 +42,7 @@ interface ConversationTimelineProps {
 
 const terminalStatuses = new Set([
   'completed',
+  'completed_with_conflict',
   'failed',
   'cancelled',
 ])
@@ -49,6 +50,7 @@ const terminalStatuses = new Set([
 const statusLabel = (
   status: ChatTimelineTurn['agent']['status'],
 ): string => ({
+  waiting_for_capacity: '等待分支资源',
   queued: '等待 Worker',
   running: 'Agent 已开始工作',
   planning: '正在分析需求',
@@ -57,6 +59,7 @@ const statusLabel = (
   repairing: '正在修复',
   persisting: '正在保存 Snapshot',
   completed: '已完成',
+  completed_with_conflict: '已保存，分支已变化',
   failed: '生成失败',
   cancelled: '已取消',
 })[status]

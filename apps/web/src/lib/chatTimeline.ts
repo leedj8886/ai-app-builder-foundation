@@ -16,6 +16,7 @@ export interface ChatTimelineState {
 }
 
 const activeStatuses = new Set<ChatTimelineTurn['agent']['status']>([
+  'waiting_for_capacity',
   'queued',
   'running',
   'planning',
@@ -27,9 +28,14 @@ const activeStatuses = new Set<ChatTimelineTurn['agent']['status']>([
 
 export const terminalStatuses = new Set<ChatTimelineTurn['agent']['status']>([
   'completed',
+  'completed_with_conflict',
   'failed',
   'cancelled',
 ])
+
+const isCompletedStatus = (
+  status: ChatTimelineTurn['agent']['status'],
+): boolean => status === 'completed' || status === 'completed_with_conflict'
 
 export type TimelineEventState = 'active' | 'done' | 'failed'
 
@@ -125,6 +131,11 @@ export const formatCollapsedTurnLabel = (
   if (turn.agent.status === 'cancelled') {
     return '已取消 · 保留已完成的工作步骤'
   }
+  if (turn.agent.status === 'completed_with_conflict') {
+    return `已保存 · 分支已变化 · ${
+      turn.agent.summary ?? turn.snapshot?.summary ?? '替代版本'
+    }`
+  }
 
   const summary = turn.agent.summary ?? turn.agent.plan?.summary ?? '生成完成'
   const changedFiles = turn.snapshot?.changedFiles.length ?? 0
@@ -156,7 +167,7 @@ export const resolveDefaultExpandedRunIds = (
   const expanded = new Set<string>()
   const latestCompleted = [...turns]
     .reverse()
-    .find((turn) => turn.agent.status === 'completed')
+    .find((turn) => isCompletedStatus(turn.agent.status))
 
   if (latestCompleted) expanded.add(latestCompleted.runId)
 
@@ -290,7 +301,11 @@ const statusFromEvent = (
   if (event.type === 'run.started') return 'running'
   if (event.type === 'validation.started') return 'validating'
   if (event.type === 'repair.started') return 'repairing'
-  if (event.type === 'run.completed') return 'completed'
+  if (event.type === 'run.completed') {
+    return event.payload?.conflict === true
+      ? 'completed_with_conflict'
+      : 'completed'
+  }
   if (event.type === 'run.failed') return 'failed'
   if (event.type === 'run.cancelled') return 'cancelled'
   const phase = event.type === 'agent.step'
@@ -362,7 +377,7 @@ export const applyTimelineEvent = (
     ? event.createdAt
     : turn.agent.startedAt
   const completedAt = (
-    status === 'completed'
+    isCompletedStatus(status)
     || status === 'failed'
     || status === 'cancelled'
   ) ? event.createdAt : turn.agent.completedAt
@@ -399,9 +414,12 @@ export const applyTimelineEvent = (
     },
   }
   const expandedRunIds = new Set(appended.expandedRunIds)
-  if (status === 'completed') {
+  if (isCompletedStatus(status)) {
     for (const candidate of turns) {
-      if (candidate.runId !== runId && candidate.agent.status === 'completed') {
+      if (
+        candidate.runId !== runId
+        && isCompletedStatus(candidate.agent.status)
+      ) {
         expandedRunIds.delete(candidate.runId)
       }
     }
