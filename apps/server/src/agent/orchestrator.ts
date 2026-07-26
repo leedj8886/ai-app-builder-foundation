@@ -350,6 +350,7 @@ const publicAgentError = (
   const knownCodes = new Set([
     'PROJECT_NOT_FOUND',
     'INVALID_CHAT_BRANCH',
+    'BRANCH_EXECUTION_LOST',
     'INVALID_BASE_SNAPSHOT',
     'INVALID_MODEL_OUTPUT',
     'MODEL_REQUEST_FAILED',
@@ -426,10 +427,15 @@ const activateSnapshotIfBaseIsCurrent = async (
   );
 };
 
+interface BranchExecutionContext {
+  assertHeld(): Promise<void>;
+}
+
 export const processAgentRun = async (
   job: AgentRunJobData,
   modelClient: ModelClient,
-  validator: ProjectValidator
+  validator: ProjectValidator,
+  execution?: BranchExecutionContext
 ): Promise<void> => {
   const run = await AgentRun.findById(job.runId);
 
@@ -581,6 +587,7 @@ export const processAgentRun = async (
       }
     });
 
+    await execution?.assertHeld();
     await transitionRun(run, 'validating', 'persisting');
     const snapshot = await ProjectSnapshot.create({
         userId: run.userId,
@@ -724,7 +731,8 @@ export const processAgentRun = async (
 
 export const processValidationCandidate = async (
   jobData: AgentRunJobData,
-  validator: ProjectValidator
+  validator: ProjectValidator,
+  execution?: BranchExecutionContext
 ): Promise<void> => {
   if (!jobData.candidateId) {
     throw new Error('Retry-validation job requires a candidate id');
@@ -785,6 +793,7 @@ export const processValidationCandidate = async (
       message: 'Project validation passed',
       payload: validation
     });
+    await execution?.assertHeld();
     await transitionRun(run, 'validating', 'persisting');
     const snapshot = await ProjectSnapshot.create({
       userId: run.userId,

@@ -17,6 +17,8 @@ import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { User } from '../models/User';
+import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
+import { ensureMainBranch } from '../branches/branchService';
 import {
   createIntegrationEnvironment,
   type IntegrationEnvironment
@@ -42,17 +44,23 @@ const createQueuedRun = async () => {
     password: 'password',
     name: 'Worker owner'
   });
+  const { workspace } = await ensureDefaultWorkspaceForUser(user._id);
   const project = await Project.create({
+    workspaceId: workspace._id,
     userId: user._id,
     name: 'Worker project'
   });
+  const branch = await ensureMainBranch(project);
   const run = await AgentRun.create({
     userId: user._id,
+    workspaceId: workspace._id,
     projectId: project._id,
+    branchId: branch._id,
     prompt: 'Build a dashboard',
     status: 'queued',
     mode: 'create',
     baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
     maxRepairAttempts: 2,
     model: 'fake-model'
   });
@@ -72,6 +80,7 @@ const createQueuedChatRun = async () => {
   const chat = await Chat.create({
     userId: fixture.user._id,
     projectId: fixture.project._id,
+    branchId: fixture.run.branchId,
     title: 'Worker chat',
     messages: [{
       id: crypto.randomUUID(),
@@ -90,7 +99,12 @@ const waitForTerminalRun = async (runId: string) => {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const run = await AgentRun.findById(runId);
-    if (run && ['completed', 'failed', 'cancelled'].includes(run.status)) {
+    if (run && [
+      'completed',
+      'completed_with_conflict',
+      'failed',
+      'cancelled'
+    ].includes(run.status)) {
       return run;
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -108,7 +122,7 @@ const withWorker = async (
     connection: { url: environment.redisUrl },
     modelClient,
     validator,
-    concurrency: 1
+    concurrency: 2
   });
   try {
     await worker.waitUntilReady();
@@ -117,6 +131,56 @@ const withWorker = async (
     await worker.close();
   }
 };
+
+test('two Runs on one Branch never execute their models concurrently', async () => {
+  const first = await createQueuedRun();
+  const branch = await ensureMainBranch(first.project);
+  const secondRun = await AgentRun.create({
+    userId: first.user._id,
+    workspaceId: first.project.workspaceId,
+    projectId: first.project._id,
+    branchId: branch._id,
+    prompt: 'Second change',
+    status: 'queued',
+    mode: 'create',
+    baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
+    maxRepairAttempts: 2,
+    model: 'fake-model'
+  });
+
+  let active = 0;
+  let maxActive = 0;
+  const model = createFakeModelClient();
+  const originalPlan = model.generatePlan;
+  model.generatePlan = async input => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    try {
+      return await originalPlan(input);
+    } finally {
+      active -= 1;
+    }
+  };
+
+  await Promise.all([
+    enqueueAgentRun(first.run._id.toString()),
+    enqueueAgentRun(secondRun._id.toString())
+  ]);
+  await withWorker(model, createPassingValidator(), async () => {
+    const completed = await Promise.all([
+      waitForTerminalRun(first.run._id.toString()),
+      waitForTerminalRun(secondRun._id.toString())
+    ]);
+    assert.deepEqual(
+      completed.map(run => run.status),
+      ['completed', 'completed']
+    );
+  });
+
+  assert.equal(maxActive, 1);
+});
 
 test('BullMQ Create run seeds required files when the model only updates App', async () => {
   const { run } = await createQueuedRun();
