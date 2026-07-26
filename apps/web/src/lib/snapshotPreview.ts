@@ -12,6 +12,7 @@ export interface SnapshotPreviewModel {
 const supportedLanguages = new Set([
   'ts',
   'tsx',
+  'js',
   'css',
   'json',
   'html',

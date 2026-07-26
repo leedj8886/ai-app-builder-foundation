@@ -109,6 +109,21 @@ describe('snapshot preview conversion', () => {
     )
   })
 
+  it('includes JavaScript configuration files in the preview model', () => {
+    const tailwindConfig = 'module.exports = { content: ["./src/**/*.{ts,tsx}"] }'
+    const postcssConfig = 'module.exports = { plugins: { tailwindcss: {} } }'
+    const result = createSnapshotPreviewModel(createSnapshot({
+      files: [
+        ...validFiles(),
+        { path: 'tailwind.config.js', content: tailwindConfig, language: 'js' },
+        { path: 'postcss.config.cjs', content: postcssConfig, language: 'js' },
+      ],
+    }))
+
+    assert.equal(result.files['/tailwind.config.js'], tailwindConfig)
+    assert.equal(result.files['/postcss.config.cjs'], postcssConfig)
+  })
+
   it('rejects unsafe unsupported duplicate and missing-entry snapshots', () => {
     const assertConversionError = (
       files: SnapshotFile[],

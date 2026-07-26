@@ -83,7 +83,7 @@ export interface AgentEvent {
 export interface ProjectSnapshotFile {
   path: string;
   content: string;
-  language: 'ts' | 'tsx' | 'css' | 'json' | 'html' | 'md';
+  language: 'ts' | 'tsx' | 'js' | 'css' | 'json' | 'html' | 'md';
 }
 
 export interface ProjectSnapshot {

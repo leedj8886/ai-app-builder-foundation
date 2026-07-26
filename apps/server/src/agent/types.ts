@@ -51,7 +51,15 @@ export interface AgentErrorPayload {
   details?: unknown;
 }
 
-export const projectFileLanguages = ['ts', 'tsx', 'css', 'json', 'html', 'md'] as const;
+export const projectFileLanguages = [
+  'ts',
+  'tsx',
+  'js',
+  'css',
+  'json',
+  'html',
+  'md'
+] as const;
 
 export type ProjectFileLanguage = (typeof projectFileLanguages)[number];
 

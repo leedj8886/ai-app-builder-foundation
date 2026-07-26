@@ -9,6 +9,9 @@ import {
 const supportedExtensions: Record<string, ProjectFileLanguage> = {
   '.ts': 'ts',
   '.tsx': 'tsx',
+  '.js': 'js',
+  '.cjs': 'js',
+  '.mjs': 'js',
   '.css': 'css',
   '.json': 'json',
   '.html': 'html',

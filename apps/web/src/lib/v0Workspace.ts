@@ -26,7 +26,7 @@ export interface GenerationStep {
 export interface SnapshotFile {
   path: string
   content: string
-  language: 'ts' | 'tsx' | 'css' | 'json' | 'html' | 'md'
+  language: 'ts' | 'tsx' | 'js' | 'css' | 'json' | 'html' | 'md'
 }
 
 export interface WorkspaceSnapshot {
