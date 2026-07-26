@@ -9,6 +9,9 @@ import {
 const supportedExtensions: Record<string, ProjectFileLanguage> = {
   '.ts': 'ts',
   '.tsx': 'tsx',
+  '.js': 'js',
+  '.cjs': 'js',
+  '.mjs': 'js',
   '.css': 'css',
   '.json': 'json',
   '.html': 'html',
@@ -18,6 +21,8 @@ const supportedExtensions: Record<string, ProjectFileLanguage> = {
 const requiredTemplateFiles = new Set([
   'package.json',
   'index.html',
+  'postcss.config.cjs',
+  'tailwind.config.js',
   'src/main.tsx'
 ]);
 

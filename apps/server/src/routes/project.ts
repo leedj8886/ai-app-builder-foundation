@@ -5,6 +5,7 @@ import { Chat } from '../models/Chat';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { objectIdParamSchema } from '../agent/schemas';
+import { compilePreviewCss } from '../agent/styling/compilePreviewCss';
 
 const router = Router();
 
@@ -151,7 +152,19 @@ router.get('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => 
       return;
     }
 
-    res.json({ snapshot });
+    const snapshotData = snapshot.toObject();
+    const previewCss = await compilePreviewCss(
+      snapshotData.files.map(file => ({
+        ...file,
+        language: file.language
+      }))
+    );
+    res.json({
+      snapshot: {
+        ...snapshotData,
+        ...(previewCss && { previewCss })
+      }
+    });
   } catch (error) {
     next(error);
   }

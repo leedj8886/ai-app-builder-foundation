@@ -10,9 +10,11 @@ test('createProjectTemplateFiles returns a complete React Vite entry', () => {
 
   assert.deepEqual(files.map(file => file.path), [
     'index.html',
+    'postcss.config.cjs',
     'src/App.tsx',
     'src/index.css',
     'src/main.tsx',
+    'tailwind.config.js',
     'tsconfig.json'
   ]);
   assert.equal(
@@ -70,6 +72,14 @@ test('resolveProjectBaseFiles uses a snapshot even when it has no files', () => 
 test('resolveProjectBaseFiles creates the template only without a snapshot', () => {
   assert.deepEqual(
     resolveProjectBaseFiles(undefined).map(file => file.path),
-    ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx', 'tsconfig.json']
+    [
+      'index.html',
+      'postcss.config.cjs',
+      'src/App.tsx',
+      'src/index.css',
+      'src/main.tsx',
+      'tailwind.config.js',
+      'tsconfig.json'
+    ]
   );
 });

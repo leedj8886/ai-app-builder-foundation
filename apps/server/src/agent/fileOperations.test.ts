@@ -51,6 +51,12 @@ test('inferProjectFileLanguage maps supported extensions', () => {
   assert.equal(inferProjectFileLanguage('README.md'), 'md');
 });
 
+test('inferProjectFileLanguage maps JavaScript configuration extensions', () => {
+  assert.equal(inferProjectFileLanguage('tailwind.config.js'), 'js');
+  assert.equal(inferProjectFileLanguage('postcss.config.cjs'), 'js');
+  assert.equal(inferProjectFileLanguage('vite.config.mjs'), 'js');
+});
+
 test('applyFileOperations rejects unsafe paths and unsupported files', () => {
   assert.throws(
     () => applyFileOperations([], [{ type: 'create', path: '/tmp/App.tsx', content: '' }]),
@@ -85,4 +91,13 @@ test('applyFileOperations does not delete required template files', () => {
       ),
     /required file/
   );
+  for (const path of ['tailwind.config.js', 'postcss.config.cjs']) {
+    assert.throws(
+      () => applyFileOperations(
+        [{ path, content: '', language: 'js' }],
+        [{ type: 'delete', path }]
+      ),
+      /required file/
+    );
+  }
 });

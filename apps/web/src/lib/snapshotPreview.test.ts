@@ -109,6 +109,37 @@ describe('snapshot preview conversion', () => {
     )
   })
 
+  it('includes JavaScript configuration files in the preview model', () => {
+    const tailwindConfig = 'module.exports = { content: ["./src/**/*.{ts,tsx}"] }'
+    const postcssConfig = 'module.exports = { plugins: { tailwindcss: {} } }'
+    const result = createSnapshotPreviewModel(createSnapshot({
+      files: [
+        ...validFiles(),
+        { path: 'tailwind.config.js', content: tailwindConfig, language: 'js' },
+        { path: 'postcss.config.cjs', content: postcssConfig, language: 'js' },
+      ],
+    }))
+
+    assert.equal(result.files['/tailwind.config.js'], tailwindConfig)
+    assert.equal(result.files['/postcss.config.cjs'], postcssConfig)
+  })
+
+  it('adds in-memory Tailwind compatibility to an old snapshot', () => {
+    const source = createSnapshot({
+      files: validFiles().map(file => file.path === 'src/index.css'
+        ? { ...file, content: '@tailwind base;\n@tailwind utilities;' }
+        : file),
+      devDependencies: { tailwindcss: '^3.4.17' },
+    })
+    const original = structuredClone(source)
+    const result = createSnapshotPreviewModel(source)
+
+    assert.match(result.files['/tailwind.config.js']!, /src\/\*\*/)
+    assert.match(result.files['/postcss.config.cjs']!, /tailwindcss/)
+    assert.equal(result.dependencies.tailwindcss, '^3.4.17')
+    assert.deepEqual(source, original)
+  })
+
   it('rejects unsafe unsupported duplicate and missing-entry snapshots', () => {
     const assertConversionError = (
       files: SnapshotFile[],

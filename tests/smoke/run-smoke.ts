@@ -43,6 +43,15 @@ const main = async (): Promise<void> => {
   try {
     await run('docker', [...composeArgs, 'up', '-d', '--build', '--wait'], smokeEnv);
     await run('npm', ['run', 'test:smoke:api'], smokeEnv);
+    await run('docker', [
+      ...composeArgs,
+      'exec',
+      '-T',
+      '-e', 'SMOKE_LEGACY_STYLING_SEED=true',
+      'server',
+      'node',
+      'dist/testing/seedLegacyStylingSmoke.js'
+    ], smokeEnv);
     await run('npm', ['run', 'test:smoke:browser'], smokeEnv);
   } catch (error) {
     failed = true;

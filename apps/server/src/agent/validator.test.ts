@@ -117,6 +117,70 @@ test('project validator stops before npm on structural failure', async () => {
   assert.equal(calls, 0);
 });
 
+test('project validator stops before npm on styling contract failure', async () => {
+  let calls = 0;
+  const validator = createProjectValidator({
+    workspaceRoot: '/tmp/unused',
+    validation,
+    commandRunner: async () => {
+      calls += 1;
+      return success();
+    }
+  });
+  const result = await validator.validate({
+    runId: 'run-styling',
+    files: projectFiles().filter(file =>
+      !['tailwind.config.js', 'postcss.config.cjs'].includes(file.path)
+    )
+  });
+  assert.equal(result.status, 'failed');
+  assert.equal(result.category, 'STYLING_CONFIGURATION_ERROR');
+  assert.equal(
+    result.checks.at(-1)?.stylingIssues?.[0]?.code,
+    'MISSING_CONFIGURATION'
+  );
+  assert.equal(calls, 0);
+});
+
+test('project validator reports ineffective styling build evidence', async () => {
+  const progress: Array<{ category?: string; stylingIssues?: unknown[] }> = [];
+  const validator = createProjectValidator({
+    workspaceRoot: '/tmp/unused',
+    validation,
+    dependencyCache: {
+      prepare: async () => ({
+        cache: 'hit',
+        nodeModulesPath: '/tmp/cache/node_modules'
+      })
+    },
+    createWorkspace: async () => ({
+      path: '/tmp/workspace',
+      cleanup: async () => {}
+    }),
+    commandRunner: async () => success(),
+    cssEvidenceReader: async () => [{
+      path: 'dist/app.css',
+      content: '@tailwind utilities;'
+    }]
+  });
+
+  const result = await validator.validate({
+    runId: 'run-styling-build',
+    files: projectFiles(),
+    onProgress: event => {
+      progress.push(event);
+    }
+  });
+
+  assert.equal(result.category, 'STYLING_CONFIGURATION_ERROR');
+  assert.equal(
+    result.checks.at(-1)?.stylingIssues?.[0]?.code,
+    'UNEXPANDED_DIRECTIVE'
+  );
+  assert.equal(progress.at(-1)?.category, 'STYLING_CONFIGURATION_ERROR');
+  assert.equal(progress.at(-1)?.stylingIssues?.length, 1);
+});
+
 test('project validator retries infrastructure install failures and cleans up', async () => {
   let calls = 0;
   let cleaned = false;

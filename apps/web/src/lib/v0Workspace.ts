@@ -26,7 +26,7 @@ export interface GenerationStep {
 export interface SnapshotFile {
   path: string
   content: string
-  language: 'ts' | 'tsx' | 'css' | 'json' | 'html' | 'md'
+  language: 'ts' | 'tsx' | 'js' | 'css' | 'json' | 'html' | 'md'
 }
 
 export interface WorkspaceSnapshot {
@@ -36,6 +36,7 @@ export interface WorkspaceSnapshot {
   selectedFilePath: string | null
   packageJson: SnapshotPackageJson
   validation: SnapshotValidation
+  previewCss?: string
 }
 
 export interface SnapshotPackageJson {
@@ -48,7 +49,7 @@ export interface SnapshotValidationCheck {
   name: 'structure' | 'install' | 'type-check' | 'build'
   phase?: 'structure' | 'dependencies' | 'type-check' | 'build'
   status?: 'passed' | 'failed' | 'retrying' | 'skipped'
-  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR'
+  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR'
   command?: string
   exitCode?: number
   stdout: string
@@ -56,6 +57,7 @@ export interface SnapshotValidationCheck {
   durationMs: number
   cache?: 'hit' | 'miss' | 'not-applicable'
   attempt?: number
+  stylingIssues?: import('@/services/api').StylingIssue[]
 }
 
 export interface SnapshotValidation {
@@ -123,6 +125,7 @@ export interface AgentRunDetail {
     files: SnapshotFile[]
     packageJson: SnapshotPackageJson
     validation: SnapshotValidation
+    previewCss?: string
   } | null
 }
 
@@ -217,6 +220,7 @@ const toWorkspaceSnapshot = (
     null,
   packageJson: snapshot.packageJson,
   validation: snapshot.validation,
+  previewCss: snapshot.previewCss,
 })
 
 export const applySnapshotList = (
@@ -441,7 +445,7 @@ export const applyAgentRunDetail = (
     (check) => check.status === 'failed'
       || (check.exitCode !== undefined && check.exitCode !== 0),
   )
-  const diagnostic = [failedCheck?.stderr, failedCheck?.stdout]
+  const diagnostic = failedCheck?.stylingIssues?.[0]?.message ?? [failedCheck?.stderr, failedCheck?.stdout]
     .flatMap((output) => output?.split('\n') ?? [])
     .map((line) => line.trim())
     .find(Boolean)

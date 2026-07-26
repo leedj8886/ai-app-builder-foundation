@@ -169,6 +169,22 @@ test('labels infrastructure retries and only exposes retry for retryable failure
   assert.equal(canRetryValidation(codeFailure), false)
 })
 
+test('labels structured styling build failures', () => {
+  assert.equal(validationEventLabel({
+    phase: 'build',
+    status: 'failed',
+    category: 'STYLING_CONFIGURATION_ERROR',
+    attempt: 0,
+    stylingIssues: [{
+      capability: 'tailwind',
+      code: 'UNEXPANDED_DIRECTIVE',
+      phase: 'build-evidence',
+      message: 'The emitted CSS still contains unexpanded Tailwind directives',
+      previewRecoverable: false,
+    }],
+  }), '样式构建未生效 · Tailwind 指令未展开')
+})
+
 test('marks completed lifecycle events as done instead of leaving empty circles', () => {
   const queuedEvent: ChatTimelineEvent = {
     type: 'run.created',

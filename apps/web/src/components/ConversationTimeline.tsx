@@ -71,10 +71,11 @@ const eventLabel = (event: ChatTimelineEvent): string => {
     return validationEventLabel(event.payload as {
       phase: 'structure' | 'dependencies' | 'type-check' | 'build'
       status: 'passed' | 'failed' | 'retrying' | 'skipped'
-      category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR'
+      category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR'
       attempt: number
       retryDelayMs?: number
       cache?: 'hit' | 'miss' | 'not-applicable'
+      stylingIssues?: import('@/services/api').StylingIssue[]
     })
   }
   const phase = typeof event.payload?.phase === 'string'

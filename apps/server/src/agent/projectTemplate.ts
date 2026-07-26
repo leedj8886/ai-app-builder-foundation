@@ -1,4 +1,8 @@
 import { ProjectFile } from './types';
+import {
+  createPostcssConfig,
+  createTailwindConfig
+} from './styling/tailwindAdapter';
 
 export const createProjectTemplateFiles = (): ProjectFile[] => [
   {
@@ -17,6 +21,11 @@ export const createProjectTemplateFiles = (): ProjectFile[] => [
   </body>
 </html>
 `
+  },
+  {
+    path: 'postcss.config.cjs',
+    language: 'js',
+    content: createPostcssConfig()
   },
   {
     path: 'src/App.tsx',
@@ -64,6 +73,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 `
+  },
+  {
+    path: 'tailwind.config.js',
+    language: 'js',
+    content: createTailwindConfig()
   },
   {
     path: 'tsconfig.json',

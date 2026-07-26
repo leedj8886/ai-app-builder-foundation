@@ -3,8 +3,10 @@ import {
   ProjectFileLanguage,
   ProjectSnapshotPackageJson,
   ValidationResult,
-  projectFileLanguages
+  projectFileLanguages,
+  validationErrorCategories
 } from '../agent/types';
+import type { StylingIssue } from '../agent/styling/types';
 
 export interface IProjectFile {
   path: string;
@@ -48,6 +50,37 @@ const PackageJsonSchema = new Schema<ProjectSnapshotPackageJson>(
   { _id: false }
 );
 
+const StylingIssueSchema = new Schema<StylingIssue>(
+  {
+    capability: {
+      type: String,
+      enum: ['plain-css', 'tailwind', 'css-modules', 'styled-components'],
+      required: true
+    },
+    code: {
+      type: String,
+      enum: [
+        'MISSING_DEPENDENCY',
+        'MISSING_CONFIGURATION',
+        'MISSING_ENTRY_IMPORT',
+        'UNEXPANDED_DIRECTIVE',
+        'MISSING_BUILD_OUTPUT',
+        'METADATA_CONFLICT'
+      ],
+      required: true
+    },
+    phase: {
+      type: String,
+      enum: ['source-contract', 'build-evidence'],
+      required: true
+    },
+    message: { type: String, required: true },
+    file: String,
+    previewRecoverable: { type: Boolean, required: true }
+  },
+  { _id: false }
+);
+
 const ValidationSchema = new Schema<ValidationResult>(
   {
     status: {
@@ -73,7 +106,7 @@ const ValidationSchema = new Schema<ValidationResult>(
           },
           category: {
             type: String,
-            enum: ['CODE_ERROR', 'DEPENDENCY_ERROR', 'INFRA_ERROR']
+            enum: validationErrorCategories
           },
           command: String,
           exitCode: Number,
@@ -85,7 +118,11 @@ const ValidationSchema = new Schema<ValidationResult>(
             enum: ['hit', 'miss', 'not-applicable'],
             default: 'not-applicable'
           },
-          attempt: { type: Number, default: 0 }
+          attempt: { type: Number, default: 0 },
+          stylingIssues: {
+            type: [StylingIssueSchema],
+            default: undefined
+          }
         }
       ],
       required: true,
@@ -93,7 +130,7 @@ const ValidationSchema = new Schema<ValidationResult>(
     },
     category: {
       type: String,
-      enum: ['CODE_ERROR', 'DEPENDENCY_ERROR', 'INFRA_ERROR']
+      enum: validationErrorCategories
     },
     retryable: Boolean
   },
