@@ -154,18 +154,12 @@ describe('v0 workspace state', () => {
         summary: 'New snapshot',
         fileCount: 2,
         isActive: true,
-        packageJson: {
-          dependencies: { react: '^18.3.0' },
-          devDependencies: {},
-          scripts: {},
-        },
         validation: { status: 'passed', checks: [] },
         createdAt: '2026-07-25T00:00:00.000Z',
       },
     ])
 
     assert.equal(state.snapshots[0]?.isActive, true)
-    assert.equal(state.snapshots[0]?.packageJson.dependencies.react, '^18.3.0')
   })
 
   it('applies a workspace snapshot and selects its app file', () => {
@@ -334,7 +328,6 @@ describe('v0 workspace state', () => {
         }),
         [{
           id: 'snapshot_current', summary: 'Current', fileCount: 1, isActive: true,
-          packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
           validation: { status: 'passed', checks: [] }, createdAt: '2026-07-25T00:00:00.000Z',
         }],
       ),

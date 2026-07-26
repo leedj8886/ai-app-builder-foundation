@@ -68,7 +68,6 @@ export interface SnapshotSummary {
   summary: string
   fileCount: number
   isActive: boolean
-  packageJson: SnapshotPackageJson
   validation: SnapshotValidation
   createdAt: string
 }

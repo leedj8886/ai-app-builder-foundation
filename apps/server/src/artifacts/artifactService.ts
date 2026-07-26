@@ -146,6 +146,27 @@ export class ArtifactService {
 
   async readBundle(artifactId: string): Promise<ProjectArtifactBundleV1> {
     const manifest = await ArtifactManifest.findOne({ artifactId }).lean();
+    return this.readManifest(manifest);
+  }
+
+  async readOwnedBundle(input: {
+    artifactId: string;
+    workspaceId: Types.ObjectId;
+    projectId: Types.ObjectId;
+    kind: ArtifactKind;
+  }): Promise<ProjectArtifactBundleV1> {
+    const manifest = await ArtifactManifest.findOne({
+      artifactId: input.artifactId,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      kind: input.kind
+    }).lean();
+    return this.readManifest(manifest);
+  }
+
+  private async readManifest(
+    manifest: IArtifactManifest | null
+  ): Promise<ProjectArtifactBundleV1> {
     if (!manifest) {
       throw artifactError('ARTIFACT_NOT_FOUND', 'Artifact manifest not found');
     }
@@ -160,7 +181,7 @@ export class ArtifactService {
       return await this.verifyStored(manifest);
     } catch (error) {
       if (!isContentVerificationError(error)) throw error;
-      await this.markCorrupt(artifactId, error, 'ready');
+      await this.markCorrupt(manifest.artifactId, error, 'ready');
       if (error.code === 'ARTIFACT_FORMAT_UNSUPPORTED') throw error;
       throw artifactError(
         'ARTIFACT_CORRUPT',

@@ -11,6 +11,7 @@ import { ProjectBranch } from '../models/ProjectBranch';
 import { BranchExecutionLease } from '../models/BranchExecutionLease';
 import { Chat } from '../models/Chat';
 import { ArtifactManifest } from '../models/ArtifactManifest';
+import { ValidationCandidate } from '../models/ValidationCandidate';
 
 test('ArtifactManifest exposes integrity metadata and exact indexes', () => {
   const paths = [
@@ -143,6 +144,26 @@ test('AgentRun model exposes required paths and indexes', () => {
   assert.deepEqual(indexes[0], { userId: 1, updatedAt: -1 });
   assert.deepEqual(indexes[1], { projectId: 1, updatedAt: -1 });
   assert.deepEqual(indexes[2], { status: 1, updatedAt: 1 });
+  assert.deepEqual(indexes[5], { retryOfRunId: 1 });
+  assert.deepEqual(AgentRun.schema.indexes()[5]?.[1], {
+    unique: true,
+    partialFilterExpression: {
+      retryOfRunId: { $type: 'objectId' },
+      status: {
+        $in: [
+          'waiting_for_capacity',
+          'queued',
+          'running',
+          'planning',
+          'generating',
+          'validating',
+          'repairing',
+          'persisting'
+        ]
+      }
+    },
+    background: true
+  });
 });
 
 test('AgentEvent model stores sequence per run', () => {
@@ -155,37 +176,61 @@ test('AgentEvent model stores sequence per run', () => {
   assert.deepEqual(indexes[1], { userId: 1, createdAt: -1 });
 });
 
-test('ProjectSnapshot model stores full file tree snapshots', () => {
+test('ProjectSnapshot stores artifact references without source content', () => {
+  assert.ok(ProjectSnapshot.schema.path('workspaceId'));
+  assert.ok(ProjectSnapshot.schema.path('branchId'));
   assert.ok(ProjectSnapshot.schema.path('userId'));
   assert.ok(ProjectSnapshot.schema.path('projectId'));
   assert.ok(ProjectSnapshot.schema.path('sourceRunId'));
   assert.ok(ProjectSnapshot.schema.path('parentSnapshotId'));
-  assert.ok(ProjectSnapshot.schema.path('files'));
-  assert.ok(ProjectSnapshot.schema.path('packageJson'));
+  assert.ok(ProjectSnapshot.schema.path('artifactId'));
+  assert.equal(ProjectSnapshot.schema.path('files'), undefined);
+  assert.equal(ProjectSnapshot.schema.path('packageJson'), undefined);
   assert.ok(ProjectSnapshot.schema.path('validation'));
   assert.ok(ProjectSnapshot.schema.path('summary'));
 
   const indexes = ProjectSnapshot.schema.indexes().map(([fields]) => fields);
-  assert.deepEqual(indexes[0], { projectId: 1, createdAt: -1 });
-  assert.deepEqual(indexes[1], { userId: 1, createdAt: -1 });
-  assert.deepEqual(indexes[2], { sourceRunId: 1 });
+  assert.deepEqual(indexes, [
+    { projectId: 1, createdAt: -1 },
+    { userId: 1, createdAt: -1 },
+    { sourceRunId: 1 },
+    { artifactId: 1 }
+  ]);
+  assert.equal(ProjectSnapshot.schema.indexes()[2]?.[1].unique, true);
+});
+
+test('ValidationCandidate stores artifact references without source content', () => {
+  assert.ok(ValidationCandidate.schema.path('workspaceId'));
+  assert.ok(ValidationCandidate.schema.path('branchId'));
+  assert.ok(ValidationCandidate.schema.path('userId'));
+  assert.ok(ValidationCandidate.schema.path('projectId'));
+  assert.ok(ValidationCandidate.schema.path('sourceRunId'));
+  assert.ok(ValidationCandidate.schema.path('artifactId'));
+  assert.equal(ValidationCandidate.schema.path('files'), undefined);
+  assert.equal(ValidationCandidate.schema.path('packageJson'), undefined);
+  assert.ok(ValidationCandidate.schema.path('summary'));
+  assert.ok(ValidationCandidate.schema.path('expiresAt'));
+
+  assert.deepEqual(
+    ValidationCandidate.schema.indexes().map(([fields]) => fields),
+    [
+      { expiresAt: 1 },
+      { userId: 1, sourceRunId: 1 },
+      { artifactId: 1 },
+      { sourceRunId: 1 }
+    ]
+  );
+  assert.equal(ValidationCandidate.schema.indexes()[3]?.[1].unique, true);
 });
 
 test('ProjectSnapshot accepts successful validation checks with empty output streams', () => {
   const snapshot = new ProjectSnapshot({
+    workspaceId: new Types.ObjectId(),
+    branchId: new Types.ObjectId(),
     userId: new Types.ObjectId(),
     projectId: new Types.ObjectId(),
     sourceRunId: new Types.ObjectId(),
-    files: [{
-      path: 'index.html',
-      content: '<div id="root"></div>',
-      language: 'html'
-    }],
-    packageJson: {
-      dependencies: {},
-      devDependencies: {},
-      scripts: {}
-    },
+    artifactId: 'a'.repeat(32),
     validation: {
       status: 'passed',
       checks: [{

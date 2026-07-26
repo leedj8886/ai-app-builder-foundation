@@ -118,6 +118,39 @@ test('same idempotency key and bundle returns one verified artifact', async () =
   assert.deepEqual(await service.readBundle(first.artifactId), normalizedBundle);
 });
 
+test('owned reads require the complete Workspace Project and kind scope', async () => {
+  const service = serviceFor();
+  const references = ids();
+  const result = await service.writeBundle({
+    ...references,
+    kind: 'project_snapshot',
+    idempotencyKey: `snapshot:${references.createdByRunId}`,
+    bundle
+  });
+
+  assert.deepEqual(
+    await service.readOwnedBundle({
+      artifactId: result.artifactId,
+      workspaceId: references.workspaceId,
+      projectId: references.projectId,
+      kind: 'project_snapshot'
+    }),
+    normalizedBundle
+  );
+  for (const ownership of [
+    { workspaceId: new Types.ObjectId(), projectId: references.projectId, kind: 'project_snapshot' as const },
+    { workspaceId: references.workspaceId, projectId: new Types.ObjectId(), kind: 'project_snapshot' as const },
+    { workspaceId: references.workspaceId, projectId: references.projectId, kind: 'validation_candidate' as const }
+  ]) {
+    await expectCode('ARTIFACT_NOT_FOUND', () =>
+      service.readOwnedBundle({
+        artifactId: result.artifactId,
+        ...ownership
+      })
+    );
+  }
+});
+
 test('concurrent writers with the same key converge on one artifact', async () => {
   const references = ids();
   const input = {

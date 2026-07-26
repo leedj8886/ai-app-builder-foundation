@@ -1,52 +1,18 @@
 import mongoose, { Schema, Types } from 'mongoose';
-import {
-  ProjectFileLanguage,
-  ProjectSnapshotPackageJson,
-  ValidationResult,
-  projectFileLanguages
-} from '../agent/types';
-
-export interface IProjectFile {
-  path: string;
-  content: string;
-  language: ProjectFileLanguage;
-  generatedByRunId?: Types.ObjectId;
-}
+import { ValidationResult } from '../agent/types';
 
 export interface IProjectSnapshot {
+  workspaceId: Types.ObjectId;
+  branchId: Types.ObjectId;
   userId: Types.ObjectId;
   projectId: Types.ObjectId;
   sourceRunId: Types.ObjectId;
   parentSnapshotId?: Types.ObjectId;
-  files: IProjectFile[];
-  packageJson: ProjectSnapshotPackageJson;
+  artifactId: string;
   validation: ValidationResult;
   summary: string;
   createdAt: Date;
 }
-
-const ProjectFileSchema = new Schema<IProjectFile>(
-  {
-    path: { type: String, required: true, trim: true },
-    content: { type: String, required: true },
-    language: {
-      type: String,
-      enum: projectFileLanguages,
-      required: true
-    },
-    generatedByRunId: { type: Schema.Types.ObjectId, ref: 'AgentRun' }
-  },
-  { _id: false }
-);
-
-const PackageJsonSchema = new Schema<ProjectSnapshotPackageJson>(
-  {
-    dependencies: { type: Map, of: String, required: true, default: {} },
-    devDependencies: { type: Map, of: String, required: true, default: {} },
-    scripts: { type: Map, of: String, required: true, default: {} }
-  },
-  { _id: false }
-);
 
 const ValidationSchema = new Schema<ValidationResult>(
   {
@@ -102,16 +68,13 @@ const ValidationSchema = new Schema<ValidationResult>(
 
 const ProjectSnapshotSchema = new Schema<IProjectSnapshot>(
   {
+    workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace', required: true },
+    branchId: { type: Schema.Types.ObjectId, ref: 'ProjectBranch', required: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
     sourceRunId: { type: Schema.Types.ObjectId, ref: 'AgentRun', required: true },
     parentSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
-    files: {
-      type: [ProjectFileSchema],
-      required: true,
-      default: []
-    },
-    packageJson: { type: PackageJsonSchema, required: true },
+    artifactId: { type: String, required: true, trim: true },
     validation: { type: ValidationSchema, required: true },
     summary: { type: String, required: true, trim: true }
   },
@@ -122,7 +85,8 @@ const ProjectSnapshotSchema = new Schema<IProjectSnapshot>(
 
 ProjectSnapshotSchema.index({ projectId: 1, createdAt: -1 });
 ProjectSnapshotSchema.index({ userId: 1, createdAt: -1 });
-ProjectSnapshotSchema.index({ sourceRunId: 1 });
+ProjectSnapshotSchema.index({ sourceRunId: 1 }, { unique: true });
+ProjectSnapshotSchema.index({ artifactId: 1 });
 
 export const ProjectSnapshot =
   (mongoose.models.ProjectSnapshot as mongoose.Model<IProjectSnapshot> | undefined) ||

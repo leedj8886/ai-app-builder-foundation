@@ -116,6 +116,15 @@ export interface ProjectSnapshot {
   };
 }
 
+export interface ProjectSnapshotSummary {
+  id: string;
+  summary: string;
+  fileCount: number;
+  createdAt: string;
+  isActive: boolean;
+  validation: ProjectSnapshot['validation'];
+}
+
 export interface AgentRunDetailResponse {
   run: AgentRun;
   events: AgentEvent[];
@@ -277,15 +286,9 @@ export const projectApi = {
   removeChat: (id: string, chatId: string) =>
     api.delete(`/api/projects/${id}/chats/${chatId}`),
   getSnapshots: (id: string) =>
-    api.get<{ snapshots: Array<{
-      id: string;
-      summary: string;
-      fileCount: number;
-      createdAt: string;
-      isActive: boolean;
-      packageJson: ProjectSnapshot['packageJson'];
-      validation: ProjectSnapshot['validation'];
-    }> }>(`/api/projects/${id}/snapshots`),
+    api.get<{ snapshots: ProjectSnapshotSummary[] }>(
+      `/api/projects/${id}/snapshots`,
+    ),
   getSnapshot: (id: string, snapshotId: string) =>
     api.get<{ snapshot: ProjectSnapshot }>(`/api/projects/${id}/snapshots/${snapshotId}`),
   rollbackSnapshot: (id: string, snapshotId: string) =>

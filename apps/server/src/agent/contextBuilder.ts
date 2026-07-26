@@ -8,6 +8,7 @@ import {
   AgentRunMode
 } from './types';
 import { resolveProjectBaseFiles } from './projectTemplate';
+import { getArtifactService } from '../artifacts/runtime';
 
 interface ContextBuilderInput {
   prompt: string;
@@ -124,10 +125,18 @@ export const loadAgentContext = async (
   if (run.mode === 'edit' && !baseSnapshot) {
     throw agentError('INVALID_BASE_SNAPSHOT', 'Edit mode requires a valid base snapshot');
   }
+  const baseBundle = baseSnapshot
+    ? await getArtifactService().readOwnedBundle({
+        artifactId: baseSnapshot.artifactId,
+        workspaceId: baseSnapshot.workspaceId,
+        projectId: baseSnapshot.projectId,
+        kind: 'project_snapshot'
+      })
+    : null;
 
   const contextFiles = resolveProjectBaseFiles(
-    baseSnapshot
-      ? baseSnapshot.files.map(file => ({
+    baseBundle
+      ? baseBundle.files.map(file => ({
           path: file.path,
           content: file.content,
           language: file.language

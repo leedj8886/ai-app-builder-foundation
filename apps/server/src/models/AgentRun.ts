@@ -102,6 +102,27 @@ AgentRunSchema.index({ projectId: 1, updatedAt: -1 });
 AgentRunSchema.index({ status: 1, updatedAt: 1 });
 AgentRunSchema.index({ userId: 1, chatId: 1, createdAt: -1 });
 AgentRunSchema.index({ branchId: 1, createdAt: 1 });
+AgentRunSchema.index(
+  { retryOfRunId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      retryOfRunId: { $type: 'objectId' },
+      status: {
+        $in: [
+          'waiting_for_capacity',
+          'queued',
+          'running',
+          'planning',
+          'generating',
+          'validating',
+          'repairing',
+          'persisting'
+        ]
+      }
+    }
+  }
+);
 
 export const AgentRun =
   (mongoose.models.AgentRun as mongoose.Model<IAgentRun> | undefined) ||

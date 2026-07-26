@@ -23,6 +23,28 @@ import { isTerminalAgentRunStatus } from '../agent/stateMachine';
 import { streamAgentRunEvents } from '../agent/sseStream';
 import { findOwnedWorkspaceProject } from '../workspaces/projectAccess';
 import { resolveProjectBranch } from '../branches/branchService';
+import { getArtifactService } from '../artifacts/runtime';
+import type { Types } from 'mongoose';
+
+const snapshotDetail = async (
+  snapshot: InstanceType<typeof ProjectSnapshot>,
+  expected: {
+    workspaceId: Types.ObjectId;
+    projectId: Types.ObjectId;
+  }
+) => {
+  const bundle = await getArtifactService().readOwnedBundle({
+    artifactId: snapshot.artifactId,
+    workspaceId: expected.workspaceId,
+    projectId: expected.projectId,
+    kind: 'project_snapshot'
+  });
+  return {
+    ...snapshot.toObject(),
+    files: bundle.files,
+    packageJson: bundle.packageJson
+  };
+};
 
 const router = Router();
 
@@ -35,6 +57,11 @@ const requireUserId = (req: AuthRequest): string => {
 
   return req.userId;
 };
+
+const isDuplicateKey = (error: unknown): boolean =>
+  error instanceof Error &&
+  'code' in error &&
+  (error as Error & { code?: number }).code === 11000;
 
 const canAccessRunProject = async (
   run: Pick<IAgentRun, 'projectId'>,
@@ -182,7 +209,10 @@ router.post(
       const candidate = await ValidationCandidate.findOne({
         _id: source.validationCandidateId,
         userId,
+        workspaceId: source.workspaceId,
         projectId: source.projectId,
+        branchId: source.branchId,
+        sourceRunId: source._id,
         expiresAt: { $gt: new Date() }
       });
       if (!candidate) {
@@ -210,23 +240,36 @@ router.post(
         return;
       }
 
-      const run = await AgentRun.create({
-        userId,
-        workspaceId: source.workspaceId,
-        projectId: source.projectId,
-        branchId: source.branchId,
-        chatId: source.chatId,
-        prompt: source.prompt,
-        mode: source.mode,
-        baseSnapshotId: source.baseSnapshotId,
-        baseSnapshotRevision: source.baseSnapshotRevision,
-        baseHeadVersion: source.baseHeadVersion,
-        retryOfRunId: source._id,
-        validationCandidateId: candidate._id,
-        status: 'queued',
-        model: source.model,
-        maxRepairAttempts: source.maxRepairAttempts
-      });
+      let run;
+      try {
+        run = await AgentRun.create({
+          userId,
+          workspaceId: source.workspaceId,
+          projectId: source.projectId,
+          branchId: source.branchId,
+          chatId: source.chatId,
+          prompt: source.prompt,
+          mode: source.mode,
+          baseSnapshotId: source.baseSnapshotId,
+          baseSnapshotRevision: source.baseSnapshotRevision,
+          baseHeadVersion: source.baseHeadVersion,
+          retryOfRunId: source._id,
+          validationCandidateId: candidate._id,
+          status: 'queued',
+          model: source.model,
+          maxRepairAttempts: source.maxRepairAttempts
+        });
+      } catch (error) {
+        if (!isDuplicateKey(error)) throw error;
+        const concurrent = await AgentRun.findOne({
+          retryOfRunId: source._id,
+          userId,
+          completedAt: { $exists: false }
+        });
+        if (!concurrent) throw error;
+        res.status(200).json({ run: concurrent });
+        return;
+      }
       await emitAgentEvent({
         runId: run._id,
         userId,
@@ -269,11 +312,22 @@ router.get('/runs/:runId', async (req: AuthRequest, res, next) => {
       ? await ProjectSnapshot.findOne({
           _id: run.resultSnapshotId,
           userId,
-          projectId: run.projectId
+          workspaceId: run.workspaceId,
+          projectId: run.projectId,
+          branchId: run.branchId
         })
       : null;
 
-    res.json({ run, events, resultSnapshot });
+    res.json({
+      run,
+      events,
+      resultSnapshot: resultSnapshot
+        ? await snapshotDetail(resultSnapshot, {
+            workspaceId: run.workspaceId!,
+            projectId: run.projectId
+          })
+        : null
+    });
   } catch (error) {
     next(error);
   }

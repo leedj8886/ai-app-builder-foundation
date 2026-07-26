@@ -20,6 +20,9 @@ import {
   setBranchHead
 } from '../branches/branchService';
 import { ProjectBranch } from '../models/ProjectBranch';
+import { ArtifactManifest } from '../models/ArtifactManifest';
+import { getArtifactService } from '../artifacts/runtime';
+import type { ProjectArtifactBundleV1 } from '../artifacts/types';
 
 const router = Router();
 
@@ -32,6 +35,27 @@ const requireUserId = (req: AuthRequest): string => {
   }
 
   return req.userId;
+};
+
+const readSnapshotBundle = (
+  snapshot: InstanceType<typeof ProjectSnapshot>
+) => getArtifactService().readOwnedBundle({
+  artifactId: snapshot.artifactId,
+  workspaceId: snapshot.workspaceId,
+  projectId: snapshot.projectId,
+  kind: 'project_snapshot'
+});
+
+const snapshotDetail = async (
+  snapshot: InstanceType<typeof ProjectSnapshot>,
+  loadedBundle?: ProjectArtifactBundleV1
+) => {
+  const bundle = loadedBundle ?? await readSnapshotBundle(snapshot);
+  return {
+    ...snapshot.toObject(),
+    files: bundle.files,
+    packageJson: bundle.packageJson
+  };
 };
 
 // Get all projects for user
@@ -96,9 +120,23 @@ router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
       return;
     }
 
-    const snapshots = await ProjectSnapshot.find({ projectId: id, userId })
+    const snapshots = await ProjectSnapshot.find({
+      workspaceId: project.workspaceId,
+      projectId: id,
+      userId,
+      branchId: branch._id
+    })
       .sort({ createdAt: -1 })
       .limit(50);
+    const manifests = await ArtifactManifest.find({
+      artifactId: { $in: snapshots.map(snapshot => snapshot.artifactId) },
+      workspaceId: project.workspaceId,
+      projectId: project._id,
+      kind: 'project_snapshot'
+    }).select('artifactId fileCount').lean();
+    const fileCountByArtifactId = new Map(
+      manifests.map(manifest => [manifest.artifactId, manifest.fileCount])
+    );
 
     res.json({
       snapshots: snapshots.map(snapshot => ({
@@ -107,10 +145,9 @@ router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
         sourceRunId: snapshot.sourceRunId,
         parentSnapshotId: snapshot.parentSnapshotId,
         summary: snapshot.summary,
-        packageJson: snapshot.packageJson,
         validation: snapshot.validation,
         isActive: branch.headSnapshotId?.toString() === snapshot._id.toString(),
-        fileCount: snapshot.files.length,
+        fileCount: fileCountByArtifactId.get(snapshot.artifactId) ?? 0,
         createdAt: snapshot.createdAt
       }))
     });
@@ -147,6 +184,8 @@ router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res,
     }
     const snapshot = await ProjectSnapshot.findOne({
       _id: snapshotId,
+      workspaceId: ownedProject.workspaceId,
+      branchId: branch._id,
       projectId: id,
       userId,
       'validation.status': { $ne: 'failed' }
@@ -156,6 +195,7 @@ router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res,
       res.status(404).json({ error: 'Snapshot not found' });
       return;
     }
+    const bundle = await readSnapshotBundle(snapshot);
 
     const updatedBranch = await setBranchHead({
       branchId: branch._id,
@@ -182,7 +222,10 @@ router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res,
       return;
     }
 
-    res.json({ project, snapshot });
+    res.json({
+      project,
+      snapshot: await snapshotDetail(snapshot, bundle)
+    });
   } catch (error) {
     next(error);
   }
@@ -208,6 +251,7 @@ router.get('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => 
 
     const snapshot = await ProjectSnapshot.findOne({
       _id: snapshotId,
+      workspaceId: project.workspaceId,
       projectId: id,
       userId
     });
@@ -217,7 +261,7 @@ router.get('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => 
       return;
     }
 
-    res.json({ snapshot });
+    res.json({ snapshot: await snapshotDetail(snapshot) });
   } catch (error) {
     next(error);
   }

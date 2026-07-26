@@ -18,3 +18,9 @@ export const getArtifactService = (): ArtifactService => {
 export const resetArtifactRuntimeForTests = (): void => {
   service = undefined;
 };
+
+export const setArtifactServiceForTests = (
+  testService: ArtifactService
+): void => {
+  service = testService;
+};

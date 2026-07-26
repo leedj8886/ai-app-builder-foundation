@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import { after, before, beforeEach, test } from 'node:test';
 import { once } from 'node:events';
 import request from 'supertest';
+import { Types } from 'mongoose';
 import { createApp } from '../app';
 import { emitAgentEvent } from '../agent/eventBus';
 import { getAgentRunQueue } from '../agent/queue';
@@ -21,6 +22,16 @@ import {
   createIntegrationEnvironment,
   type IntegrationEnvironment
 } from '../testing/integrationEnvironment';
+import {
+  createArtifactBackedCandidate,
+  createArtifactBackedSnapshot
+} from '../artifacts/testing';
+import {
+  getArtifactService,
+  setArtifactServiceForTests
+} from '../artifacts/runtime';
+import type { ArtifactService } from '../artifacts/artifactService';
+import { ArtifactManifest } from '../models/ArtifactManifest';
 
 let environment: IntegrationEnvironment;
 const app = createApp();
@@ -71,9 +82,9 @@ const createRun = async (
   const branch = await ensureMainBranch(project);
   return AgentRun.create({
     userId,
-    workspaceId: project.workspaceId,
+    workspaceId: project.workspaceId!,
     projectId,
-    branchId: branch._id,
+    branchId: branch._id!,
     prompt: 'Build a dashboard',
     status,
     mode: 'create',
@@ -138,7 +149,9 @@ test('Chat creation binds to main or an explicitly selected Branch', async () =>
 test('Branch creation can start from a validated Snapshot', async () => {
   const { ownerToken, owner, project } = await fixtures();
   const sourceRun = await createRun(owner._id, project._id);
-  const snapshot = await ProjectSnapshot.create({
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: project.workspaceId!,
+    branchId: sourceRun.branchId!,
     userId: owner._id,
     projectId: project._id,
     sourceRunId: sourceRun._id,
@@ -165,7 +178,9 @@ test('Branch creation can start from a validated Snapshot', async () => {
 test('Chat-associated Run captures its Branch Head baseline', async () => {
   const { ownerToken, owner, project } = await fixtures();
   const sourceRun = await createRun(owner._id, project._id);
-  const snapshot = await ProjectSnapshot.create({
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: project.workspaceId!,
+    branchId: sourceRun.branchId!,
     userId: owner._id,
     projectId: project._id,
     sourceRunId: sourceRun._id,
@@ -175,7 +190,7 @@ test('Chat-associated Run captures its Branch Head baseline', async () => {
     summary: 'Feature base'
   });
   const branch = await ProjectBranch.create({
-    workspaceId: project.workspaceId,
+    workspaceId: project.workspaceId!,
     projectId: project._id,
     name: 'feature',
     headSnapshotId: snapshot._id,
@@ -262,7 +277,9 @@ test('retry validation creates a queued Run without regenerating a Chat message'
     model: 'test-model',
     retryable: true
   });
-  const candidate = await ValidationCandidate.create({
+  const candidate = await createArtifactBackedCandidate({
+    workspaceId: project.workspaceId!,
+    branchId: branch._id,
     userId: owner._id,
     projectId: project._id,
     sourceRunId: sourceRun._id,
@@ -286,6 +303,219 @@ test('retry validation creates a queued Run without regenerating a Chat message'
   assert.equal(response.body.run.status, 'queued');
   assert.equal(response.body.run.retryOfRunId, sourceRun._id.toString());
   assert.equal(response.body.run.validationCandidateId, candidate._id.toString());
+});
+
+test('concurrent validation retry requests converge on one non-terminal Run', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const branch = await ensureMainBranch(project);
+  const sourceRun = await AgentRun.create({
+    userId: owner._id,
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    branchId: branch._id,
+    prompt: 'Retry once',
+    status: 'failed',
+    mode: 'create',
+    baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
+    maxRepairAttempts: 2,
+    model: 'test-model',
+    retryable: true
+  });
+  const candidate = await createArtifactBackedCandidate({
+    workspaceId: project.workspaceId!,
+    branchId: branch._id,
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId: sourceRun._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    summary: 'Concurrent candidate',
+    expiresAt: new Date(Date.now() + 60_000)
+  });
+  sourceRun.validationCandidateId = candidate._id;
+  await sourceRun.save();
+  await AgentRun.syncIndexes();
+
+  const responses = await Promise.all([
+    request(app)
+      .post(`/api/agent/runs/${sourceRun._id}/retry-validation`)
+      .set('Authorization', `Bearer ${ownerToken}`),
+    request(app)
+      .post(`/api/agent/runs/${sourceRun._id}/retry-validation`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+  ]);
+  assert.deepEqual(
+    responses.map(response => response.status).sort(),
+    [200, 201]
+  );
+  assert.equal(
+    responses[0]?.body.run._id,
+    responses[1]?.body.run._id
+  );
+  assert.equal(await AgentRun.countDocuments({
+    retryOfRunId: sourceRun._id,
+    completedAt: { $exists: false }
+  }), 1);
+});
+
+test('snapshot and Run detail hydrate artifacts while list does not read Blob content', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const branch = await ensureMainBranch(project);
+  const run = await createRun(owner._id, project._id);
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: project.workspaceId!,
+    branchId: branch._id,
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId: run._id,
+    files: [{
+      path: 'src/App.tsx',
+      content: 'export default function App() { return null; }',
+      language: 'tsx'
+    }],
+    packageJson: {
+      dependencies: { react: '^18.3.0' },
+      devDependencies: {},
+      scripts: { build: 'vite build' }
+    },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Hydrated snapshot'
+  });
+  run.status = 'completed';
+  run.resultSnapshotId = snapshot._id;
+  await run.save();
+
+  const detail = await request(app)
+    .get(`/api/projects/${project._id}/snapshots/${snapshot._id}`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+  assert.equal(detail.body.snapshot.files[0].path, 'src/App.tsx');
+  assert.equal(detail.body.snapshot.packageJson.dependencies.react, '^18.3.0');
+
+  const runDetail = await request(app)
+    .get(`/api/agent/runs/${run._id}`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+  assert.equal(runDetail.body.resultSnapshot.files[0].path, 'src/App.tsx');
+
+  const rollback = await request(app)
+    .post(`/api/projects/${project._id}/snapshots/${snapshot._id}/rollback`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ branchId: branch._id })
+    .expect(200);
+  assert.equal(rollback.body.snapshot.files[0].path, 'src/App.tsx');
+  assert.equal(
+    rollback.body.snapshot.packageJson.dependencies.react,
+    '^18.3.0'
+  );
+
+  const realService = getArtifactService();
+  setArtifactServiceForTests({
+    readBundle: async () => {
+      throw new Error('Blob reads are forbidden for snapshot lists');
+    }
+  } as unknown as ArtifactService);
+  try {
+    const list = await request(app)
+      .get(`/api/projects/${project._id}/snapshots`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    assert.equal(list.body.snapshots[0].fileCount, 1);
+  } finally {
+    setArtifactServiceForTests(realService);
+  }
+});
+
+test('rollback rejects cross-Branch snapshots and does not advance on corrupt artifacts', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const main = await ensureMainBranch(project);
+  const feature = await ProjectBranch.create({
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    name: 'feature',
+    headVersion: 0
+  });
+  const sourceRun = await AgentRun.create({
+    userId: owner._id,
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    branchId: feature._id,
+    prompt: 'Feature snapshot',
+    status: 'completed',
+    mode: 'create',
+    baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
+    maxRepairAttempts: 2,
+    model: 'test-model'
+  });
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: project.workspaceId!,
+    branchId: feature._id,
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId: sourceRun._id,
+    files: [{
+      path: 'src/App.tsx',
+      content: 'export default function App() { return null; }',
+      language: 'tsx'
+    }],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Feature only'
+  });
+
+  await request(app)
+    .post(`/api/projects/${project._id}/snapshots/${snapshot._id}/rollback`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ branchId: main._id })
+    .expect(404);
+  assert.equal((await ProjectBranch.findById(main._id))?.headVersion, 0);
+
+  await ArtifactManifest.updateOne(
+    { artifactId: snapshot.artifactId },
+    { $set: { state: 'corrupt' } }
+  );
+  await request(app)
+    .post(`/api/projects/${project._id}/snapshots/${snapshot._id}/rollback`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ branchId: feature._id })
+    .expect(500);
+  assert.equal((await ProjectBranch.findById(feature._id))?.headVersion, 0);
+});
+
+test('Run detail does not hydrate a result Snapshot bound to another Branch', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const main = await ensureMainBranch(project);
+  const feature = await ProjectBranch.create({
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    name: 'detail-feature',
+    headVersion: 0
+  });
+  const run = await createRun(owner._id, project._id);
+  const sourceRunId = new Types.ObjectId();
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: project.workspaceId!,
+    branchId: feature._id,
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Wrong Branch result'
+  });
+  assert.equal(run.branchId?.toString(), main._id.toString());
+  run.status = 'completed';
+  run.resultSnapshotId = snapshot._id;
+  await run.save();
+
+  const response = await request(app)
+    .get(`/api/agent/runs/${run._id}`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+  assert.equal(response.body.resultSnapshot, null);
 });
 
 test('Chat creation stores project metadata without an assistant response', async () => {
@@ -531,7 +761,9 @@ test('Chat timeline aggregates owned Runs with stable cursor pagination', async 
       createdAt: new Date('2026-07-25T10:01:06.000Z')
     }
   ]);
-  const snapshot = await ProjectSnapshot.create({
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: project.workspaceId!,
+    branchId: completed.branchId!,
     userId: owner._id,
     projectId: project._id,
     sourceRunId: completed._id,
@@ -543,10 +775,21 @@ test('Chat timeline aggregates owned Runs with stable cursor pagination', async 
   completed.resultSnapshotId = snapshot._id;
   await completed.save();
 
-  const first = await request(app)
-    .get(`/api/chat/${chat._id}/timeline?limit=2`)
-    .set('Authorization', `Bearer ${ownerToken}`)
-    .expect(200);
+  const realService = getArtifactService();
+  setArtifactServiceForTests({
+    readBundle: async () => {
+      throw new Error('Blob reads are forbidden for chat timelines');
+    }
+  } as unknown as ArtifactService);
+  let first;
+  try {
+    first = await request(app)
+      .get(`/api/chat/${chat._id}/timeline?limit=2`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+  } finally {
+    setArtifactServiceForTests(realService);
+  }
 
   assert.equal(first.body.turns.length, 2);
   assert.equal(first.body.pageInfo.hasMore, true);
@@ -589,7 +832,9 @@ test('agent routes hide projects runs snapshots and cross-project chats from oth
     title: 'Other chat',
     messages: []
   });
-  const snapshot = await ProjectSnapshot.create({
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: project.workspaceId!,
+    branchId: run.branchId!,
     userId: owner._id,
     projectId: project._id,
     sourceRunId: run._id,
