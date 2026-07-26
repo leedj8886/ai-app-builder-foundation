@@ -1,15 +1,25 @@
-version: '3.8'
-
 services:
   mongodb:
     image: mongo:7
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
-      MONGO_INITDB_DATABASE: v0-by-kimi
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-local-development-password}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-v0-by-kimi}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet
+          --username "$$MONGO_INITDB_ROOT_USERNAME"
+          --password "$$MONGO_INITDB_ROOT_PASSWORD"
+          --authenticationDatabase admin
+          --eval "quit(db.adminCommand('ping').ok ? 0 : 1)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -19,7 +29,12 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     networks:
       - v0-network
 
@@ -29,29 +44,28 @@ services:
       dockerfile: apps/server/Dockerfile
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "${API_PORT:-3001}:3001"
     environment:
-      - PORT=3001
-      - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
-      - CLIENT_URL=${CLIENT_URL:-http://localhost:5173}
-      - AGENT_QUEUE_NAME=${AGENT_QUEUE_NAME:-v0-agent-runs}
-      - AGENT_MODEL=${AGENT_MODEL:-}
-      - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
-      - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
-      - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
-      - AGENT_VALIDATION_NPM_CACHE_ROOT=/var/cache/v0-agent/npm
-      - AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT=/var/cache/v0-agent/dependencies
-      - NODE_ENV=production
-    volumes:
-      - agent_validation_cache:/var/cache/v0-agent
+      PORT: "3001"
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-local-development-password}@mongodb:27017/${MONGO_DATABASE:-v0-by-kimi}?authSource=admin
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-change-before-deploying}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-v0-agent-runs}
+      AGENT_MODEL: ${AGENT_MODEL:-}
+      AGENT_MAX_REPAIR_ATTEMPTS: ${AGENT_MAX_REPAIR_ATTEMPTS:-2}
+      NODE_ENV: production
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     networks:
       - v0-network
 
@@ -62,21 +76,37 @@ services:
     restart: unless-stopped
     command: npm run start:worker --workspace @v0/server
     environment:
-      - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
-      - AGENT_QUEUE_NAME=${AGENT_QUEUE_NAME:-v0-agent-runs}
-      - AGENT_MODEL=${AGENT_MODEL:-}
-      - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
-      - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
-      - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
-      - NODE_ENV=production
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-local-development-password}@mongodb:27017/${MONGO_DATABASE:-v0-by-kimi}?authSource=admin
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-change-before-deploying}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-v0-agent-runs}
+      AGENT_MODEL: ${AGENT_MODEL:-}
+      AGENT_MAX_REPAIR_ATTEMPTS: ${AGENT_MAX_REPAIR_ATTEMPTS:-2}
+      AGENT_WORKSPACE_ROOT: ${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
+      AGENT_CONTEXT_CHAR_LIMIT: ${AGENT_CONTEXT_CHAR_LIMIT:-120000}
+      AGENT_VALIDATION_STRUCTURE_TIMEOUT_MS: ${AGENT_VALIDATION_STRUCTURE_TIMEOUT_MS:-5000}
+      AGENT_VALIDATION_CACHE_HIT_TIMEOUT_MS: ${AGENT_VALIDATION_CACHE_HIT_TIMEOUT_MS:-15000}
+      AGENT_VALIDATION_INSTALL_TIMEOUT_MS: ${AGENT_VALIDATION_INSTALL_TIMEOUT_MS:-180000}
+      AGENT_VALIDATION_TYPE_CHECK_TIMEOUT_MS: ${AGENT_VALIDATION_TYPE_CHECK_TIMEOUT_MS:-60000}
+      AGENT_VALIDATION_BUILD_TIMEOUT_MS: ${AGENT_VALIDATION_BUILD_TIMEOUT_MS:-120000}
+      AGENT_VALIDATION_ROUND_TIMEOUT_MS: ${AGENT_VALIDATION_ROUND_TIMEOUT_MS:-300000}
+      AGENT_VALIDATION_INFRA_RETRY_DELAYS_MS: ${AGENT_VALIDATION_INFRA_RETRY_DELAYS_MS:-5000,15000}
+      AGENT_VALIDATION_NPM_CACHE_ROOT: /var/cache/v0-agent/npm
+      AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT: /var/cache/v0-agent/dependencies
+      AGENT_VALIDATION_CACHE_RETENTION_MS: ${AGENT_VALIDATION_CACHE_RETENTION_MS:-604800000}
+      AGENT_VALIDATION_CACHE_MAX_BYTES: ${AGENT_VALIDATION_CACHE_MAX_BYTES:-10737418240}
+      AGENT_MAX_VALIDATION_OUTPUT_CHARS: ${AGENT_MAX_VALIDATION_OUTPUT_CHARS:-12000}
+      NODE_ENV: production
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - agent_validation_cache:/var/cache/v0-agent
     networks:
       - v0-network
 
@@ -86,11 +116,15 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     ports:
-      - "80:80"
-    environment:
-      - VITE_API_URL=${VITE_API_URL:-http://localhost:3001}
+      - "${WEB_PORT:-3000}:80"
     depends_on:
-      - server
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     networks:
       - v0-network
 
