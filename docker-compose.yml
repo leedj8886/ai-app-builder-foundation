@@ -55,7 +55,14 @@ services:
       AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-v0-agent-runs}
       AGENT_MODEL: ${AGENT_MODEL:-}
       AGENT_MAX_REPAIR_ATTEMPTS: ${AGENT_MAX_REPAIR_ATTEMPTS:-2}
+      ARTIFACT_STORE_DRIVER: shared-filesystem
+      ARTIFACT_STORE_ROOT: /var/lib/open-v0/artifacts
+      SANDBOX_PROVIDER: fake
+      SANDBOX_LOCAL_ENABLED: "false"
       NODE_ENV: production
+    volumes:
+      - agent_validation_cache:/var/cache/v0-agent
+      - artifact_store:/var/lib/open-v0/artifacts
     depends_on:
       mongodb:
         condition: service_healthy
@@ -99,6 +106,10 @@ services:
       AGENT_VALIDATION_CACHE_RETENTION_MS: ${AGENT_VALIDATION_CACHE_RETENTION_MS:-604800000}
       AGENT_VALIDATION_CACHE_MAX_BYTES: ${AGENT_VALIDATION_CACHE_MAX_BYTES:-10737418240}
       AGENT_MAX_VALIDATION_OUTPUT_CHARS: ${AGENT_MAX_VALIDATION_OUTPUT_CHARS:-12000}
+      ARTIFACT_STORE_DRIVER: shared-filesystem
+      ARTIFACT_STORE_ROOT: /var/lib/open-v0/artifacts
+      SANDBOX_PROVIDER: fake
+      SANDBOX_LOCAL_ENABLED: "false"
       NODE_ENV: production
     depends_on:
       mongodb:
@@ -107,6 +118,7 @@ services:
         condition: service_healthy
     volumes:
       - agent_validation_cache:/var/cache/v0-agent
+      - artifact_store:/var/lib/open-v0/artifacts
     networks:
       - v0-network
 
@@ -128,9 +140,31 @@ services:
     networks:
       - v0-network
 
+  artifact-reconciler:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    profiles:
+      - maintenance
+    restart: "no"
+    command: npm run start:reconcile:artifacts --workspace @v0/server
+    environment:
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-local-development-password}@mongodb:27017/${MONGO_DATABASE:-v0-by-kimi}?authSource=admin
+      ARTIFACT_STORE_DRIVER: shared-filesystem
+      ARTIFACT_STORE_ROOT: /var/lib/open-v0/artifacts
+      NODE_ENV: production
+    volumes:
+      - artifact_store:/var/lib/open-v0/artifacts
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - v0-network
+
 volumes:
   mongodb_data:
   agent_validation_cache:
+  artifact_store:
 
 networks:
   v0-network:

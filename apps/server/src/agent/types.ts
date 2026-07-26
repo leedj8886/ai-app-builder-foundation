@@ -1,4 +1,5 @@
 export const agentRunStatuses = [
+  'waiting_for_capacity',
   'queued',
   'running',
   'planning',
@@ -7,13 +8,19 @@ export const agentRunStatuses = [
   'repairing',
   'persisting',
   'completed',
+  'completed_with_conflict',
   'failed',
   'cancelled'
 ] as const;
 
 export type AgentRunStatus = (typeof agentRunStatuses)[number];
 
-export const terminalAgentRunStatuses = ['completed', 'failed', 'cancelled'] as const;
+export const terminalAgentRunStatuses = [
+  'completed',
+  'completed_with_conflict',
+  'failed',
+  'cancelled'
+] as const;
 
 export type TerminalAgentRunStatus = (typeof terminalAgentRunStatuses)[number];
 

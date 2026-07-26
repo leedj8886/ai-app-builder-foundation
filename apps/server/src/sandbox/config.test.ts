@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { getSandboxConfig } from './config';
+
+test('getSandboxConfig uses safe defaults', () => {
+  const config = getSandboxConfig({});
+
+  assert.equal(config.provider, 'fake');
+  assert.equal(config.localEnabled, false);
+  assert.deepEqual(config.allowedBuildImages, ['node:22']);
+  assert.equal(config.quotaLockTtlMs, 5_000);
+  assert.equal(config.quotaLockWaitMs, 2_000);
+  assert.equal(config.readinessTimeoutMs, 60_000);
+  assert.equal(config.leaseSeconds, 900);
+  assert.equal(config.autoDeleteSeconds, 1_800);
+  assert.equal(config.orphanGraceMs, 300_000);
+  assert.deepEqual(config.commandTimeouts, {
+    install: 180_000,
+    typeCheck: 60_000,
+    build: 120_000
+  });
+});
+
+test('getSandboxConfig parses strict overrides', () => {
+  const config = getSandboxConfig({
+    SANDBOX_PROVIDER: 'daytona',
+    SANDBOX_LOCAL_ENABLED: 'true',
+    SANDBOX_ALLOWED_BUILD_IMAGES: 'node:22, node:24',
+    SANDBOX_QUOTA_LOCK_TTL_MS: '7000'
+  });
+
+  assert.equal(config.provider, 'daytona');
+  assert.equal(config.localEnabled, true);
+  assert.deepEqual(config.allowedBuildImages, ['node:22', 'node:24']);
+  assert.equal(config.quotaLockTtlMs, 7_000);
+});
+
+test('getSandboxConfig rejects unsafe production local mode', () => {
+  assert.throws(
+    () =>
+      getSandboxConfig({
+        NODE_ENV: 'production',
+        SANDBOX_PROVIDER: 'local',
+        SANDBOX_LOCAL_ENABLED: 'true'
+      }),
+    /LocalProcessProvider cannot be enabled in production/
+  );
+  assert.throws(
+    () =>
+      getSandboxConfig({
+        NODE_ENV: 'production',
+        SANDBOX_LOCAL_ENABLED: 'true'
+      }),
+    /LocalProcessProvider cannot be enabled in production/
+  );
+});
+
+test('getSandboxConfig rejects malformed values', () => {
+  assert.throws(
+    () => getSandboxConfig({ SANDBOX_QUOTA_LOCK_TTL_MS: '0' }),
+    /positive safe integer/
+  );
+  assert.throws(
+    () => getSandboxConfig({ SANDBOX_LOCAL_ENABLED: 'TRUE' }),
+    /must be "true" or "false"/
+  );
+  assert.throws(
+    () => getSandboxConfig({ SANDBOX_ALLOWED_BUILD_IMAGES: 'node:22, ' }),
+    /non-empty image names/
+  );
+});

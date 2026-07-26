@@ -17,6 +17,39 @@ import {
 } from './v0Workspace'
 
 describe('v0 workspace state', () => {
+  it('completed_with_conflict keeps the validated Snapshot ready', () => {
+    const state = applyAgentRunDetail(
+      startApiGeneration(
+        createInitialWorkspaceState(),
+        'Build competing version',
+        'run_conflict',
+      ),
+      {
+        run: {
+          _id: 'run_conflict',
+          status: 'completed_with_conflict',
+          resultSnapshotId: 'snapshot_conflict',
+        },
+        events: [],
+        resultSnapshot: {
+          _id: 'snapshot_conflict',
+          summary: 'Validated conflicting version',
+          files: [],
+          packageJson: {
+            dependencies: {},
+            devDependencies: {},
+            scripts: {},
+          },
+          validation: { status: 'passed', checks: [] },
+        },
+      },
+    )
+
+    assert.equal(state.generation.status, 'ready')
+    assert.equal(state.snapshot?.id, 'snapshot_conflict')
+    assert.match(state.generation.warning ?? '', /未更新当前分支/)
+  })
+
   it('only treats persisted ObjectId run ids as cancellable', () => {
     assert.equal(isCancellableRunId('64b7f5086f1f8e9f0f000001'), true)
     assert.equal(isCancellableRunId('pending:local-request'), false)
@@ -121,18 +154,12 @@ describe('v0 workspace state', () => {
         summary: 'New snapshot',
         fileCount: 2,
         isActive: true,
-        packageJson: {
-          dependencies: { react: '^18.3.0' },
-          devDependencies: {},
-          scripts: {},
-        },
         validation: { status: 'passed', checks: [] },
         createdAt: '2026-07-25T00:00:00.000Z',
       },
     ])
 
     assert.equal(state.snapshots[0]?.isActive, true)
-    assert.equal(state.snapshots[0]?.packageJson.dependencies.react, '^18.3.0')
   })
 
   it('applies a workspace snapshot and selects its app file', () => {
@@ -339,7 +366,6 @@ describe('v0 workspace state', () => {
         }),
         [{
           id: 'snapshot_current', summary: 'Current', fileCount: 1, isActive: true,
-          packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
           validation: { status: 'passed', checks: [] }, createdAt: '2026-07-25T00:00:00.000Z',
         }],
       ),

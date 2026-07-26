@@ -8,6 +8,7 @@ import {
   AgentRunMode
 } from './types';
 import { resolveProjectBaseFiles } from './projectTemplate';
+import { getArtifactService } from '../artifacts/runtime';
 
 interface ContextBuilderInput {
   prompt: string;
@@ -89,7 +90,8 @@ export const loadAgentContext = async (
 ): Promise<AgentContext> => {
   const project = await Project.findOne({
     _id: run.projectId,
-    userId: run.userId
+    userId: run.userId,
+    workspaceId: run.workspaceId
   });
 
   if (!project) {
@@ -100,9 +102,17 @@ export const loadAgentContext = async (
     ? await Chat.findOne({
         _id: run.chatId,
         userId: run.userId,
-        projectId: run.projectId
+        projectId: run.projectId,
+        branchId: run.branchId
       })
     : null;
+
+  if (run.chatId && !chat) {
+    throw agentError(
+      'INVALID_CHAT_BRANCH',
+      'Chat no longer belongs to the AgentRun branch'
+    );
+  }
 
   const baseSnapshot = run.baseSnapshotId
     ? await ProjectSnapshot.findOne({
@@ -115,10 +125,18 @@ export const loadAgentContext = async (
   if (run.mode === 'edit' && !baseSnapshot) {
     throw agentError('INVALID_BASE_SNAPSHOT', 'Edit mode requires a valid base snapshot');
   }
+  const baseBundle = baseSnapshot
+    ? await getArtifactService().readOwnedBundle({
+        artifactId: baseSnapshot.artifactId,
+        workspaceId: baseSnapshot.workspaceId,
+        projectId: baseSnapshot.projectId,
+        kind: 'project_snapshot'
+      })
+    : null;
 
   const contextFiles = resolveProjectBaseFiles(
-    baseSnapshot
-      ? baseSnapshot.files.map(file => ({
+    baseBundle
+      ? baseBundle.files.map(file => ({
           path: file.path,
           content: file.content,
           language: file.language

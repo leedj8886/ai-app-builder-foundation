@@ -62,6 +62,18 @@ const page = (
   },
 })
 
+test('Branch conflict completion is terminal and keeps its Snapshot summary', () => {
+  const conflict = turn('conflict', 'completed_with_conflict')
+  conflict.snapshot = {
+    id: 'snapshot-conflict',
+    summary: 'Alternative result',
+    changedFiles: ['src/App.tsx'],
+  }
+
+  assert.equal(canToggleTurn(conflict), true)
+  assert.match(formatCollapsedTurnLabel(conflict), /分支已变化/)
+});
+
 test('expands active failed and latest completed turns by default', () => {
   const expanded = resolveDefaultExpandedRunIds([
     turn('old', 'completed'),

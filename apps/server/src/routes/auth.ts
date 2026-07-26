@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { User } from '../models/User';
 import { generateToken } from '../middleware/auth';
+import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.post('/register', async (req, res, next) => {
 
     const user = new User({ email, password, name });
     await user.save();
+    await ensureDefaultWorkspaceForUser(user._id);
 
     const token = generateToken(user._id.toString());
 

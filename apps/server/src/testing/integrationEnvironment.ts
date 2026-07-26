@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import mongoose from 'mongoose';
@@ -6,6 +9,7 @@ import {
   GenericContainer,
   type StartedTestContainer
 } from 'testcontainers';
+import { resetArtifactRuntimeForTests } from '../artifacts/runtime';
 
 export interface IntegrationEnvironment {
   namespace: string;
@@ -47,10 +51,12 @@ export const createIntegrationEnvironment =
     let redisContainer: StartedTestContainer | undefined;
 
     try {
-      [mongoContainer, redisContainer] = await Promise.all([
-        new GenericContainer('mongo:7').withExposedPorts(27017).start(),
-        new GenericContainer('redis:7-alpine').withExposedPorts(6379).start()
-      ]);
+      mongoContainer = await new GenericContainer('mongo:7')
+        .withExposedPorts(27017)
+        .start();
+      redisContainer = await new GenericContainer('redis:7-alpine')
+        .withExposedPorts(6379)
+        .start();
     } catch (error) {
       await Promise.allSettled([
         mongoContainer?.stop(),
@@ -62,18 +68,26 @@ export const createIntegrationEnvironment =
       );
     }
 
+    let artifactRoot: string | undefined;
+    let initializingRedis: IORedis | undefined;
+    try {
     const namespace = `phase6-${randomUUID()}`;
     const databaseName = namespace.replaceAll('-', '_');
     const queueName = `${namespace}-agent-runs`;
     const mongoUri = `mongodb://${mongoContainer.getHost()}:${mongoContainer.getMappedPort(27017)}/${databaseName}`;
     const redisUrl = `redis://${redisContainer.getHost()}:${redisContainer.getMappedPort(6379)}`;
+    artifactRoot = await mkdtemp(path.join(tmpdir(), 'open-v0-artifacts-'));
+    const environmentArtifactRoot = artifactRoot;
 
     process.env.MONGODB_URI = mongoUri;
     process.env.REDIS_URL = redisUrl;
     process.env.AGENT_QUEUE_NAME = queueName;
+    process.env.ARTIFACT_STORE_ROOT = artifactRoot;
+    resetArtifactRuntimeForTests();
     process.env.JWT_SECRET ||= 'phase-6-integration-secret';
 
     const redis = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+    initializingRedis = redis;
     await mongoose.connect(mongoUri);
 
     let closed = false;
@@ -90,6 +104,9 @@ export const createIntegrationEnvironment =
         await queue.close();
       }
       await deleteMatchingKeys(redis, `${namespace}:*`);
+      await rm(environmentArtifactRoot, { recursive: true, force: true });
+      await mkdir(environmentArtifactRoot, { recursive: true });
+      resetArtifactRuntimeForTests();
     };
 
     const close = async (): Promise<void> => {
@@ -102,12 +119,14 @@ export const createIntegrationEnvironment =
         closeAgentRunQueue(),
         closeSharedRedisConnection()
       ]);
-      await mongoose.disconnect();
-      await redis.quit();
       await Promise.allSettled([
+        mongoose.disconnect(),
+        redis.quit(),
         mongoContainer.stop(),
-        redisContainer.stop()
+        redisContainer.stop(),
+        rm(environmentArtifactRoot, { recursive: true, force: true })
       ]);
+      resetArtifactRuntimeForTests();
     };
 
     return {
@@ -119,4 +138,19 @@ export const createIntegrationEnvironment =
       reset,
       close
     };
+    } catch (error) {
+      await Promise.allSettled([
+        mongoose.connection.readyState === 0
+          ? Promise.resolve()
+          : mongoose.disconnect(),
+        initializingRedis?.disconnect(),
+        mongoContainer.stop(),
+        redisContainer.stop(),
+        artifactRoot
+          ? rm(artifactRoot, { recursive: true, force: true })
+          : Promise.resolve()
+      ]);
+      resetArtifactRuntimeForTests();
+      throw error;
+    }
   };

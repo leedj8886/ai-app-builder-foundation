@@ -2,10 +2,19 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import type { Worker } from 'bullmq';
 import type { ModelClient } from '../agent/types';
+import { Types } from 'mongoose';
 import { createAgentWorker } from '../agent/createWorker';
 import { emitAgentEvent } from '../agent/eventBus';
-import { processAgentRun } from '../agent/orchestrator';
-import { enqueueAgentRun } from '../agent/queue';
+import {
+  processAgentRun,
+  processValidationCandidate,
+  createRunCandidate,
+  createRunSnapshot
+} from '../agent/orchestrator';
+import {
+  enqueueAgentRun,
+  enqueueValidationRetry
+} from '../agent/queue';
 import { createFakeModelClient } from '../agent/testing/fakeModelClient';
 import {
   createFailOnceValidator,
@@ -16,11 +25,25 @@ import { AgentRun } from '../models/AgentRun';
 import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
+import { ProjectBranch } from '../models/ProjectBranch';
+import { ValidationCandidate } from '../models/ValidationCandidate';
 import { User } from '../models/User';
+import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
+import { ensureMainBranch } from '../branches/branchService';
 import {
   createIntegrationEnvironment,
   type IntegrationEnvironment
 } from '../testing/integrationEnvironment';
+import {
+  createArtifactBackedCandidate,
+  createArtifactBackedSnapshot
+} from '../artifacts/testing';
+import {
+  getArtifactService,
+  setArtifactServiceForTests
+} from '../artifacts/runtime';
+import type { ArtifactService } from '../artifacts/artifactService';
+import { ArtifactError, type ArtifactErrorCode } from '../artifacts/types';
 
 let environment: IntegrationEnvironment;
 
@@ -42,17 +65,23 @@ const createQueuedRun = async () => {
     password: 'password',
     name: 'Worker owner'
   });
+  const { workspace } = await ensureDefaultWorkspaceForUser(user._id);
   const project = await Project.create({
+    workspaceId: workspace._id,
     userId: user._id,
     name: 'Worker project'
   });
+  const branch = await ensureMainBranch(project);
   const run = await AgentRun.create({
     userId: user._id,
+    workspaceId: workspace._id,
     projectId: project._id,
+    branchId: branch._id,
     prompt: 'Build a dashboard',
     status: 'queued',
     mode: 'create',
     baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
     maxRepairAttempts: 2,
     model: 'fake-model'
   });
@@ -72,6 +101,7 @@ const createQueuedChatRun = async () => {
   const chat = await Chat.create({
     userId: fixture.user._id,
     projectId: fixture.project._id,
+    branchId: fixture.run.branchId,
     title: 'Worker chat',
     messages: [{
       id: crypto.randomUUID(),
@@ -90,7 +120,12 @@ const waitForTerminalRun = async (runId: string) => {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     const run = await AgentRun.findById(runId);
-    if (run && ['completed', 'failed', 'cancelled'].includes(run.status)) {
+    if (run && [
+      'completed',
+      'completed_with_conflict',
+      'failed',
+      'cancelled'
+    ].includes(run.status)) {
       return run;
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -108,7 +143,7 @@ const withWorker = async (
     connection: { url: environment.redisUrl },
     modelClient,
     validator,
-    concurrency: 1
+    concurrency: 2
   });
   try {
     await worker.waitUntilReady();
@@ -118,13 +153,494 @@ const withWorker = async (
   }
 };
 
+test('two Runs on one Branch never execute their models concurrently', async () => {
+  const first = await createQueuedRun();
+  const branch = await ensureMainBranch(first.project);
+  const secondRun = await AgentRun.create({
+    userId: first.user._id,
+    workspaceId: first.project.workspaceId,
+    projectId: first.project._id,
+    branchId: branch._id,
+    prompt: 'Second change',
+    status: 'queued',
+    mode: 'create',
+    baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
+    maxRepairAttempts: 2,
+    model: 'fake-model'
+  });
+
+  let active = 0;
+  let maxActive = 0;
+  const model = createFakeModelClient();
+  const originalPlan = model.generatePlan;
+  model.generatePlan = async input => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    try {
+      return await originalPlan(input);
+    } finally {
+      active -= 1;
+    }
+  };
+
+  await Promise.all([
+    enqueueAgentRun(first.run._id.toString()),
+    enqueueAgentRun(secondRun._id.toString())
+  ]);
+  await withWorker(model, createPassingValidator(), async () => {
+    const completed = await Promise.all([
+      waitForTerminalRun(first.run._id.toString()),
+      waitForTerminalRun(secondRun._id.toString())
+    ]);
+    assert.deepEqual(
+      completed.map(run => run.status),
+      ['completed', 'completed']
+    );
+  });
+
+  assert.equal(maxActive, 1);
+});
+
+test('completed Run advances only its Branch Head', async () => {
+  const { project, run } = await createQueuedRun();
+  const main = await ensureMainBranch(project);
+  const other = await ProjectBranch.create({
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    name: 'other',
+    headVersion: 0
+  });
+
+  await enqueueAgentRun(run._id.toString());
+  await withWorker(
+    createFakeModelClient(),
+    createPassingValidator(),
+    async () => {
+      await waitForTerminalRun(run._id.toString());
+    }
+  );
+
+  const [completed, refreshedMain, refreshedOther] = await Promise.all([
+    AgentRun.findById(run._id),
+    ProjectBranch.findById(main._id),
+    ProjectBranch.findById(other._id)
+  ]);
+  assert.equal(completed?.status, 'completed');
+  assert.equal(
+    refreshedMain?.headSnapshotId?.toString(),
+    completed?.resultSnapshotId?.toString()
+  );
+  assert.equal(refreshedMain?.headVersion, 1);
+  assert.equal(refreshedOther?.headVersion, 0);
+});
+
+test('stale Run keeps its Snapshot and completes with conflict', async () => {
+  const fixture = await createQueuedRun();
+  const branch = await ensureMainBranch(fixture.project);
+  const winningSnapshot = await createArtifactBackedSnapshot({
+    workspaceId: fixture.project.workspaceId!,
+    branchId: branch._id,
+    userId: fixture.user._id,
+    projectId: fixture.project._id,
+    sourceRunId: new Types.ObjectId(),
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Winning snapshot'
+  });
+  branch.headSnapshotId = winningSnapshot._id;
+  branch.headVersion = 1;
+  await branch.save();
+
+  await processAgentRun(
+    { runId: fixture.run._id.toString() },
+    createFakeModelClient(),
+    createPassingValidator(),
+    { assertHeld: async () => undefined }
+  );
+
+  const [run, refreshedBranch, resultSnapshot] = await Promise.all([
+    AgentRun.findById(fixture.run._id),
+    ProjectBranch.findById(branch._id),
+    ProjectSnapshot.findOne({ sourceRunId: fixture.run._id }).sort({
+      createdAt: -1
+    })
+  ]);
+  assert.equal(run?.status, 'completed_with_conflict');
+  assert.ok(run?.resultSnapshotId);
+  assert.ok(resultSnapshot);
+  assert.ok(resultSnapshot.artifactId);
+  assert.equal('files' in resultSnapshot.toObject(), false);
+  assert.equal('packageJson' in resultSnapshot.toObject(), false);
+  const resultBundle = await getArtifactService().readBundle(
+    resultSnapshot.artifactId
+  );
+  assert.ok(resultBundle.files.some(file => file.path === 'src/App.tsx'));
+  assert.equal(
+    refreshedBranch?.headSnapshotId?.toString(),
+    winningSnapshot._id.toString()
+  );
+});
+
+test('Artifact persistence errors expose stable codes with narrow retryability', async () => {
+  const cases: Array<{
+    code: ArtifactErrorCode;
+    errorRetryable: boolean;
+    expectedRetryable: boolean;
+  }> = [
+    {
+      code: 'ARTIFACT_STORE_UNAVAILABLE',
+      errorRetryable: false,
+      expectedRetryable: false
+    },
+    {
+      code: 'ARTIFACT_WRITE_FAILED',
+      errorRetryable: true,
+      expectedRetryable: false
+    },
+    {
+      code: 'ARTIFACT_CORRUPT',
+      errorRetryable: false,
+      expectedRetryable: false
+    },
+    {
+      code: 'ARTIFACT_INVALID_PATH',
+      errorRetryable: false,
+      expectedRetryable: false
+    },
+    {
+      code: 'ARTIFACT_IDEMPOTENCY_CONFLICT',
+      errorRetryable: false,
+      expectedRetryable: false
+    }
+  ];
+
+  const realService = getArtifactService();
+  try {
+    for (const item of cases) {
+      const fixture = await createQueuedRun();
+      setArtifactServiceForTests({
+        writeBundle: async () => {
+          throw new ArtifactError(
+            item.code,
+            `Stable ${item.code}`,
+            item.errorRetryable
+          );
+        }
+      } as unknown as ArtifactService);
+      await processAgentRun(
+        { runId: fixture.run._id.toString() },
+        createFakeModelClient(),
+        createPassingValidator()
+      );
+      const failed = await AgentRun.findById(fixture.run._id);
+      assert.equal(failed?.status, 'failed');
+      assert.equal(failed?.error?.code, item.code);
+      assert.equal(failed?.retryable ?? false, item.expectedRetryable);
+    }
+  } finally {
+    setArtifactServiceForTests(realService);
+  }
+});
+
+test('Snapshot upsert rejects an existing domain record with another artifact', async () => {
+  const fixture = await createQueuedRun();
+  await createArtifactBackedSnapshot({
+    workspaceId: fixture.project.workspaceId!,
+    branchId: fixture.run.branchId!,
+    userId: fixture.user._id,
+    projectId: fixture.project._id,
+    sourceRunId: fixture.run._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Conflicting domain record'
+  });
+  const realService = getArtifactService();
+  setArtifactServiceForTests({
+    writeBundle: async () => ({ artifactId: 'b'.repeat(32) })
+  } as unknown as ArtifactService);
+  try {
+    await processAgentRun(
+      { runId: fixture.run._id.toString() },
+      createFakeModelClient(),
+      createPassingValidator()
+    );
+  } finally {
+    setArtifactServiceForTests(realService);
+  }
+  const failed = await AgentRun.findById(fixture.run._id);
+  assert.equal(failed?.error?.code, 'ARTIFACT_IDEMPOTENCY_CONFLICT');
+  assert.equal(failed?.retryable ?? false, false);
+});
+
+test('concurrent Snapshot and Candidate helpers converge on one owned domain record', async () => {
+  await Promise.all([
+    ProjectSnapshot.syncIndexes(),
+    ValidationCandidate.syncIndexes()
+  ]);
+  const snapshotFixture = await createQueuedRun();
+  await Promise.all([
+    createRunSnapshot(snapshotFixture.run, {
+      files: [],
+      packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+      validation: { status: 'passed', checks: [] },
+      summary: 'Concurrent Snapshot'
+    }),
+    createRunSnapshot(snapshotFixture.run, {
+      files: [],
+      packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+      validation: { status: 'passed', checks: [] },
+      summary: 'Concurrent Snapshot'
+    })
+  ]);
+  assert.equal(await ProjectSnapshot.countDocuments({
+    sourceRunId: snapshotFixture.run._id
+  }), 1);
+
+  const candidateFixture = await createQueuedRun();
+  await Promise.all([
+    createRunCandidate(candidateFixture.run, {
+      files: [],
+      packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+      summary: 'Concurrent Candidate'
+    }),
+    createRunCandidate(candidateFixture.run, {
+      files: [],
+      packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+      summary: 'Concurrent Candidate'
+    })
+  ]);
+  assert.equal(await ValidationCandidate.countDocuments({
+    sourceRunId: candidateFixture.run._id
+  }), 1);
+});
+
+test('Candidate upsert rejects an existing domain record with another artifact', async () => {
+  const fixture = await createQueuedRun();
+  await createArtifactBackedCandidate({
+    workspaceId: fixture.project.workspaceId!,
+    branchId: fixture.run.branchId!,
+    userId: fixture.user._id,
+    projectId: fixture.project._id,
+    sourceRunId: fixture.run._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    summary: 'Conflicting Candidate',
+    expiresAt: new Date(Date.now() + 60_000)
+  });
+  const realService = getArtifactService();
+  setArtifactServiceForTests({
+    writeBundle: async () => ({ artifactId: 'c'.repeat(32) })
+  } as unknown as ArtifactService);
+  try {
+    await processAgentRun(
+      { runId: fixture.run._id.toString() },
+      createFakeModelClient(),
+      {
+        validate: async () => ({
+          status: 'failed',
+          checks: [],
+          category: 'INFRA_ERROR',
+          retryable: true
+        })
+      }
+    );
+  } finally {
+    setArtifactServiceForTests(realService);
+  }
+  const failed = await AgentRun.findById(fixture.run._id);
+  assert.equal(failed?.error?.code, 'ARTIFACT_IDEMPOTENCY_CONFLICT');
+  assert.equal(failed?.retryable ?? false, false);
+});
+
+test('persisting recovery completes from an artifact-backed Snapshot', async () => {
+  const fixture = await createQueuedRun();
+  fixture.run.status = 'persisting';
+  await fixture.run.save();
+  const snapshot = await createArtifactBackedSnapshot({
+    workspaceId: fixture.project.workspaceId!,
+    branchId: fixture.run.branchId!,
+    userId: fixture.user._id,
+    projectId: fixture.project._id,
+    sourceRunId: fixture.run._id,
+    files: [{
+      path: 'src/App.tsx',
+      content: 'export default function App() { return null; }',
+      language: 'tsx'
+    }],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Recovered snapshot'
+  });
+
+  await processAgentRun(
+    { runId: fixture.run._id.toString() },
+    createFakeModelClient(),
+    createPassingValidator()
+  );
+
+  const completed = await AgentRun.findById(fixture.run._id);
+  assert.equal(completed?.status, 'completed');
+  assert.equal(completed?.resultSnapshotId?.toString(), snapshot._id.toString());
+  const bundle = await getArtifactService().readBundle(snapshot.artifactId);
+  assert.equal(bundle.files[0]?.path, 'src/App.tsx');
+});
+
+test('validation infrastructure failure persists a Candidate artifact reused by retry', async () => {
+  const fixture = await createQueuedRun();
+  await processAgentRun(
+    { runId: fixture.run._id.toString() },
+    createFakeModelClient(),
+    {
+      validate: async () => ({
+        status: 'failed',
+        checks: [],
+        category: 'INFRA_ERROR',
+        retryable: true
+      })
+    }
+  );
+
+  const failed = await AgentRun.findById(fixture.run._id);
+  assert.equal(failed?.status, 'failed');
+  assert.ok(failed?.validationCandidateId);
+  const candidate = await ValidationCandidate.findById(
+    failed.validationCandidateId
+  );
+  assert.ok(candidate?.artifactId);
+  assert.equal('files' in candidate.toObject(), false);
+  assert.equal('packageJson' in candidate.toObject(), false);
+  const candidateBundle = await getArtifactService().readBundle(
+    candidate.artifactId
+  );
+  assert.ok(candidateBundle.files.some(file => file.path === 'src/App.tsx'));
+
+  const retry = await AgentRun.create({
+    userId: fixture.user._id,
+    workspaceId: fixture.project.workspaceId,
+    projectId: fixture.project._id,
+    branchId: fixture.run.branchId,
+    prompt: fixture.run.prompt,
+    status: 'queued',
+    mode: fixture.run.mode,
+    baseSnapshotRevision: fixture.run.baseSnapshotRevision,
+    baseHeadVersion: fixture.run.baseHeadVersion,
+    retryOfRunId: fixture.run._id,
+    validationCandidateId: candidate._id,
+    maxRepairAttempts: fixture.run.maxRepairAttempts,
+    model: fixture.run.model
+  });
+  await processValidationCandidate(
+    {
+      runId: retry._id.toString(),
+      candidateId: candidate._id.toString(),
+      kind: 'retry-validation'
+    },
+    createPassingValidator()
+  );
+
+  const completedRetry = await AgentRun.findById(retry._id);
+  assert.equal(completedRetry?.status, 'completed');
+  const retrySnapshot = await ProjectSnapshot.findById(
+    completedRetry?.resultSnapshotId
+  );
+  assert.ok(retrySnapshot?.artifactId);
+  const retryBundle = await getArtifactService().readBundle(
+    retrySnapshot.artifactId
+  );
+  assert.deepEqual(retryBundle.files, candidateBundle.files);
+});
+
+test('expired Candidate fails the retry Run and releases the retry uniqueness slot', async () => {
+  const fixture = await createQueuedRun();
+  const candidate = await createArtifactBackedCandidate({
+    workspaceId: fixture.project.workspaceId!,
+    branchId: fixture.run.branchId!,
+    userId: fixture.user._id,
+    projectId: fixture.project._id,
+    sourceRunId: fixture.run._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    summary: 'Expiring Candidate',
+    expiresAt: new Date(Date.now() + 60_000)
+  });
+  fixture.run.status = 'failed';
+  fixture.run.retryable = true;
+  fixture.run.validationCandidateId = candidate._id;
+  fixture.run.completedAt = new Date();
+  await fixture.run.save();
+  const retry = await AgentRun.create({
+    userId: fixture.user._id,
+    workspaceId: fixture.project.workspaceId,
+    projectId: fixture.project._id,
+    branchId: fixture.run.branchId,
+    prompt: fixture.run.prompt,
+    status: 'queued',
+    mode: fixture.run.mode,
+    baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
+    retryOfRunId: fixture.run._id,
+    validationCandidateId: candidate._id,
+    maxRepairAttempts: 2,
+    model: 'test-model'
+  });
+  candidate.expiresAt = new Date(Date.now() - 1);
+  await candidate.save();
+
+  await enqueueValidationRetry(
+    retry._id.toString(),
+    candidate._id.toString()
+  );
+  await withWorker(
+    createFakeModelClient(),
+    createPassingValidator(),
+    async () => {
+      await waitForTerminalRun(retry._id.toString());
+    }
+  );
+  const failedRetry = await AgentRun.findById(retry._id);
+  assert.equal(failedRetry?.status, 'failed');
+  assert.equal(failedRetry?.retryable, false);
+  assert.equal(
+    failedRetry?.error?.code,
+    'VALIDATION_CANDIDATE_EXPIRED'
+  );
+  const nextRetry = await AgentRun.create({
+    userId: fixture.user._id,
+    workspaceId: fixture.project.workspaceId,
+    projectId: fixture.project._id,
+    branchId: fixture.run.branchId,
+    prompt: fixture.run.prompt,
+    status: 'queued',
+    mode: fixture.run.mode,
+    baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
+    retryOfRunId: fixture.run._id,
+    validationCandidateId: candidate._id,
+    maxRepairAttempts: 2,
+    model: 'test-model'
+  });
+  assert.ok(nextRetry._id);
+});
+
 test('BullMQ Create run seeds required files when the model only updates App', async () => {
   const { run } = await createQueuedRun();
   const modelClient: ModelClient = {
     generatePlan: async input => {
       assert.deepEqual(
         input.context.files.map(file => file.path),
-        ['index.html', 'src/App.tsx', 'src/index.css', 'src/main.tsx', 'tsconfig.json']
+        [
+          'index.html',
+          'postcss.config.cjs',
+          'src/App.tsx',
+          'src/index.css',
+          'src/main.tsx',
+          'tailwind.config.js',
+          'tsconfig.json'
+        ]
       );
       return {
         value: {
@@ -162,9 +678,20 @@ test('BullMQ Create run seeds required files when the model only updates App', a
   });
 
   const snapshot = await ProjectSnapshot.findOne({ sourceRunId: run._id });
+  assert.ok(snapshot?.artifactId);
+  const bundle = await getArtifactService().readBundle(snapshot.artifactId);
   assert.deepEqual(
-    snapshot?.files.map(file => file.path),
-    ['index.html', 'package.json', 'src/App.tsx', 'src/index.css', 'src/main.tsx', 'tsconfig.json']
+    bundle.files.map(file => file.path),
+    [
+      'index.html',
+      'package.json',
+      'postcss.config.cjs',
+      'src/App.tsx',
+      'src/index.css',
+      'src/main.tsx',
+      'tailwind.config.js',
+      'tsconfig.json'
+    ]
   );
 });
 
@@ -186,7 +713,12 @@ test('BullMQ worker completes a create run and activates one passing snapshot', 
   ]);
   assert.ok(completed?.resultSnapshotId);
   assert.equal(snapshot?.validation.status, 'passed');
-  assert.ok(snapshot?.files.some((file) => file.path === 'src/App.tsx'));
+  assert.ok(snapshot?.artifactId);
+  const persisted = snapshot.toObject();
+  assert.equal('files' in persisted, false);
+  assert.equal('packageJson' in persisted, false);
+  const bundle = await getArtifactService().readBundle(snapshot.artifactId);
+  assert.ok(bundle.files.some((file) => file.path === 'src/App.tsx'));
   assert.equal(refreshedProject?.activeSnapshotId?.toString(), snapshot?._id.toString());
   assert.equal(refreshedProject?.activeSnapshotRevision, 1);
   assert.deepEqual(modelClient.calls, { plan: 1, generate: 1, repair: 0 });

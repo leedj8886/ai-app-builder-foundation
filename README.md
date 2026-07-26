@@ -167,6 +167,40 @@ AGENT_MODEL=
 - 尚未提供公开在线 Demo 和一键云部署。
 - 本阶段仍使用开发代号，项目与 Vercel 无官方关系。
 
+## Workspace、Branch 与 Artifact
+
+新项目使用 Workspace 作为租户边界。一个 Project 可以关联多个 Chat，每个 Chat
+绑定一个 ProjectBranch，并以独立的 Snapshot Head 演进。新项目不需要存量迁移；
+如需从早期开发数据库升级，可在停止 API Server 和 Worker、备份 MongoDB 后执行：
+
+```bash
+npm run build --workspace @v0/server
+npm run start:migrate:workspace-branches --workspace @v0/server
+```
+
+ProjectSnapshot 和 ValidationCandidate 的源码 Bundle 不保存在 MongoDB 中。
+MongoDB 只保存 Manifest 和 `artifactId`，Blob 保存在 API、Worker 和运维任务共同
+挂载的 ArtifactStore。Compose 已配置共享 `artifact_store` volume。一次性清理：
+
+```bash
+docker compose --profile maintenance run --rm artifact-reconciler
+```
+
+非 `terminated` SandboxLease 会保护其源 Artifact 不被回收。
+
+## Sandbox Core（Phase 2）
+
+当前包含 provider-neutral Sandbox Core、Fake Provider、仅限开发测试的
+LocalProcessProvider、持久化 Lease、Redis 配额调度、Artifact hydration 和
+Sandbox Reconciler。Redis 不可用时，新预留 fail closed。
+
+以下 Lease 状态占用 Project/Workspace 配额：`reserved`、`provisioning`、
+`ready`、`running`、`terminating`。每个 Branch 最多一个占用配额的 Build
+Sandbox。
+
+Phase 2 尚未把 Agent Worker 校验切换到 Sandbox。Daytona Provider、
+PreviewDeployment、Preview Gateway 和 Preview 回收属于后续阶段。
+
 Preview 会为缺少配置的旧 Tailwind Snapshot 只读编译 CSS，并在内存中补齐
 Tailwind/PostCSS 配置和依赖，不会改写持久化文件。新项目会持久化完整配置；
 生产验证还会检查构建后的 CSS，避免只通过 Vite 退出码却没有实际生成样式。

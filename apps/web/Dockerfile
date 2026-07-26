@@ -15,6 +15,8 @@ COPY apps/web ./apps/web
 
 # Build
 WORKDIR /app/apps/web
+ARG VITE_API_URL=http://localhost:3001
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # Production stage

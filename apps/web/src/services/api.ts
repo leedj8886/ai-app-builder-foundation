@@ -50,12 +50,15 @@ export const authApi = {
 
 export interface AgentRun {
   _id: string;
+  workspaceId?: string;
   projectId: string;
+  branchId?: string;
   prompt: string;
-  status: 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'failed' | 'cancelled';
+  status: 'waiting_for_capacity' | 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'completed_with_conflict' | 'failed' | 'cancelled';
   mode: 'create' | 'edit';
   model?: string;
   baseSnapshotId?: string;
+  baseHeadVersion?: number;
   resultSnapshotId?: string;
   retryOfRunId?: string;
   validationCandidateId?: string;
@@ -127,6 +130,15 @@ export interface ProjectSnapshot {
   };
 }
 
+export interface ProjectSnapshotSummary {
+  id: string;
+  summary: string;
+  fileCount: number;
+  createdAt: string;
+  isActive: boolean;
+  validation: ProjectSnapshot['validation'];
+}
+
 export interface AgentRunDetailResponse {
   run: AgentRun;
   events: AgentEvent[];
@@ -137,6 +149,7 @@ export interface RoutedChat {
   _id: string;
   userId: string;
   projectId?: string;
+  branchId?: string;
   title: string;
   messages: Array<{
     id: string;
@@ -151,6 +164,7 @@ export interface RoutedChat {
 export interface ChatListItem {
   _id: string;
   projectId?: string;
+  branchId?: string;
   title: string;
   preview?: string;
   createdAt: string;
@@ -286,15 +300,9 @@ export const projectApi = {
   removeChat: (id: string, chatId: string) =>
     api.delete(`/api/projects/${id}/chats/${chatId}`),
   getSnapshots: (id: string) =>
-    api.get<{ snapshots: Array<{
-      id: string;
-      summary: string;
-      fileCount: number;
-      createdAt: string;
-      isActive: boolean;
-      packageJson: ProjectSnapshot['packageJson'];
-      validation: ProjectSnapshot['validation'];
-    }> }>(`/api/projects/${id}/snapshots`),
+    api.get<{ snapshots: ProjectSnapshotSummary[] }>(
+      `/api/projects/${id}/snapshots`,
+    ),
   getSnapshot: (id: string, snapshotId: string) =>
     api.get<{ snapshot: ProjectSnapshot }>(`/api/projects/${id}/snapshots/${snapshotId}`),
   rollbackSnapshot: (id: string, snapshotId: string) =>

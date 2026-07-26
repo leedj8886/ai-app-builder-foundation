@@ -438,7 +438,13 @@ export function V0Clone() {
       setWorkspace((state) => applyAgentRunDetail(state, detail))
       await refreshProjectData(activeProjectId)
       await loadTimeline(activeChatId)
-      if (chatId && detail.run.status === 'completed') {
+      if (
+        chatId
+        && (
+          detail.run.status === 'completed'
+          || detail.run.status === 'completed_with_conflict'
+        )
+      ) {
         setEditDraft((current) => current.trim() === prompt ? '' : current)
       }
     } catch (error) {

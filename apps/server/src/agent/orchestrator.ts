@@ -25,6 +25,11 @@ import {
   ProjectSnapshotPackageJson
 } from './types';
 import { ProjectValidator } from './validator';
+import { commitBranchHead } from '../branches/branchService';
+import { ProjectBranch } from '../models/ProjectBranch';
+import { getArtifactService } from '../artifacts/runtime';
+import { ArtifactError, type ArtifactProjectFile } from '../artifacts/types';
+import { ArtifactManifest } from '../models/ArtifactManifest';
 
 interface WorkerEvent {
   type: AgentEventType;
@@ -59,6 +64,183 @@ interface ValidatedAgentGenerationResult extends RunAgentGenerationResult {
   validation: import('./types').ValidationResult;
   repairAttempts: number;
 }
+
+const artifactFiles = (files: ProjectFile[]) => files.map(file => ({
+  path: file.path,
+  content: file.content,
+  language: file.language,
+  ...(file.generatedByRunId && {
+    generatedByRunId: file.generatedByRunId.toString()
+  })
+}));
+
+const domainFiles = (files: ArtifactProjectFile[]): ProjectFile[] => files.map(file => ({
+  path: file.path,
+  content: file.content,
+  language: file.language,
+  ...(file.generatedByRunId && Types.ObjectId.isValid(file.generatedByRunId) && {
+    generatedByRunId: new Types.ObjectId(file.generatedByRunId)
+  })
+}));
+
+const assertArtifactMatch = async <T extends { artifactId: string }>(
+  record: T | null,
+  artifactId: string,
+  scope: {
+    workspaceId: Types.ObjectId;
+    projectId: Types.ObjectId;
+    branchId: Types.ObjectId;
+    userId: Types.ObjectId;
+  },
+  kind: 'project_snapshot' | 'validation_candidate'
+): Promise<T> => {
+  const owned = record as T & {
+    workspaceId?: Types.ObjectId;
+    projectId?: Types.ObjectId;
+    branchId?: Types.ObjectId;
+    userId?: Types.ObjectId;
+  } | null;
+  if (
+    !owned ||
+    owned.artifactId !== artifactId ||
+    !owned.workspaceId?.equals(scope.workspaceId) ||
+    !owned.projectId?.equals(scope.projectId) ||
+    !owned.branchId?.equals(scope.branchId) ||
+    !owned.userId?.equals(scope.userId)
+  ) {
+    throw new ArtifactError(
+      'ARTIFACT_IDEMPOTENCY_CONFLICT',
+      'Domain record does not reference its idempotent artifact'
+    );
+  }
+  const manifest = await ArtifactManifest.exists({
+    artifactId,
+    workspaceId: scope.workspaceId,
+    projectId: scope.projectId,
+    kind
+  });
+  if (!manifest) {
+    throw new ArtifactError(
+      'ARTIFACT_IDEMPOTENCY_CONFLICT',
+      'Domain record does not reference an owned artifact manifest'
+    );
+  }
+  return owned;
+};
+
+const isDuplicateKey = (error: unknown): boolean =>
+  error instanceof Error &&
+  'code' in error &&
+  (error as Error & { code?: number }).code === 11000;
+
+export const createRunSnapshot = async (
+  run: InstanceType<typeof AgentRun>,
+  input: {
+    parentSnapshotId?: Types.ObjectId;
+    files: ProjectFile[];
+    packageJson: ProjectSnapshotPackageJson;
+    validation: import('./types').ValidationResult;
+    summary: string;
+  }
+) => {
+  if (!run.workspaceId || !run.branchId) {
+    throw new Error('AgentRun is missing artifact ownership');
+  }
+  const artifact = await getArtifactService().writeBundle({
+    workspaceId: run.workspaceId,
+    projectId: run.projectId,
+    createdByRunId: run._id,
+    kind: 'project_snapshot',
+    idempotencyKey: `snapshot:${run._id.toString()}`,
+    bundle: {
+      version: 1,
+      files: artifactFiles(input.files),
+      packageJson: input.packageJson
+    }
+  });
+  let snapshot;
+  try {
+    snapshot = await ProjectSnapshot.findOneAndUpdate(
+      { sourceRunId: run._id },
+      {
+        $setOnInsert: {
+          workspaceId: run.workspaceId,
+          branchId: run.branchId,
+          userId: run.userId,
+          projectId: run.projectId,
+          sourceRunId: run._id,
+          parentSnapshotId: input.parentSnapshotId,
+          artifactId: artifact.artifactId,
+          validation: input.validation,
+          summary: input.summary
+        }
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    snapshot = await ProjectSnapshot.findOne({ sourceRunId: run._id });
+  }
+  return assertArtifactMatch(snapshot, artifact.artifactId, {
+    workspaceId: run.workspaceId,
+    projectId: run.projectId,
+    branchId: run.branchId,
+    userId: run.userId
+  }, 'project_snapshot');
+};
+
+export const createRunCandidate = async (
+  run: InstanceType<typeof AgentRun>,
+  input: {
+    files: ProjectFile[];
+    packageJson: ProjectSnapshotPackageJson;
+    summary: string;
+  }
+) => {
+  if (!run.workspaceId || !run.branchId) {
+    throw new Error('AgentRun is missing artifact ownership');
+  }
+  const artifact = await getArtifactService().writeBundle({
+    workspaceId: run.workspaceId,
+    projectId: run.projectId,
+    createdByRunId: run._id,
+    kind: 'validation_candidate',
+    idempotencyKey: `candidate:${run._id.toString()}`,
+    bundle: {
+      version: 1,
+      files: artifactFiles(input.files),
+      packageJson: input.packageJson
+    }
+  });
+  let candidate;
+  try {
+    candidate = await ValidationCandidate.findOneAndUpdate(
+      { sourceRunId: run._id },
+      {
+        $setOnInsert: {
+          workspaceId: run.workspaceId,
+          branchId: run.branchId,
+          userId: run.userId,
+          projectId: run.projectId,
+          sourceRunId: run._id,
+          artifactId: artifact.artifactId,
+          summary: input.summary,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1_000)
+        }
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    candidate = await ValidationCandidate.findOne({ sourceRunId: run._id });
+  }
+  return assertArtifactMatch(candidate, artifact.artifactId, {
+    workspaceId: run.workspaceId,
+    projectId: run.projectId,
+    branchId: run.branchId,
+    userId: run.userId
+  }, 'validation_candidate');
+};
 
 export const buildPhaseOneWorkerEvents = (): WorkerEvent[] => [
   { type: 'run.started', message: 'Agent run started' },
@@ -349,6 +531,8 @@ const publicAgentError = (
   };
   const knownCodes = new Set([
     'PROJECT_NOT_FOUND',
+    'INVALID_CHAT_BRANCH',
+    'BRANCH_EXECUTION_LOST',
     'INVALID_BASE_SNAPSHOT',
     'INVALID_MODEL_OUTPUT',
     'MODEL_REQUEST_FAILED',
@@ -356,7 +540,18 @@ const publicAgentError = (
     'NO_EFFECTIVE_CHANGES',
     'REPEATED_VALIDATION_FAILURE',
     'VALIDATION_INFRA_ERROR',
-    'VALIDATION_FAILED'
+    'VALIDATION_FAILED',
+    'VALIDATION_CANDIDATE_NOT_FOUND',
+    'VALIDATION_CANDIDATE_EXPIRED',
+    'ARTIFACT_STORE_UNAVAILABLE',
+    'ARTIFACT_WRITE_FAILED',
+    'ARTIFACT_NOT_FOUND',
+    'ARTIFACT_CORRUPT',
+    'ARTIFACT_FORMAT_UNSUPPORTED',
+    'ARTIFACT_LIMIT_EXCEEDED',
+    'ARTIFACT_INVALID_PATH',
+    'ARTIFACT_INVALID_BUNDLE',
+    'ARTIFACT_IDEMPOTENCY_CONFLICT'
   ]);
   const code = typeof candidate.code === 'string' && knownCodes.has(candidate.code)
     ? candidate.code
@@ -403,32 +598,57 @@ const transitionRun = async (
   Object.assign(run, fields);
 };
 
-const activateSnapshotIfBaseIsCurrent = async (
+const completeRunWithSnapshot = async (
   run: InstanceType<typeof AgentRun>,
-  snapshotId: Types.ObjectId
-): Promise<void> => {
-  await Project.updateOne(
-    {
-      _id: run.projectId,
-      userId: run.userId,
-      $or: [
-        { activeSnapshotRevision: run.baseSnapshotRevision },
-        ...(run.baseSnapshotRevision === 0
-          ? [{ activeSnapshotRevision: { $exists: false } }]
-          : [])
-      ]
-    },
-    {
-      $set: { activeSnapshotId: snapshotId },
-      $inc: { activeSnapshotRevision: 1 }
+  snapshot: InstanceType<typeof ProjectSnapshot>,
+  fields: Record<string, unknown> = {}
+): Promise<'completed' | 'completed_with_conflict'> => {
+  if (!run.branchId || run.baseHeadVersion === undefined) {
+    throw Object.assign(new Error('AgentRun is missing Branch baseline'), {
+      code: 'INVALID_BRANCH_BASELINE'
+    });
+  }
+  const committed = await commitBranchHead({
+    branchId: run.branchId,
+    expectedHeadVersion: run.baseHeadVersion,
+    snapshotId: snapshot._id
+  });
+  const status = committed.outcome === 'conflict'
+    ? 'completed_with_conflict'
+    : 'completed';
+  await transitionRun(run, 'persisting', status, {
+    resultSnapshotId: snapshot._id,
+    completedAt: new Date(),
+    ...fields
+  });
+
+  if (committed.outcome === 'advanced') {
+    const branch = await ProjectBranch.findById(run.branchId).select('name');
+    if (branch?.name === 'main') {
+      await Project.updateOne(
+        { _id: run.projectId, userId: run.userId },
+        {
+          $set: {
+            activeSnapshotId: snapshot._id,
+            activeSnapshotRevision: committed.headVersion
+          }
+        }
+      );
     }
-  );
+  }
+
+  return status;
 };
+
+interface BranchExecutionContext {
+  assertHeld(): Promise<void>;
+}
 
 export const processAgentRun = async (
   job: AgentRunJobData,
   modelClient: ModelClient,
-  validator: ProjectValidator
+  validator: ProjectValidator,
+  execution?: BranchExecutionContext
 ): Promise<void> => {
   const run = await AgentRun.findById(job.runId);
 
@@ -460,11 +680,13 @@ export const processAgentRun = async (
       return;
     }
 
-    await transitionRun(run, 'persisting', 'completed', {
-      resultSnapshotId: pendingSnapshot._id,
-      completedAt: new Date()
-    });
-    await activateSnapshotIfBaseIsCurrent(run, pendingSnapshot._id);
+    const status = await completeRunWithSnapshot(run, pendingSnapshot);
+    const manifest = await ArtifactManifest.findOne({
+      artifactId: pendingSnapshot.artifactId,
+      workspaceId: run.workspaceId,
+      projectId: run.projectId,
+      kind: 'project_snapshot'
+    }).select('fileCount').lean();
     await emitAgentEvent({
       runId: run._id,
       userId: run.userId,
@@ -473,16 +695,19 @@ export const processAgentRun = async (
       message: 'Agent run completed with a project snapshot',
       payload: {
         snapshotId: pendingSnapshot._id.toString(),
-        fileCount: pendingSnapshot.files.length
+        fileCount: manifest?.fileCount ?? 0,
+        branchId: run.branchId?.toString(),
+        branchAdvanced: status === 'completed',
+        conflict: status === 'completed_with_conflict'
       }
     });
     return;
   }
 
-  if (run.status === 'completed') {
-    if (run.resultSnapshotId) {
-      await activateSnapshotIfBaseIsCurrent(run, run.resultSnapshotId);
-    }
+  if (
+    run.status === 'completed' ||
+    run.status === 'completed_with_conflict'
+  ) {
     const completedEvent = await AgentEvent.exists({
       runId: run._id,
       type: 'run.completed'
@@ -490,7 +715,16 @@ export const processAgentRun = async (
 
     if (!completedEvent && run.resultSnapshotId) {
       const snapshot = await ProjectSnapshot.findById(run.resultSnapshotId)
-        .select('files');
+        .select('artifactId');
+      const manifest = snapshot
+        ? await ArtifactManifest.findOne({
+            artifactId: snapshot.artifactId,
+            workspaceId: run.workspaceId,
+            projectId: run.projectId,
+            kind: 'project_snapshot'
+          })
+          .select('fileCount').lean()
+        : null;
       await emitAgentEvent({
         runId: run._id,
         userId: run.userId,
@@ -499,7 +733,10 @@ export const processAgentRun = async (
         message: 'Agent run completed with a project snapshot',
         payload: {
           snapshotId: run.resultSnapshotId.toString(),
-          fileCount: snapshot?.files.length ?? 0
+          fileCount: manifest?.fileCount ?? 0,
+          branchId: run.branchId?.toString(),
+          branchAdvanced: run.status === 'completed',
+          conflict: run.status === 'completed_with_conflict'
         }
       });
     }
@@ -528,17 +765,18 @@ export const processAgentRun = async (
           userId: run.userId
         })
       : null;
-    const basePackageJson = baseSnapshot
-      ? baseSnapshot.toObject().packageJson
-      : undefined;
+    const baseBundle = baseSnapshot
+      ? await getArtifactService().readOwnedBundle({
+          artifactId: baseSnapshot.artifactId,
+          workspaceId: run.workspaceId!,
+          projectId: run.projectId,
+          kind: 'project_snapshot'
+        })
+      : null;
+    const basePackageJson = baseBundle?.packageJson;
     const baseFiles = resolveProjectBaseFiles(
-      baseSnapshot
-        ? baseSnapshot.files.map(file => ({
-            path: file.path,
-            content: file.content,
-            language: file.language,
-            generatedByRunId: file.generatedByRunId
-          }))
+      baseBundle
+        ? domainFiles(baseBundle.files)
         : undefined
     );
 
@@ -580,36 +818,19 @@ export const processAgentRun = async (
       }
     });
 
+    await execution?.assertHeld();
     await transitionRun(run, 'validating', 'persisting');
-    const snapshot = await ProjectSnapshot.create({
-        userId: run.userId,
-        projectId: run.projectId,
-        sourceRunId: run._id,
-        parentSnapshotId: baseSnapshot?._id,
-        files: generation.files,
-        packageJson: generation.packageJson,
-        validation: generation.validation,
-        summary: generation.summary
-      });
+    const snapshot = await createRunSnapshot(run, {
+      parentSnapshotId: baseSnapshot?._id,
+      files: generation.files,
+      packageJson: generation.packageJson,
+      validation: generation.validation,
+      summary: generation.summary
+    });
 
-    try {
-      await transitionRun(run, 'persisting', 'completed', {
-        resultSnapshotId: snapshot._id,
-        usage: generation.usage,
-        completedAt: new Date()
-      });
-    } catch (error) {
-      await ProjectSnapshot.deleteOne({ _id: snapshot._id });
-      throw error;
-    }
-    try {
-      await activateSnapshotIfBaseIsCurrent(run, snapshot._id);
-    } catch (error) {
-      throw Object.assign(new Error('Failed to activate completed project snapshot'), {
-        code: 'SNAPSHOT_ACTIVATION_FAILED',
-        cause: error
-      });
-    }
+    const status = await completeRunWithSnapshot(run, snapshot, {
+      usage: generation.usage
+    });
 
     if (run.chatId) {
       try {
@@ -640,7 +861,10 @@ export const processAgentRun = async (
         message: 'Agent run completed with a project snapshot',
         payload: {
           snapshotId: snapshot._id.toString(),
-          fileCount: generation.files.length
+          fileCount: generation.files.length,
+          branchId: run.branchId?.toString(),
+          branchAdvanced: status === 'completed',
+          conflict: status === 'completed_with_conflict'
         }
       });
     } catch (error) {
@@ -656,13 +880,14 @@ export const processAgentRun = async (
 
     console.error(`AgentRun ${run._id.toString()} failed`, error);
 
-    if (['COMPLETION_EVENT_FAILED', 'SNAPSHOT_ACTIVATION_FAILED'].includes(
+    if (['COMPLETION_EVENT_FAILED'].includes(
       (error as { code?: string }).code ?? ''
     )) {
       throw error;
     }
 
-    const publicError = publicAgentError(error);
+    let effectiveError = error;
+    let publicError = publicAgentError(effectiveError);
     const failedCandidate = (
       error as {
         code?: string;
@@ -673,18 +898,18 @@ export const processAgentRun = async (
         };
       }
     ).candidate;
-    const candidate = (
+    let candidate: InstanceType<typeof ValidationCandidate> | null = null;
+    if (
       publicError.code === 'VALIDATION_INFRA_ERROR' &&
       failedCandidate
-    ) ? await ValidationCandidate.create({
-      userId: run.userId,
-      projectId: run.projectId,
-      sourceRunId: run._id,
-      files: failedCandidate.files,
-      packageJson: failedCandidate.packageJson,
-      summary: failedCandidate.summary,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1_000)
-    }) : null;
+    ) {
+      try {
+        candidate = await createRunCandidate(run, failedCandidate);
+      } catch (candidateError) {
+        effectiveError = candidateError;
+        publicError = publicAgentError(candidateError);
+      }
+    }
     const result = await AgentRun.updateOne(
       {
         _id: run._id,
@@ -698,6 +923,7 @@ export const processAgentRun = async (
             validationCandidateId: candidate._id,
             retryable: true
           }),
+          ...(!candidate && { retryable: false }),
           completedAt: new Date()
         }
       }
@@ -723,24 +949,46 @@ export const processAgentRun = async (
 
 export const processValidationCandidate = async (
   jobData: AgentRunJobData,
-  validator: ProjectValidator
+  validator: ProjectValidator,
+  execution?: BranchExecutionContext
 ): Promise<void> => {
   if (!jobData.candidateId) {
     throw new Error('Retry-validation job requires a candidate id');
   }
   const run = await AgentRun.findById(jobData.runId);
   if (!run || run.status !== 'queued') return;
-  const candidate = await ValidationCandidate.findOne({
-    _id: jobData.candidateId,
-    userId: run.userId,
-    projectId: run.projectId,
-    expiresAt: { $gt: new Date() }
-  });
-  if (!candidate) {
+  if (
+    !run.validationCandidateId?.equals(jobData.candidateId) ||
+    !run.retryOfRunId
+  ) {
     throw new Error('Validation candidate not found');
   }
-
   try {
+    const candidate = await ValidationCandidate.findOne({
+      _id: run.validationCandidateId,
+      userId: run.userId,
+      workspaceId: run.workspaceId,
+      projectId: run.projectId,
+      branchId: run.branchId,
+      sourceRunId: run.retryOfRunId
+    });
+    if (!candidate) {
+      throw Object.assign(new Error('Validation candidate is unavailable'), {
+        code: 'VALIDATION_CANDIDATE_NOT_FOUND'
+      });
+    }
+    if (candidate.expiresAt <= new Date()) {
+      throw Object.assign(new Error('Validation candidate has expired'), {
+        code: 'VALIDATION_CANDIDATE_EXPIRED'
+      });
+    }
+    const candidateBundle = await getArtifactService().readOwnedBundle({
+      artifactId: candidate.artifactId,
+      workspaceId: run.workspaceId!,
+      projectId: run.projectId,
+      kind: 'validation_candidate'
+    });
+    const candidateFiles = domainFiles(candidateBundle.files);
     await transitionRun(run, 'queued', 'running', { startedAt: new Date() });
     await emitAgentEvent({
       runId: run._id,
@@ -752,7 +1000,7 @@ export const processValidationCandidate = async (
     await transitionRun(run, 'running', 'validating');
     const validation = await validator.validate({
       runId: `${run._id.toString()}-retry`,
-      files: candidate.files,
+      files: candidateFiles,
       onProgress: async progress => {
         await emitAgentEvent({
           runId: run._id,
@@ -784,23 +1032,18 @@ export const processValidationCandidate = async (
       message: 'Project validation passed',
       payload: validation
     });
+    await execution?.assertHeld();
     await transitionRun(run, 'validating', 'persisting');
-    const snapshot = await ProjectSnapshot.create({
-      userId: run.userId,
-      projectId: run.projectId,
-      sourceRunId: run._id,
+    const snapshot = await createRunSnapshot(run, {
       parentSnapshotId: run.baseSnapshotId,
-      files: candidate.files,
-      packageJson: candidate.packageJson,
+      files: candidateFiles,
+      packageJson: candidateBundle.packageJson,
       validation,
       summary: candidate.summary
     });
-    await transitionRun(run, 'persisting', 'completed', {
-      resultSnapshotId: snapshot._id,
-      completedAt: new Date(),
+    const status = await completeRunWithSnapshot(run, snapshot, {
       retryable: false
     });
-    await activateSnapshotIfBaseIsCurrent(run, snapshot._id);
     await ValidationCandidate.deleteOne({ _id: candidate._id });
     await emitAgentEvent({
       runId: run._id,
@@ -810,14 +1053,34 @@ export const processValidationCandidate = async (
       message: 'Agent run completed with a project snapshot',
       payload: {
         snapshotId: snapshot._id.toString(),
-        fileCount: candidate.files.length
+        fileCount: candidateBundle.files.length,
+        branchId: run.branchId?.toString(),
+        branchAdvanced: status === 'completed',
+        conflict: status === 'completed_with_conflict'
       }
     });
   } catch (error) {
     const publicError = publicAgentError(error);
-    const retryable = publicError.code === 'VALIDATION_INFRA_ERROR';
+    const retryable =
+      publicError.code === 'VALIDATION_INFRA_ERROR' ||
+      publicError.code === 'ARTIFACT_STORE_UNAVAILABLE' ||
+      (
+        publicError.code === 'ARTIFACT_WRITE_FAILED' &&
+        error instanceof ArtifactError &&
+        error.retryable
+      );
     await AgentRun.updateOne(
-      { _id: run._id, status: { $nin: ['completed', 'failed', 'cancelled'] } },
+      {
+        _id: run._id,
+        status: {
+          $nin: [
+            'completed',
+            'completed_with_conflict',
+            'failed',
+            'cancelled'
+          ]
+        }
+      },
       {
         $set: {
           status: 'failed',

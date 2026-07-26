@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAgentContext } from './contextBuilder';
+import { buildAgentContext, loadAgentContext } from './contextBuilder';
 import { createProjectTemplateFiles } from './projectTemplate';
+import { Project } from '../models/Project';
+import { ProjectSnapshot } from '../models/ProjectSnapshot';
+import {
+  getArtifactService,
+  setArtifactServiceForTests
+} from '../artifacts/runtime';
+import type { ArtifactService } from '../artifacts/artifactService';
+import type { IAgentRun } from '../models/AgentRun';
+import { Types } from 'mongoose';
 
 const input = {
   prompt: 'Add a task filter',
@@ -94,4 +103,69 @@ test('buildAgentContext includes the Create template file contents', () => {
     context.files.find(file => file.path === 'index.html')?.content?.includes('/src/main.tsx'),
     true
   );
+});
+
+test('loadAgentContext hydrates edit files through the base artifact', async () => {
+  const projectFindOne = Project.findOne;
+  const snapshotFindOne = ProjectSnapshot.findOne;
+  const realService = getArtifactService();
+  const artifactId = 'a'.repeat(32);
+  const ids = {
+    userId: new Types.ObjectId(),
+    workspaceId: new Types.ObjectId(),
+    projectId: new Types.ObjectId(),
+    branchId: new Types.ObjectId(),
+    snapshotId: new Types.ObjectId()
+  };
+  Project.findOne = (async () => ({
+    name: 'Artifact project',
+    description: 'Hydrated context',
+    settings: { framework: 'react', styling: 'tailwind', uiLibrary: 'none' }
+  })) as typeof Project.findOne;
+  ProjectSnapshot.findOne = (async () => ({
+    artifactId,
+    workspaceId: ids.workspaceId,
+    projectId: ids.projectId
+  })) as typeof ProjectSnapshot.findOne;
+  setArtifactServiceForTests({
+    readOwnedBundle: async (
+      request: Parameters<ArtifactService['readOwnedBundle']>[0]
+    ) => {
+      assert.equal(request.artifactId, artifactId);
+      assert.equal(request.workspaceId.toString(), ids.workspaceId.toString());
+      assert.equal(request.projectId.toString(), ids.projectId.toString());
+      assert.equal(request.kind, 'project_snapshot');
+      return {
+        version: 1 as const,
+        files: [{
+          path: 'src/App.tsx',
+          content: 'export default function App() { return <main>Artifact</main>; }',
+          language: 'tsx' as const
+        }],
+        packageJson: {
+          dependencies: {},
+          devDependencies: {},
+          scripts: {}
+        }
+      };
+    }
+  } as unknown as ArtifactService);
+
+  try {
+    const context = await loadAgentContext({
+      ...ids,
+      _id: new Types.ObjectId(),
+      prompt: 'Edit from artifact',
+      mode: 'edit',
+      baseSnapshotId: ids.snapshotId
+    } as unknown as IAgentRun, 20_000);
+    assert.equal(
+      context.files.find(file => file.path === 'src/App.tsx')?.content,
+      'export default function App() { return <main>Artifact</main>; }'
+    );
+  } finally {
+    Project.findOne = projectFindOne;
+    ProjectSnapshot.findOne = snapshotFindOne;
+    setArtifactServiceForTests(realService);
+  }
 });

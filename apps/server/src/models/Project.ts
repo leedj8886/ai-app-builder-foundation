@@ -1,12 +1,17 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IProject extends Document {
+  workspaceId?: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
   name: string;
   description?: string;
   chatIds: mongoose.Types.ObjectId[];
   activeSnapshotId?: mongoose.Types.ObjectId;
   activeSnapshotRevision: number;
+  sandboxLimits: {
+    maxConcurrentBuilds: number;
+    maxRunningPreviews: number;
+  };
   settings: {
     framework: 'react' | 'vue' | 'svelte';
     styling: 'tailwind' | 'css-modules' | 'styled-components';
@@ -17,6 +22,11 @@ export interface IProject extends Document {
 }
 
 const ProjectSchema = new Schema<IProject>({
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true
+  },
   userId: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -44,6 +54,20 @@ const ProjectSchema = new Schema<IProject>({
     required: true,
     default: 0
   },
+  sandboxLimits: {
+    maxConcurrentBuilds: {
+      type: Number,
+      required: true,
+      default: 2,
+      min: 1
+    },
+    maxRunningPreviews: {
+      type: Number,
+      required: true,
+      default: 3,
+      min: 1
+    }
+  },
   settings: {
     framework: {
       type: String,
@@ -66,6 +90,6 @@ const ProjectSchema = new Schema<IProject>({
 });
 
 // Index for efficient queries
-ProjectSchema.index({ userId: 1, updatedAt: -1 });
+ProjectSchema.index({ userId: 1, workspaceId: 1, updatedAt: -1 });
 
 export const Project = mongoose.model<IProject>('Project', ProjectSchema);
