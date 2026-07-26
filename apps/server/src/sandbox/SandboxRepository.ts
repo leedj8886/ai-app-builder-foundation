@@ -99,6 +99,29 @@ export class SandboxRepository {
     return SandboxLease.findOne({ provisioningKey: key }).exec();
   }
 
+  findByProviderRef(
+    provider: string,
+    externalId: string
+  ): Promise<SandboxLeaseDocument | null> {
+    return SandboxLease.findOne({ provider, externalId }).exec();
+  }
+
+  claimProvisioning(
+    leaseId: Types.ObjectId,
+    expectedUpdatedAt: Date,
+    claimedAt: Date
+  ): Promise<SandboxLeaseDocument | null> {
+    return SandboxLease.findOneAndUpdate(
+      {
+        _id: leaseId,
+        state: 'provisioning',
+        updatedAt: expectedUpdatedAt
+      },
+      { $set: { lastHeartbeatAt: claimedAt } },
+      { new: true, runValidators: true }
+    ).exec();
+  }
+
   async transition(input: {
     leaseId: Types.ObjectId;
     from: SandboxLeaseState[];
