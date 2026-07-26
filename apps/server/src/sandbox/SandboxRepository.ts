@@ -71,6 +71,10 @@ const duplicateKey = (error: unknown): boolean =>
   );
 
 export class SandboxRepository {
+  findById(leaseId: Types.ObjectId): Promise<SandboxLeaseDocument | null> {
+    return SandboxLease.findById(leaseId).exec();
+  }
+
   async createReserved(
     input: SandboxReservationRecord
   ): Promise<SandboxLeaseDocument> {
