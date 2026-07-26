@@ -8,6 +8,10 @@ export interface IProject extends Document {
   chatIds: mongoose.Types.ObjectId[];
   activeSnapshotId?: mongoose.Types.ObjectId;
   activeSnapshotRevision: number;
+  sandboxLimits: {
+    maxConcurrentBuilds: number;
+    maxRunningPreviews: number;
+  };
   settings: {
     framework: 'react' | 'vue' | 'svelte';
     styling: 'tailwind' | 'css-modules' | 'styled-components';
@@ -49,6 +53,20 @@ const ProjectSchema = new Schema<IProject>({
     type: Number,
     required: true,
     default: 0
+  },
+  sandboxLimits: {
+    maxConcurrentBuilds: {
+      type: Number,
+      required: true,
+      default: 2,
+      min: 1
+    },
+    maxRunningPreviews: {
+      type: Number,
+      required: true,
+      default: 3,
+      min: 1
+    }
   },
   settings: {
     framework: {

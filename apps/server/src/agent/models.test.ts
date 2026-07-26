@@ -12,6 +12,7 @@ import { BranchExecutionLease } from '../models/BranchExecutionLease';
 import { Chat } from '../models/Chat';
 import { ArtifactManifest } from '../models/ArtifactManifest';
 import { ValidationCandidate } from '../models/ValidationCandidate';
+import { SandboxLease } from '../models/SandboxLease';
 
 test('ArtifactManifest exposes integrity metadata and exact indexes', () => {
   const paths = [
@@ -76,6 +77,49 @@ test('Project model exposes the active snapshot pointer', () => {
   assert.deepEqual(
     Project.schema.indexes().map(([fields]) => fields),
     [{ userId: 1, workspaceId: 1, updatedAt: -1 }]
+  );
+});
+
+test('Sandbox models expose durable lease scope, policy, limits, and indexes', () => {
+  for (const path of [
+    'workspaceId',
+    'projectId',
+    'branchId',
+    'requestedByUserId',
+    'sourceArtifact.artifactId',
+    'sourceArtifact.kind',
+    'purpose',
+    'provider',
+    'provisioningKey',
+    'externalId',
+    'state',
+    'spec.networkPolicy.defaultAction',
+    'resourceProfile.cpu',
+    'reservedAt',
+    'expiresAt'
+  ]) {
+    assert.ok(SandboxLease.schema.path(path), path);
+  }
+  assert.ok(Project.schema.path('sandboxLimits.maxConcurrentBuilds'));
+  assert.ok(Project.schema.path('sandboxLimits.maxRunningPreviews'));
+  const project = new Project({
+    workspaceId: new Types.ObjectId(),
+    userId: new Types.ObjectId(),
+    name: 'Sandbox defaults'
+  });
+  assert.equal(project.sandboxLimits.maxConcurrentBuilds, 2);
+  assert.equal(project.sandboxLimits.maxRunningPreviews, 3);
+
+  assert.deepEqual(
+    SandboxLease.schema.indexes().map(([fields]) => fields),
+    [
+      { provisioningKey: 1 },
+      { branchId: 1, purpose: 1 },
+      { workspaceId: 1, purpose: 1, state: 1 },
+      { projectId: 1, purpose: 1, state: 1 },
+      { state: 1, expiresAt: 1 },
+      { provider: 1, externalId: 1 }
+    ]
   );
 });
 
