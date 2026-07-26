@@ -1,6 +1,7 @@
 import { ArtifactManifest, type IArtifactManifest } from '../models/ArtifactManifest';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { ValidationCandidate } from '../models/ValidationCandidate';
+import { SandboxLease } from '../models/SandboxLease';
 import type { ArtifactStore } from './ArtifactStore';
 import type { ArtifactService } from './artifactService';
 import { ArtifactError } from './types';
@@ -87,11 +88,15 @@ const reconcileWriting = async (
 };
 
 const hasReference = async (artifactId: string): Promise<boolean> => {
-  const [snapshot, candidate] = await Promise.all([
+  const [snapshot, candidate, lease] = await Promise.all([
     ProjectSnapshot.exists({ artifactId }),
-    ValidationCandidate.exists({ artifactId })
+    ValidationCandidate.exists({ artifactId }),
+    SandboxLease.exists({
+      'sourceArtifact.artifactId': artifactId,
+      state: { $ne: 'terminated' }
+    })
   ]);
-  return snapshot !== null || candidate !== null;
+  return snapshot !== null || candidate !== null || lease !== null;
 };
 
 const deletePendingManifest = async (

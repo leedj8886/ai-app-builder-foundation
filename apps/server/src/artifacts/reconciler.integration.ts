@@ -10,6 +10,7 @@ import {
 } from 'testcontainers';
 import { ArtifactManifest } from '../models/ArtifactManifest';
 import { ValidationCandidate } from '../models/ValidationCandidate';
+import { SandboxLease } from '../models/SandboxLease';
 import type { ArtifactStore } from './ArtifactStore';
 import { ArtifactService } from './artifactService';
 import { reconcileArtifacts } from './reconciler';
@@ -95,7 +96,8 @@ before(async () => {
     await mongoose.connect(uri);
     await Promise.all([
       ArtifactManifest.syncIndexes(),
-      ValidationCandidate.syncIndexes()
+      ValidationCandidate.syncIndexes(),
+      SandboxLease.syncIndexes()
     ]);
   } catch (error) {
     await mongoose.disconnect().catch(() => undefined);
@@ -107,7 +109,8 @@ before(async () => {
 beforeEach(async () => {
   await Promise.all([
     ArtifactManifest.deleteMany({}),
-    ValidationCandidate.deleteMany({})
+    ValidationCandidate.deleteMany({}),
+    SandboxLease.deleteMany({})
   ]);
   if (root) await rm(root, { recursive: true, force: true });
   root = await mkdtemp(path.join(tmpdir(), 'artifact-reconciler-'));
@@ -214,6 +217,54 @@ test('preserves referenced ready artifacts and deletes old unreferenced artifact
   assert.ok(await ArtifactManifest.exists({ artifactId: referenced.artifactId }));
   assert.equal(await ArtifactManifest.exists({ artifactId: orphan.artifactId }), null);
   assert.equal(await store.exists(orphan.storageKey), false);
+});
+
+test('preserves artifacts referenced by non-terminated Sandbox leases', async () => {
+  const store = new SharedFilesystemArtifactStore(root);
+  const manifest = await seedArtifact(store, 'ready', old);
+  const reservedAt = new Date(now.getTime() - 60_000);
+  const lease = await SandboxLease.create({
+    workspaceId: manifest.workspaceId,
+    projectId: manifest.projectId,
+    branchId: new Types.ObjectId(),
+    requestedByUserId: new Types.ObjectId(),
+    runId: new Types.ObjectId(),
+    sourceArtifact: {
+      artifactId: manifest.artifactId,
+      kind: 'validation_candidate'
+    },
+    purpose: 'build',
+    provider: 'fake',
+    provisioningKey: `lease:${crypto.randomUUID()}`,
+    state: 'provisioning',
+    spec: {
+      image: 'node:22',
+      workingDirectory: '/workspace',
+      networkPolicy: {
+        defaultAction: 'allow',
+        allowedDomains: [],
+        allowedCidrs: []
+      },
+      leaseSeconds: 900,
+      autoDeleteSeconds: 1_800
+    },
+    resourceProfile: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
+    reservedAt,
+    expiresAt: new Date(now.getTime() + 900_000)
+  });
+
+  assert.equal((await reconcile(store)).preserved, 1);
+  assert.ok(await ArtifactManifest.exists({ artifactId: manifest.artifactId }));
+
+  await SandboxLease.updateOne(
+    { _id: lease._id },
+    { $set: { state: 'terminated', terminatedAt: now } }
+  );
+  assert.equal((await reconcile(store)).deleted, 1);
+  assert.equal(
+    await ArtifactManifest.exists({ artifactId: manifest.artifactId }),
+    null
+  );
 });
 
 test('resumes delete_pending and retains it when store deletion is unavailable', async () => {

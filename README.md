@@ -172,7 +172,8 @@ ARTIFACT_ORPHAN_RETENTION_MS=86400000
 - 部署系统负责备份、容量及 inode 告警。临时清理失败应进入平台日志和告警。
 
 一次性 Reconciler 用于推进超时的 `writing` Manifest、重试
-`delete_pending` 清理，以及回收超过保留期且没有 Snapshot/Candidate 引用的
+`delete_pending` 清理，以及回收超过保留期且没有 Snapshot、Candidate 或非终态
+SandboxLease 引用的
 Artifact：
 
 ```bash
@@ -189,3 +190,26 @@ Manifest CAS，可容忍偶发的并发执行，但生产环境仍建议单任�
 
 该命令不是存量数据迁移工具；本项目采用最终态 Artifact Schema，不支持把旧的
 MongoDB `files/packageJson` 字段转换为 Artifact。
+
+## Sandbox Core（Phase 2）
+
+Phase 2 提供与具体厂商无关的 Sandbox Core，但尚未切换 Agent Worker 的现有本地
+校验流程。当前默认使用确定性的 Fake Provider 做测试；LocalProcessProvider 仅供
+开发和合同测试使用，不提供网络隔离，也禁止在生产环境启用。
+
+新 Sandbox 预留通过 Redis Workspace 短锁进行调度。Redis 不可用或锁丢失时，
+系统会拒绝新预留，不会退化为无锁 MongoDB 计数。MongoDB 中以下 Lease 状态占用
+Project 和 Workspace 配额：
+
+- `reserved`
+- `provisioning`
+- `ready`
+- `running`
+- `terminating`
+
+每个 Branch 最多存在一个占用配额的 Build Lease；Project 默认最多两个并行 Build
+和三个运行中 Preview，Workspace 同时限制数量、CPU、内存和磁盘。历史代码内容
+由 ArtifactStore 持久保存，非 `terminated` Lease 会保护其源 Artifact 不被回收。
+
+Daytona Provider、Worker 切换、PreviewDeployment、Preview Gateway 和 Preview
+回收策略属于后续阶段，Phase 2 不把这些能力标记为已实现。
