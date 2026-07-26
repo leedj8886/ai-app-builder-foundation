@@ -15,6 +15,7 @@
     "test:smoke:api": "tsx tests/smoke/api-smoke.ts",
     "test:smoke:browser": "playwright test tests/smoke/workspace.spec.ts",
     "test:smoke": "tsx tests/smoke/run-smoke.ts",
+    "test:readiness": "node --import tsx --test tests/repository/open-source-readiness.test.ts",
     "clean": "turbo run clean"
   },
   "devDependencies": {
