@@ -917,7 +917,7 @@ function WorkspaceScreen({
 }) {
   return (
     <main
-      className={`grid min-h-[calc(100vh-48px)] grid-cols-1 bg-white ${
+      className={`grid h-[calc(100vh-48px)] min-h-0 grid-cols-1 overflow-hidden bg-white ${
         sidebarCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-[272px_1fr]'
       }`}
     >
@@ -969,7 +969,7 @@ function WorkspaceScreen({
         </button>
       )}
 
-      <section className="flex min-w-0 flex-col">
+      <section className="flex min-h-0 min-w-0 flex-col">
         <div className="flex h-13 min-h-13 items-center justify-between border-b border-neutral-200 px-3 py-2 sm:px-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{selectedTemplate.title}</p>
@@ -989,8 +989,8 @@ function WorkspaceScreen({
           </div>
         </div>
 
-        <div className="grid flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[440px_1fr]">
-          <section className="flex min-h-[420px] flex-col border-b border-neutral-200 xl:border-b-0 xl:border-r">
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[440px_1fr]">
+          <section className="flex min-h-0 flex-col border-b border-neutral-200 xl:border-b-0 xl:border-r">
             <div
               className="sr-only"
               data-testid="agent-generation-status"
