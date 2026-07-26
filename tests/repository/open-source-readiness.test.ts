@@ -129,3 +129,21 @@ test('repository includes contribution templates and a reproducible example', as
   assert.match(checklist, /npm run test:smoke/);
   assert.match(checklist, /四名测试者/);
 });
+
+test('architecture keeps the core independent from application agent frameworks', async () => {
+  const architecture = await readFile(
+    repositoryFile('docs/architecture.md'),
+    'utf8'
+  );
+
+  assert.match(architecture, /## 核心边界/);
+  assert.match(
+    architecture,
+    /Model Provider.*Agent Runtime.*Tool Registry.*Run.*Event State.*Workspace Snapshot.*Validate.*Repair.*Preview/s
+  );
+  assert.match(
+    architecture,
+    /核心不依赖 LangChain、LangGraph、AI SDK 等应用层 Agent 框架/
+  );
+  assert.match(architecture, /独立、可选的 Adapter/);
+});

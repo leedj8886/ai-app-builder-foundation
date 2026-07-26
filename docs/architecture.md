@@ -16,6 +16,19 @@
 | Agent Worker | Node.js | 规划、生成、验证、修复和持久化 |
 | Validation Workspace | npm、TypeScript、Vite | 在隔离目录中验证生成项目 |
 
+## 核心边界
+
+核心运行路径由项目自身的 TypeScript 接口连接：
+
+`Model Provider → Agent Runtime / Tool Registry → Run / Event State → Workspace Snapshot → Validate / Repair / Preview`
+
+- 核心不依赖 LangChain、LangGraph、AI SDK 等应用层 Agent 框架。
+- Orchestrator、状态模型和验证流水线只依赖项目自有接口，不接收厂商 SDK 或第三方框架的专有类型。
+- 模型厂商、第三方框架和内部 Agent 平台通过边缘 Adapter 接入。
+- 这些集成应保持为独立、可选的 Adapter，不得成为核心运行、默认构建或自托管部署的前置条件。
+
+“框架无关”并不禁止团队使用第三方框架，而是确保团队能够替换任何边缘集成而无需重写 Open v0 的核心状态与执行流程。
+
 ## 一次生成的数据流
 
 ```mermaid
