@@ -1,129 +1,171 @@
-# v0-by-kimi
+# Open v0 Platform Foundation
 
-一个基于自然语言的多轮对话生成 Web 站点的平台，类似于 v0.dev。
+> 当前开发代号：`v0-by-kimi`。正式品牌将在独立命名阶段确定。
 
-## 功能特性
+帮助团队搭建自己的 v0：一个开源、可自托管的 AI App Builder 平台底座。
 
-- 🤖 **AI 驱动的代码生成** - 通过自然语言描述生成 React + Tailwind CSS + shadcn/ui 代码
-- 💬 **多轮对话迭代** - 持续对话修改和优化生成的界面
-- 👁️ **实时预览** - 即时查看生成的 UI 效果
-- 📁 **项目管理** - 保存对话历史，组织成项目
-- 🔐 **用户认证** - 支持注册、登录、个人工作台
-- 📤 **代码导出** - 一键复制或下载生成的代码
+**不只是生成代码，而是生成能够通过真实构建的代码。**
 
-## 技术栈
+[快速开始](#快速开始) · [系统架构](docs/architecture.md) ·
+[故障排查](docs/troubleshooting.md) · [路线图](ROADMAP.md) ·
+[参与贡献](CONTRIBUTING.md)
 
-### 后端
-- Node.js + Express
-- TypeScript
-- MongoDB (数据存储)
-- DeepSeek API（AI 代码生成）
-- JWT (认证)
+## 为什么做这个项目
 
-### 前端
-- React 18 + TypeScript
-- Tailwind CSS
-- shadcn/ui
-- Monaco Editor (代码编辑)
-- Sandpack (代码预览)
+多数 AI App Builder 在模型输出代码后就宣布完成。本项目将代码生成放入一个可审计、可恢复的执行流程：
 
-## 项目结构
+`规划 → 生成 → 安装依赖 → 类型检查 → 生产构建 → 诊断 → 修复 → 快照`
 
-```
-v0-by-kimi/
-├── apps/
-│   ├── server/          # 后端服务
-│   └── web/             # 前端应用
-├── packages/
-│   ├── shared/          # 共享类型和工具
-│   └── ui/              # 共享 UI 组件
-├── docker-compose.yml
-└── README.md
-```
+只有生成项目通过验证后，运行才会完成并生成可预览快照。失败会被分类为代码错误、依赖错误或基础设施错误，以便定向修复或重试。
+
+## 适合谁
+
+- 为组织建设内部 AI 开发平台的团队
+- 构建垂直 AI App Builder 的创业者
+- 需要自托管和可扩展 prompt-to-app 环境的开发者
+- 研究 Coding Agent 可靠性与恢复架构的工程师
+
+如果你只想立即使用成熟的消费级 AI App Builder，本项目当前并不以替代其全部产品体验为目标。
+
+## 核心能力
+
+- **构建验证：** 结构、依赖、TypeScript 和生产构建分层校验。
+- **定向恢复：** 区分代码、依赖和基础设施问题，避免盲目重新生成。
+- **可审计 Agent：** BullMQ Worker 异步执行，SSE 实时展示持久化事件。
+- **项目快照：** 保存通过验证的完整文件树，支持多轮修改和回滚。
+- **多用户平台：** JWT 认证、项目、对话和用户隔离。
+- **自托管：** React、Express、MongoDB、Redis、Nginx 和 Docker Compose。
 
 ## 快速开始
 
+### 前置条件
+
+- Docker Desktop 或 Docker Engine + Compose v2
+- 一个可用的 DeepSeek API Key
+
+### 启动
+
 ```bash
-# 安装依赖
-npm install
-
-# 启动开发服务器
-npm run dev
-
-# 访问 http://localhost:3000
+cp .env.example .env
 ```
 
-## 环境变量
+编辑 `.env`，至少填写：
+
+```dotenv
+DEEPSEEK_API_KEY=your-key
+JWT_SECRET=replace-with-a-random-secret
+MONGO_ROOT_PASSWORD=replace-with-a-local-password
+```
+
+然后启动：
 
 ```bash
-# 后端 (.env)
-PORT=3001
-MONGODB_URI=mongodb://localhost:27017/v0-by-kimi
-JWT_SECRET=your-secret-key
-DEEPSEEK_API_KEY=your-deepseek-key
+docker compose up --build
+```
+
+访问：
+
+- Web：http://localhost:3000
+- API 健康检查：http://localhost:3001/health
+
+查看状态和日志：
+
+```bash
+docker compose ps
+docker compose logs -f server worker
+```
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+需要同时删除本地 MongoDB 数据和验证缓存时，明确运行：
+
+```bash
+docker compose down --volumes
+```
+
+该命令会删除 Compose 创建的数据卷，请先确认本地数据不再需要。
+
+## 手动开发
+
+```bash
+npm install
+cp apps/server/.env.example apps/server/.env
+cp apps/web/.env.example apps/web/.env
+docker compose up -d mongodb redis
+npm run dev
+```
+
+另开终端启动 Worker：
+
+```bash
+npm run worker --workspace @v0/server
+```
+
+手动开发模式下 Web 默认位于 `http://localhost:5173`。
+
+## 验证
+
+```bash
+npm run test:readiness
+npm run test --workspace @v0/server
+npm run test --workspace @v0/web
+npm run build
+```
+
+完整 Docker Smoke：
+
+```bash
+npm run test:smoke
+```
+
+Smoke Worker 使用确定性的 FakeModelClient，不调用真实模型，不产生模型费用。
+
+## 系统组成
+
+| 组件 | 职责 |
+|---|---|
+| Web | 对话、执行时间线、代码和快照预览 |
+| API Server | 认证、项目、对话、Agent Run 和 SSE |
+| MongoDB | 用户、项目、Run、Event 和 Snapshot |
+| Redis/BullMQ | Agent 队列和实时事件通道 |
+| Agent Worker | 规划、生成、验证、修复和持久化 |
+| Validation Workspace | 真实安装、类型检查和生产构建 |
+
+完整数据流和扩展点见[系统架构](docs/architecture.md)。
+
+## 模型配置
+
+当前生产 Worker 通过 OpenAI SDK 调用 DeepSeek-compatible API：
+
+```dotenv
+DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
-# 可选：只覆盖 Agent Worker 使用的模型
 AGENT_MODEL=
-
-# 前端 (.env)
-VITE_API_URL=http://localhost:3001
 ```
 
-## Agent Worker
+`AGENT_MODEL` 只覆盖 Agent Worker 模型。Provider-neutral Adapter 属于公开路线图中的下一阶段。
 
-生产 Worker 使用真实 DeepSeek API 和真实项目校验：
+## 当前限制
 
-```bash
-npm run build --workspace @v0/server
-npm run start:worker --workspace @v0/server
-```
+- 当前生产 Provider 配置仍以 DeepSeek 命名。
+- 生成目标聚焦 React + TypeScript + Tailwind。
+- 构建通过不代表生成代码已通过业务、安全或合规审计。
+- 尚未提供公开在线 Demo 和一键云部署。
+- 本阶段仍使用开发代号，项目与 Vercel 无官方关系。
 
-`DEEPSEEK_MODEL` 默认是 `deepseek-v4-flash`。如需更高质量，可设置为
-`deepseek-v4-pro`；`AGENT_MODEL` 只覆盖 Agent Worker。
+## 文档
 
-Smoke Worker 使用确定性的 FakeModelClient，不调用 DeepSeek，也不会产生模型费用：
+- [系统架构](docs/architecture.md)
+- [故障排查](docs/troubleshooting.md)
+- [路线图](ROADMAP.md)
+- [贡献指南](CONTRIBUTING.md)
+- [安全策略](SECURITY.md)
 
-```bash
-npm run build --workspace @v0/server
-npm run start:smoke-worker --workspace @v0/server
-```
+## License
 
-不要把 `DEEPSEEK_API_KEY` 提交到 Git。
-
-## 项目验证与缓存
-
-Worker 会依次检查项目结构、准备依赖、运行 TypeScript 检查和生产构建。
-依赖按 `package.json`、锁文件、Node/npm 版本生成指纹，并持久化到
-`AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT`；npm 下载缓存位于
-`AGENT_VALIDATION_NPM_CACHE_ROOT`。Docker Compose 默认把两者挂载到
-`agent_validation_cache` volume。
-
-常用配置：
-
-```bash
-AGENT_VALIDATION_STRUCTURE_TIMEOUT_MS=5000
-AGENT_VALIDATION_CACHE_HIT_TIMEOUT_MS=15000
-AGENT_VALIDATION_INSTALL_TIMEOUT_MS=180000
-AGENT_VALIDATION_TYPE_CHECK_TIMEOUT_MS=60000
-AGENT_VALIDATION_BUILD_TIMEOUT_MS=120000
-AGENT_VALIDATION_ROUND_TIMEOUT_MS=300000
-AGENT_VALIDATION_INFRA_RETRY_DELAYS_MS=5000,15000
-AGENT_VALIDATION_CACHE_RETENTION_MS=604800000
-AGENT_VALIDATION_CACHE_MAX_BYTES=10737418240
-```
-
-缓存启动时清理一次，之后每六小时清理；默认保留七天，最大 10 GiB。
-校验子进程只继承 `PATH`、`HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`、
-`NODE_EXTRA_CA_CERTS`、`NPM_CONFIG_REGISTRY` 和 `npm_config_registry`，
-这些值不会写入事件或校验结果。
-
-失败分类如下：
-
-- `CODE_ERROR`：TypeScript 或构建代码错误，可由代码修复流程处理。
-- `DEPENDENCY_ERROR`：包名、版本或依赖声明错误，只允许依赖定向修复。
-- `INFRA_ERROR`：registry、网络、超时等环境问题；自动退避重试，不调用模型。
-
-基础设施重试耗尽后，页面会提供“重新验证”。它复用已保存的候选文件和依赖，
-不会重新生成代码，也不会新增用户对话消息；“重新生成”则会再次调用模型并产生
-新的代码候选。
+Apache-2.0。详见 [LICENSE](LICENSE)。
