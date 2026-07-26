@@ -4,6 +4,7 @@ import { createAgentWorker } from './agent/createWorker';
 import { createRedisConnection } from './agent/redis';
 import { createFakeModelClient } from './agent/testing/fakeModelClient';
 import { createPassingValidator } from './agent/testing/fakeValidator';
+import type { ProjectValidator } from './agent/validator';
 import { connectDB, disconnectDB } from './utils/db';
 
 dotenv.config();
@@ -12,11 +13,39 @@ const startSmokeWorker = async (): Promise<void> => {
   await connectDB();
   const config = getAgentConfig();
   const connection = createRedisConnection();
+  let validationCalls = 0;
+  const smokeValidator: ProjectValidator = process.env.SMOKE_VALIDATION_EVENTS === 'true'
+    ? {
+        validate: async input => {
+          validationCalls += 1;
+          if (validationCalls === 1) {
+            await input.onProgress?.({
+              phase: 'dependencies',
+              status: 'retrying',
+              category: 'INFRA_ERROR',
+              attempt: 1,
+              retryDelayMs: 5,
+              message: 'Deterministic transient registry failure'
+            });
+          }
+          await input.onProgress?.({
+            phase: 'dependencies',
+            status: 'passed',
+            attempt: 1,
+            cache: validationCalls === 1 ? 'miss' : 'hit',
+            message: validationCalls === 1
+              ? 'Dependencies installed'
+              : 'Dependency cache hit'
+          });
+          return { status: 'passed', retryable: false, checks: [] };
+        }
+      }
+    : createPassingValidator();
   const worker = createAgentWorker({
     connection,
     queueName: config.queueName,
     modelClient: createFakeModelClient(),
-    validator: createPassingValidator(),
+    validator: smokeValidator,
     concurrency: 1
   });
 

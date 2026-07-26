@@ -35,6 +35,15 @@ interface RunDetail {
     status: string;
     resultSnapshotId?: string;
   };
+  events?: Array<{
+    type: string;
+    payload?: {
+      phase?: string;
+      status?: string;
+      category?: string;
+      cache?: string;
+    };
+  }>;
 }
 
 const waitForTerminalRun = async (
@@ -141,6 +150,19 @@ const main = async (): Promise<void> => {
   );
   const editedDetail = await waitForTerminalRun(edited.run._id, token);
   assert.equal(editedDetail.run.status, 'completed');
+  assert.ok(editedDetail.events?.some(event =>
+    event.type === 'validation.step'
+    && event.payload?.phase === 'dependencies'
+    && event.payload.cache === 'hit'
+  ), 'unchanged dependencies should produce a cache hit');
+  assert.ok(detail.events?.some(event =>
+    event.type === 'validation.step'
+    && event.payload?.category === 'INFRA_ERROR'
+    && event.payload.status === 'retrying'
+  ), 'transient infrastructure failure should be retried');
+  assert.ok(!detail.events?.some(event =>
+    event.type === 'repair.started'
+  ), 'infrastructure retry must not invoke model repair');
 
   const persistedChat = await requestJson<{
     chat: { messages: Array<{ role: string }> };

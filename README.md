@@ -90,3 +90,40 @@ npm run start:smoke-worker --workspace @v0/server
 ```
 
 不要把 `DEEPSEEK_API_KEY` 提交到 Git。
+
+## 项目验证与缓存
+
+Worker 会依次检查项目结构、准备依赖、运行 TypeScript 检查和生产构建。
+依赖按 `package.json`、锁文件、Node/npm 版本生成指纹，并持久化到
+`AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT`；npm 下载缓存位于
+`AGENT_VALIDATION_NPM_CACHE_ROOT`。Docker Compose 默认把两者挂载到
+`agent_validation_cache` volume。
+
+常用配置：
+
+```bash
+AGENT_VALIDATION_STRUCTURE_TIMEOUT_MS=5000
+AGENT_VALIDATION_CACHE_HIT_TIMEOUT_MS=15000
+AGENT_VALIDATION_INSTALL_TIMEOUT_MS=180000
+AGENT_VALIDATION_TYPE_CHECK_TIMEOUT_MS=60000
+AGENT_VALIDATION_BUILD_TIMEOUT_MS=120000
+AGENT_VALIDATION_ROUND_TIMEOUT_MS=300000
+AGENT_VALIDATION_INFRA_RETRY_DELAYS_MS=5000,15000
+AGENT_VALIDATION_CACHE_RETENTION_MS=604800000
+AGENT_VALIDATION_CACHE_MAX_BYTES=10737418240
+```
+
+缓存启动时清理一次，之后每六小时清理；默认保留七天，最大 10 GiB。
+校验子进程只继承 `PATH`、`HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`、
+`NODE_EXTRA_CA_CERTS`、`NPM_CONFIG_REGISTRY` 和 `npm_config_registry`，
+这些值不会写入事件或校验结果。
+
+失败分类如下：
+
+- `CODE_ERROR`：TypeScript 或构建代码错误，可由代码修复流程处理。
+- `DEPENDENCY_ERROR`：包名、版本或依赖声明错误，只允许依赖定向修复。
+- `INFRA_ERROR`：registry、网络、超时等环境问题；自动退避重试，不调用模型。
+
+基础设施重试耗尽后，页面会提供“重新验证”。它复用已保存的候选文件和依赖，
+不会重新生成代码，也不会新增用户对话消息；“重新生成”则会再次调用模型并产生
+新的代码候选。

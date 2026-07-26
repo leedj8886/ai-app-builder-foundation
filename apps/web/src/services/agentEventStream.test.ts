@@ -218,6 +218,20 @@ describe('streamAgentEvents', () => {
     assert.deepEqual(received, [2, 3])
   })
 
+  it('accepts structured validation progress events', async () => {
+    const received: AgentEvent[] = []
+    await streamAgentEvents(options(async () => responseFromChunks([
+      eventFrame(1, 'validation.step', 'Dependency cache hit'),
+      eventFrame(2, 'run.completed', 'done'),
+    ]), {
+      onEvent: (event) => { received.push(event) },
+    }))
+    assert.deepEqual(received.map(event => event.type), [
+      'validation.step',
+      'run.completed',
+    ])
+  })
+
   it('awaits asynchronous event callbacks in stream order', async () => {
     const callbacks: string[] = []
     await streamAgentEvents(options(async () => responseFromChunks([

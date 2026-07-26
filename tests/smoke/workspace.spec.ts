@@ -72,6 +72,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page.getByTestId('agent-generation-status'))
     .toHaveAttribute('data-status', 'ready', { timeout: 90_000 });
   await expect(editComposer.getByRole('textbox')).toHaveValue('');
+  await expect(timeline).toContainText('依赖缓存命中');
 
   const turns = timeline.locator('[data-testid^="conversation-turn-"]');
   await expect(turns).toHaveCount(2);

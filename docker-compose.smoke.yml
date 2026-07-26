@@ -33,6 +33,7 @@ services:
       JWT_SECRET: phase6-smoke-secret
       AGENT_QUEUE_NAME: phase6-smoke-runs
       DEEPSEEK_API_KEY: null
+      SMOKE_VALIDATION_EVENTS: "true"
     volumes: !override
       - agent_validation_cache_smoke:/var/cache/v0-agent
 
