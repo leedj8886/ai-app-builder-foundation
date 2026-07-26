@@ -13,6 +13,7 @@ import {
   createTimelineState,
   formatCollapsedTurnLabel,
   formatPlanningDuration,
+  getTimelineEventState,
   validationEventLabel,
   mergeOlderTimelinePage,
   insertTimelineRun,
@@ -166,6 +167,35 @@ test('labels infrastructure retries and only exposes retry for retryable failure
 
   assert.equal(canRetryValidation(retryable), true)
   assert.equal(canRetryValidation(codeFailure), false)
+})
+
+test('marks completed lifecycle events as done instead of leaving empty circles', () => {
+  const queuedEvent: ChatTimelineEvent = {
+    type: 'run.created',
+    sequence: 1,
+    message: 'Run queued',
+    createdAt: '2026-07-25T10:00:00.000Z',
+  }
+  const generatingEvent: ChatTimelineEvent = {
+    type: 'agent.step',
+    sequence: 2,
+    message: 'Generating files',
+    payload: { phase: 'generating' },
+    createdAt: '2026-07-25T10:00:01.000Z',
+  }
+
+  assert.equal(
+    getTimelineEventState('completed', queuedEvent, 0, 2),
+    'done',
+  )
+  assert.equal(
+    getTimelineEventState('generating', queuedEvent, 0, 2),
+    'done',
+  )
+  assert.equal(
+    getTimelineEventState('generating', generatingEvent, 1, 2),
+    'active',
+  )
 })
 
 test('inserts the returned Run as the expanded active turn', () => {

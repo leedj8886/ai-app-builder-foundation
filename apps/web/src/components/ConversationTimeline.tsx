@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Circle,
   FileCode2,
   Loader2,
   Sparkles,
@@ -20,6 +19,7 @@ import {
   canRetryValidation,
   formatCollapsedTurnLabel,
   formatPlanningDuration,
+  getTimelineEventState,
   validationEventLabel,
   type ChatTimelineState,
 } from '@/lib/chatTimeline'
@@ -209,15 +209,15 @@ function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
 
       {visibleEvents.length > 0 ? (
         <div className="space-y-2">
-          {visibleEvents.map((event) => {
-            const isFailure = event.type === 'run.failed'
-              || event.type === 'validation.failed'
-            const isSuccess = event.type === 'run.completed'
-              || event.type === 'validation.passed'
-              || (
-                event.type === 'validation.step'
-                && event.payload?.status === 'passed'
-              )
+          {visibleEvents.map((event, eventIndex) => {
+            const eventState = getTimelineEventState(
+              turn.agent.status,
+              event,
+              eventIndex,
+              visibleEvents.length,
+            )
+            const isFailure = eventState === 'failed'
+            const isDone = eventState === 'done'
             const isWarning = event.type === 'validation.step'
               && event.payload?.category === 'INFRA_ERROR'
             const path = typeof event.payload?.path === 'string'
@@ -231,18 +231,18 @@ function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
                     ? <AlertCircle className="h-3.5 w-3.5" />
                     : isWarning
                       ? <AlertTriangle className="h-3.5 w-3.5" />
-                    : isSuccess
-                      ? <CheckCircle2 className="h-3.5 w-3.5" />
-                      : event.type === 'file.changed'
+                    : event.type === 'file.changed'
                         ? <FileCode2 className="h-3.5 w-3.5" />
-                        : <Circle className="h-3.5 w-3.5" />
+                      : isDone
+                        ? <CheckCircle2 className="h-3.5 w-3.5" />
+                        : <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 }
                 tone={
                   isFailure
                     ? 'danger'
                     : isWarning
                       ? 'warning'
-                      : isSuccess
+                      : isDone
                         ? 'success'
                         : 'neutral'
                 }

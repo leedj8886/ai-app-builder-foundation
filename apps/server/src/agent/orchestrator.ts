@@ -88,6 +88,26 @@ const combineUsage = (
   };
 };
 
+const hasEffectiveFileChanges = (
+  baseFiles: ProjectFile[],
+  operations: Parameters<typeof applyFileOperations>[1]
+): boolean => {
+  const baseFilesByPath = new Map(
+    baseFiles.map(file => [file.path.replace(/\\/g, '/'), file.content])
+  );
+
+  return operations.some(operation => {
+    const operationPath = operation.path.replace(/\\/g, '/');
+    const existingContent = baseFilesByPath.get(operationPath);
+
+    if (operation.type === 'delete') {
+      return existingContent !== undefined;
+    }
+
+    return existingContent !== operation.content;
+  });
+};
+
 export const runAgentGeneration = async (
   input: RunAgentGenerationInput
 ): Promise<RunAgentGenerationResult> => {
@@ -114,6 +134,15 @@ export const runAgentGeneration = async (
     context: input.context,
     plan: planned.value
   });
+  if (
+    input.context.mode === 'edit' &&
+    !hasEffectiveFileChanges(input.baseFiles, generated.value.operations)
+  ) {
+    throw Object.assign(
+      new Error('The model did not produce any effective file changes'),
+      { code: 'NO_EFFECTIVE_CHANGES' }
+    );
+  }
   const packageJson = mergeProjectPackageJson(
     input.basePackageJson,
     generated.value

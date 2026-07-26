@@ -104,6 +104,67 @@ test('runAgentGeneration plans before generating and applies file operations', a
   assert.deepEqual(events[1].payload, plan);
 });
 
+test('Edit generation rejects a successful model response with no effective file changes', async () => {
+  const existingApp = 'export default function App() { return <main>White</main>; }';
+  const context: AgentContext = {
+    prompt: 'Change the background to sky blue',
+    mode: 'edit',
+    project: {
+      name: 'Landing page',
+      framework: 'react',
+      styling: 'tailwind',
+      uiLibrary: 'none'
+    },
+    messages: [],
+    files: [{ path: 'src/App.tsx', content: existingApp }]
+  };
+  const modelClient: ModelClient = {
+    generatePlan: async () => ({
+      value: {
+        summary: 'Change the background color',
+        steps: [{
+          title: 'Update the page background',
+          intent: 'Use a sky-blue background',
+          filesLikelyTouched: ['src/App.tsx']
+        }],
+        assumptions: []
+      }
+    }),
+    generateFiles: async () => ({
+      value: {
+        message: 'Changed the background to sky blue',
+        operations: [{
+          type: 'update',
+          path: 'src/App.tsx',
+          content: existingApp
+        }],
+        dependencies: {},
+        devDependencies: {}
+      }
+    }),
+    repairFiles: async () => {
+      throw new Error('repair should not run');
+    }
+  };
+
+  await assert.rejects(
+    runAgentGeneration({
+      context,
+      baseFiles: [{
+        path: 'src/App.tsx',
+        content: existingApp,
+        language: 'tsx'
+      }],
+      modelClient,
+      onEvent: async () => undefined
+    }),
+    (error: Error & { code?: string }) => {
+      assert.equal(error.code, 'NO_EFFECTIVE_CHANGES');
+      return true;
+    }
+  );
+});
+
 test('Create generation keeps required template files when the model only updates App', async () => {
   const templateFiles = createProjectTemplateFiles();
   const context: AgentContext = {

@@ -31,6 +31,34 @@ export const terminalStatuses = new Set<ChatTimelineTurn['agent']['status']>([
   'cancelled',
 ])
 
+export type TimelineEventState = 'active' | 'done' | 'failed'
+
+export const getTimelineEventState = (
+  turnStatus: ChatTimelineTurn['agent']['status'],
+  event: ChatTimelineEvent,
+  eventIndex: number,
+  eventCount: number,
+): TimelineEventState => {
+  if (
+    event.type === 'run.failed'
+    || event.type === 'validation.failed'
+    || event.type === 'run.cancelled'
+  ) {
+    return 'failed'
+  }
+
+  if (
+    event.type === 'run.completed'
+    || event.type === 'validation.passed'
+    || terminalStatuses.has(turnStatus)
+    || eventIndex < eventCount - 1
+  ) {
+    return 'done'
+  }
+
+  return 'active'
+}
+
 export const canToggleTurn = (turn: ChatTimelineTurn): boolean =>
   terminalStatuses.has(turn.agent.status)
 
