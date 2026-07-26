@@ -164,6 +164,12 @@ export class ArtifactService {
     return this.readManifest(manifest);
   }
 
+  async verifyManifestBundle(
+    manifest: IArtifactManifest
+  ): Promise<ProjectArtifactBundleV1> {
+    return this.verifyStored(manifest);
+  }
+
   private async readManifest(
     manifest: IArtifactManifest | null
   ): Promise<ProjectArtifactBundleV1> {

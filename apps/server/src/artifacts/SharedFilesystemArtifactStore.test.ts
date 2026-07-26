@@ -41,12 +41,14 @@ test('shared store satisfies the ArtifactStore contract', async t => {
   assert.equal(await store.exists(key), false);
   await store.put({ storageKey: key, bytes });
   assert.equal(await store.exists(key), true);
+  assert.deepEqual(await store.stat(key), { size: bytes.byteLength });
   assert.deepEqual(await store.get(key), bytes);
   await expectCode('ARTIFACT_WRITE_FAILED', () =>
     store.put({ storageKey: key, bytes })
   );
   await store.delete(key);
   assert.equal(await store.exists(key), false);
+  await expectCode('ARTIFACT_NOT_FOUND', () => store.stat(key));
   await store.delete(key);
   await assertNoTempFiles(root);
 });
@@ -69,6 +71,7 @@ test('shared store rejects traversal and symlink targets', async t => {
     })
   );
   await expectCode('ARTIFACT_INVALID_PATH', () => store.get(key));
+  await expectCode('ARTIFACT_INVALID_PATH', () => store.stat(key));
   await expectCode('ARTIFACT_INVALID_PATH', () => store.exists(key));
   await expectCode('ARTIFACT_INVALID_PATH', () => store.delete(key));
   await assert.rejects(access(path.join(target, 'ab')), { code: 'ENOENT' });
@@ -107,12 +110,14 @@ test('shared store rejects symlink and non-regular final targets', async t => {
   const store = new SharedFilesystemArtifactStore(root);
 
   await expectCode('ARTIFACT_INVALID_PATH', () => store.get(key));
+  await expectCode('ARTIFACT_INVALID_PATH', () => store.stat(key));
   await expectCode('ARTIFACT_INVALID_PATH', () => store.exists(key));
   await expectCode('ARTIFACT_INVALID_PATH', () => store.delete(key));
 
   await rm(finalPathFor(root));
   await mkdir(finalPathFor(root));
   await expectCode('ARTIFACT_INVALID_PATH', () => store.get(key));
+  await expectCode('ARTIFACT_INVALID_PATH', () => store.stat(key));
   await expectCode('ARTIFACT_INVALID_PATH', () => store.exists(key));
   await expectCode('ARTIFACT_INVALID_PATH', () => store.delete(key));
 });

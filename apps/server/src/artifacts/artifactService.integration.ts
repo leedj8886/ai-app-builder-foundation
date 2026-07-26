@@ -268,6 +268,9 @@ test('retryable store unavailability leaves manifest writing', async () => {
     get: async () => {
       throw new ArtifactError('ARTIFACT_STORE_UNAVAILABLE', 'offline', true);
     },
+    stat: async () => {
+      throw new ArtifactError('ARTIFACT_STORE_UNAVAILABLE', 'offline', true);
+    },
     exists: async () => {
       throw new ArtifactError('ARTIFACT_STORE_UNAVAILABLE', 'offline', true);
     },
@@ -303,6 +306,7 @@ test('published bytes do not recover an unrelated nonretryable put failure', asy
       );
     },
     get: async () => published!,
+    stat: async () => ({ size: published?.byteLength ?? 0 }),
     exists: async () => published !== undefined,
     delete: async () => undefined
   };
@@ -340,6 +344,7 @@ test('an explicit EEXIST put result verifies and recovers published bytes', asyn
       );
     },
     get: async () => published!,
+    stat: async () => ({ size: published?.byteLength ?? 0 }),
     exists: async () => published !== undefined,
     delete: async () => undefined
   };
@@ -364,6 +369,7 @@ test('nonretryable store unavailability leaves a writing manifest unchanged', as
   const store: ArtifactStore = {
     put: async () => { throw unavailable; },
     get: async () => { throw unavailable; },
+    stat: async () => { throw unavailable; },
     exists: async () => { throw unavailable; },
     delete: async () => undefined
   };
@@ -397,6 +403,7 @@ test('nonretryable store unavailability leaves a ready manifest unchanged', asyn
   const store: ArtifactStore = {
     put: async () => { throw unavailable; },
     get: async () => { throw unavailable; },
+    stat: async () => { throw unavailable; },
     exists: async () => { throw unavailable; },
     delete: async () => undefined
   };

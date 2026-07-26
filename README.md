@@ -141,3 +141,51 @@ AGENT_VALIDATION_CACHE_MAX_BYTES=10737418240
 基础设施重试耗尽后，页面会提供“重新验证”。它复用已保存的候选文件和依赖，
 不会重新生成代码，也不会新增用户对话消息；“重新生成”则会再次调用模型并产生
 新的代码候选。
+
+## Artifact 共享存储
+
+ProjectSnapshot 和 ValidationCandidate 的源码 Bundle 不保存在 MongoDB 中。
+MongoDB 只保存不可变 Artifact 的 Manifest 和 `artifactId`；gzip JSON Blob
+保存在所有 API Server、Agent Worker 和运维任务共同挂载的持久目录。
+
+生产环境至少配置：
+
+```bash
+ARTIFACT_STORE_DRIVER=shared-filesystem
+ARTIFACT_STORE_ROOT=/var/lib/open-v0/artifacts
+ARTIFACT_MAX_BUNDLE_BYTES=52428800
+ARTIFACT_MAX_COMPRESSED_BYTES=20971520
+ARTIFACT_MAX_FILES=5000
+ARTIFACT_WRITING_TIMEOUT_MS=300000
+ARTIFACT_ORPHAN_RETENTION_MS=86400000
+```
+
+部署约束：
+
+- `ARTIFACT_STORE_ROOT` 必须由部署系统预先创建，不能使用容器临时层、仓库目录
+  或 HTTP 静态资源目录。
+- API、Worker 和 Reconciler 必须挂载同一个 PVC/NFS 路径。挂载根只允许可信的
+  平台运行账户写入，不与用户进程共享写权限。
+- 启动前检查运行账户对根目录具有读写权限，并能对目录执行 `fsync`。所选
+  PVC/NFS 还必须验证同一挂载点内的 hard-link no-clobber、文件 `fsync` 和目录
+  `fsync` 语义；这些能力是不可变发布和崩溃恢复的前提。
+- 部署系统负责备份、容量及 inode 告警。临时清理失败应进入平台日志和告警。
+
+一次性 Reconciler 用于推进超时的 `writing` Manifest、重试
+`delete_pending` 清理，以及回收超过保留期且没有 Snapshot/Candidate 引用的
+Artifact：
+
+```bash
+# 开发或运维容器
+npm run reconcile:artifacts --workspace @v0/server
+
+# 编译后的生产镜像
+npm run start:reconcile:artifacts --workspace @v0/server
+```
+
+建议由 Kubernetes CronJob 或企业调度平台周期执行，每次运行结束后退出。实现使用
+Manifest CAS，可容忍偶发的并发执行，但生产环境仍建议单任务并发策略，以减少共享
+存储负载。命令启动时会检查挂载根权限，失败时以非零状态退出且不输出内部路径。
+
+该命令不是存量数据迁移工具；本项目采用最终态 Artifact Schema，不支持把旧的
+MongoDB `files/packageJson` 字段转换为 Artifact。

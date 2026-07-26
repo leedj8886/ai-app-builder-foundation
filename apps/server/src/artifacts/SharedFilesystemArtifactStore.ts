@@ -185,6 +185,47 @@ export class SharedFilesystemArtifactStore implements ArtifactStore {
     }
   }
 
+  async stat(storageKey: string): Promise<{ size: number }> {
+    const finalPath = this.resolveKey(storageKey);
+
+    try {
+      await this.assertSafeParent(path.dirname(finalPath));
+      let handle: Awaited<ReturnType<typeof open>> | undefined;
+      try {
+        handle = await this.openRegularFile(finalPath);
+        const stats = await handle.stat();
+        return { size: stats.size };
+      } finally {
+        await handle?.close();
+      }
+    } catch (error) {
+      if (error instanceof ArtifactError) {
+        throw error;
+      }
+      if (isCode(error, 'ELOOP')) {
+        throw artifactError(
+          'ARTIFACT_INVALID_PATH',
+          'artifact target must not be a symbolic link',
+          false,
+          error
+        );
+      }
+      if (isCode(error, 'ENOENT')) {
+        throw artifactError(
+          'ARTIFACT_NOT_FOUND',
+          'artifact does not exist',
+          false,
+          error
+        );
+      }
+      throw this.mapFilesystemError(
+        error,
+        'ARTIFACT_STORE_UNAVAILABLE',
+        'failed to inspect artifact'
+      );
+    }
+  }
+
   async exists(storageKey: string): Promise<boolean> {
     const finalPath = this.resolveKey(storageKey);
 
