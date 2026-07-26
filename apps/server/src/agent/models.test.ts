@@ -10,6 +10,64 @@ import { WorkspaceMember } from '../models/WorkspaceMember';
 import { ProjectBranch } from '../models/ProjectBranch';
 import { BranchExecutionLease } from '../models/BranchExecutionLease';
 import { Chat } from '../models/Chat';
+import { ArtifactManifest } from '../models/ArtifactManifest';
+
+test('ArtifactManifest exposes integrity metadata and exact indexes', () => {
+  const paths = [
+    'artifactId',
+    'workspaceId',
+    'projectId',
+    'createdByRunId',
+    'kind',
+    'idempotencyKey',
+    'format',
+    'formatVersion',
+    'storageKey',
+    'sha256',
+    'uncompressedBytes',
+    'compressedBytes',
+    'fileCount',
+    'state',
+    'errorCode',
+    'createdAt',
+    'updatedAt'
+  ];
+  for (const path of paths) assert.ok(ArtifactManifest.schema.path(path), path);
+
+  assert.deepEqual(ArtifactManifest.schema.indexes(), [
+    [{ artifactId: 1 }, { unique: true, background: true }],
+    [{ idempotencyKey: 1 }, { unique: true, background: true }],
+    [{ workspaceId: 1, projectId: 1, createdAt: -1 }, { background: true }],
+    [{ state: 1, updatedAt: 1 }, { background: true }],
+    [{ createdByRunId: 1, kind: 1 }, { background: true }]
+  ]);
+});
+
+test('ArtifactManifest rejects malformed persisted integrity metadata', () => {
+  const manifest = new ArtifactManifest({
+    artifactId: 'a'.repeat(32),
+    workspaceId: new Types.ObjectId(),
+    projectId: new Types.ObjectId(),
+    createdByRunId: new Types.ObjectId(),
+    kind: 'project_snapshot',
+    idempotencyKey: 'snapshot:test',
+    format: 'open-v0.bundle+json+gzip',
+    formatVersion: 1,
+    storageKey: 'outside/blob.gz',
+    sha256: 'not-a-digest',
+    uncompressedBytes: -1,
+    compressedBytes: 1.5,
+    fileCount: -1,
+    state: 'writing'
+  });
+
+  const errors = manifest.validateSync()?.errors;
+  assert.ok(errors?.storageKey);
+  assert.ok(errors?.sha256);
+  assert.ok(errors?.uncompressedBytes);
+  assert.ok(errors?.compressedBytes);
+  assert.ok(errors?.fileCount);
+});
 
 test('Project model exposes the active snapshot pointer', () => {
   assert.ok(Project.schema.path('activeSnapshotId'));
