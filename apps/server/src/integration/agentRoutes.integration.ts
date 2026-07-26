@@ -65,16 +65,24 @@ const createRun = async (
   userId: typeof User.prototype._id,
   projectId: typeof Project.prototype._id,
   status: 'queued' | 'running' = 'running'
-) => AgentRun.create({
-  userId,
-  projectId,
-  prompt: 'Build a dashboard',
-  status,
-  mode: 'create',
-  baseSnapshotRevision: 0,
-  maxRepairAttempts: 2,
-  model: 'test-model'
-});
+) => {
+  const project = await Project.findById(projectId);
+  assert.ok(project);
+  const branch = await ensureMainBranch(project);
+  return AgentRun.create({
+    userId,
+    workspaceId: project.workspaceId,
+    projectId,
+    branchId: branch._id,
+    prompt: 'Build a dashboard',
+    status,
+    mode: 'create',
+    baseSnapshotRevision: branch.headVersion,
+    baseHeadVersion: branch.headVersion,
+    maxRepairAttempts: 2,
+    model: 'test-model'
+  });
+};
 
 test('Project creation creates one main Branch', async () => {
   const user = await User.create({
@@ -154,6 +162,72 @@ test('Branch creation can start from a validated Snapshot', async () => {
   assert.equal(response.body.branch.headVersion, 0);
 });
 
+test('Chat-associated Run captures its Branch Head baseline', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const sourceRun = await createRun(owner._id, project._id);
+  const snapshot = await ProjectSnapshot.create({
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId: sourceRun._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Feature base'
+  });
+  const branch = await ProjectBranch.create({
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    name: 'feature',
+    headSnapshotId: snapshot._id,
+    headVersion: 7
+  });
+  const chat = await Chat.create({
+    userId: owner._id,
+    projectId: project._id,
+    branchId: branch._id,
+    title: 'Feature chat',
+    messages: []
+  });
+
+  const response = await request(app)
+    .post('/api/agent/runs')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      projectId: project._id,
+      chatId: chat._id,
+      prompt: 'Continue the feature',
+      mode: 'edit'
+    })
+    .expect(201);
+
+  assert.equal(response.body.run.workspaceId, project.workspaceId?.toString());
+  assert.equal(response.body.run.branchId, branch._id.toString());
+  assert.equal(response.body.run.baseSnapshotId, snapshot._id.toString());
+  assert.equal(response.body.run.baseHeadVersion, 7);
+});
+
+test('Run creation rejects a Chat whose Branch is not in the Project', async () => {
+  const { ownerToken, owner, project, otherProject } = await fixtures();
+  const otherBranch = await ensureMainBranch(otherProject);
+  const chat = await Chat.create({
+    userId: owner._id,
+    projectId: project._id,
+    branchId: otherBranch._id,
+    title: 'Invalid branch chat',
+    messages: []
+  });
+
+  await request(app)
+    .post('/api/agent/runs')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      projectId: project._id,
+      chatId: chat._id,
+      prompt: 'Do not run'
+    })
+    .expect(404);
+});
+
 test('authenticated run creation persists its event and BullMQ job', async () => {
   const { ownerToken, project } = await fixtures();
   const response = await request(app)
@@ -173,13 +247,17 @@ test('authenticated run creation persists its event and BullMQ job', async () =>
 
 test('retry validation creates a queued Run without regenerating a Chat message', async () => {
   const { ownerToken, owner, project } = await fixtures();
+  const branch = await ensureMainBranch(project);
   const sourceRun = await AgentRun.create({
     userId: owner._id,
+    workspaceId: project.workspaceId,
     projectId: project._id,
+    branchId: branch._id,
     prompt: 'Build a dashboard',
     status: 'failed',
     mode: 'create',
     baseSnapshotRevision: 0,
+    baseHeadVersion: 0,
     maxRepairAttempts: 2,
     model: 'test-model',
     retryable: true
@@ -234,11 +312,13 @@ test('Chat creation stores project metadata without an assistant response', asyn
 
 test('Chat list returns owned records newest first with bounded previews', async () => {
   const { ownerToken, owner, stranger, project } = await fixtures();
+  const branch = await ensureMainBranch(project);
   const longPrompt = 'x'.repeat(220);
   const [older, newer] = await Chat.create([
     {
       userId: owner._id,
       projectId: project._id,
+      branchId: branch._id,
       title: 'Older chat',
       messages: [
         {
@@ -258,6 +338,7 @@ test('Chat list returns owned records newest first with bounded previews', async
     {
       userId: owner._id,
       projectId: project._id,
+      branchId: branch._id,
       title: 'Newer chat',
       messages: []
     }
@@ -295,9 +376,11 @@ test('Chat list returns owned records newest first with bounded previews', async
 
 test('creating a Chat-associated Run appends one user message', async () => {
   const { ownerToken, owner, project } = await fixtures();
+  const branch = await ensureMainBranch(project);
   const chat = await Chat.create({
     userId: owner._id,
     projectId: project._id,
+    branchId: branch._id,
     title: 'Support dashboard',
     messages: []
   });
@@ -327,9 +410,11 @@ test('Chat timeline aggregates owned Runs with stable cursor pagination', async 
     owner,
     project
   } = await fixtures();
+  const branch = await ensureMainBranch(project);
   const chat = await Chat.create({
     userId: owner._id,
     projectId: project._id,
+    branchId: branch._id,
     title: 'Timeline chat',
     messages: []
   });
@@ -341,12 +426,15 @@ test('Chat timeline aggregates owned Runs with stable cursor pagination', async 
   const [oldest, completed, failed] = await AgentRun.create([
     {
       userId: owner._id,
+      workspaceId: project.workspaceId,
       projectId: project._id,
+      branchId: branch._id,
       chatId: chat._id,
       prompt: 'Create the first version',
       status: 'completed',
       mode: 'create',
       baseSnapshotRevision: 0,
+      baseHeadVersion: 0,
       maxRepairAttempts: 2,
       model: 'test-model',
       startedAt: new Date('2026-07-25T10:00:01.000Z'),
@@ -355,12 +443,15 @@ test('Chat timeline aggregates owned Runs with stable cursor pagination', async 
     },
     {
       userId: owner._id,
+      workspaceId: project.workspaceId,
       projectId: project._id,
+      branchId: branch._id,
       chatId: chat._id,
       prompt: 'Add an activity list',
       status: 'completed',
       mode: 'edit',
       baseSnapshotRevision: 1,
+      baseHeadVersion: 1,
       maxRepairAttempts: 2,
       model: 'test-model',
       startedAt: new Date('2026-07-25T10:01:01.000Z'),
@@ -369,12 +460,15 @@ test('Chat timeline aggregates owned Runs with stable cursor pagination', async 
     },
     {
       userId: owner._id,
+      workspaceId: project.workspaceId,
       projectId: project._id,
+      branchId: branch._id,
       chatId: chat._id,
       prompt: 'Add a broken widget',
       status: 'failed',
       mode: 'edit',
       baseSnapshotRevision: 2,
+      baseHeadVersion: 2,
       maxRepairAttempts: 2,
       model: 'test-model',
       error: {
@@ -487,9 +581,11 @@ test('agent routes hide projects runs snapshots and cross-project chats from oth
     otherProject
   } = await fixtures();
   const run = await createRun(owner._id, project._id);
+  const otherBranch = await ensureMainBranch(otherProject);
   const chat = await Chat.create({
     userId: owner._id,
     projectId: otherProject._id,
+    branchId: otherBranch._id,
     title: 'Other chat',
     messages: []
   });

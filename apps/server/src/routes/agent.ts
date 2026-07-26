@@ -1,11 +1,10 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { AgentRun } from '../models/AgentRun';
+import { AgentRun, type IAgentRun } from '../models/AgentRun';
 import { AgentEvent } from '../models/AgentEvent';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { Chat } from '../models/Chat';
-import { Project } from '../models/Project';
 import { ValidationCandidate } from '../models/ValidationCandidate';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { getAgentConfig } from '../agent/config';
@@ -22,6 +21,8 @@ import {
 import { createRedisConnection } from '../agent/redis';
 import { isTerminalAgentRunStatus } from '../agent/stateMachine';
 import { streamAgentRunEvents } from '../agent/sseStream';
+import { findOwnedWorkspaceProject } from '../workspaces/projectAccess';
+import { resolveProjectBranch } from '../branches/branchService';
 
 const router = Router();
 
@@ -35,11 +36,19 @@ const requireUserId = (req: AuthRequest): string => {
   return req.userId;
 };
 
+const canAccessRunProject = async (
+  run: Pick<IAgentRun, 'projectId'>,
+  userId: string
+): Promise<boolean> => Boolean(await findOwnedWorkspaceProject({
+  projectId: run.projectId,
+  userId
+}));
+
 router.get('/runs', async (req: AuthRequest, res, next) => {
   try {
     const userId = requireUserId(req);
     const { projectId, limit } = listAgentRunsQuerySchema.parse(req.query);
-    const project = await Project.findOne({ _id: projectId, userId });
+    const project = await findOwnedWorkspaceProject({ projectId, userId });
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
@@ -47,7 +56,7 @@ router.get('/runs', async (req: AuthRequest, res, next) => {
     }
 
     const runs = await AgentRun.find({ projectId, userId })
-      .select('projectId prompt status mode baseSnapshotId resultSnapshotId attempt maxRepairAttempts error startedAt completedAt createdAt updatedAt')
+      .select('workspaceId projectId branchId prompt status mode baseSnapshotId baseHeadVersion resultSnapshotId attempt maxRepairAttempts error startedAt completedAt createdAt updatedAt')
       .sort({ createdAt: -1 })
       .limit(limit);
 
@@ -62,8 +71,8 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
     const userId = requireUserId(req);
     const body = createAgentRunRequestSchema.parse(req.body);
 
-    const project = await Project.findOne({
-      _id: body.projectId,
+    const project = await findOwnedWorkspaceProject({
+      projectId: body.projectId,
       userId
     });
 
@@ -84,20 +93,22 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       res.status(404).json({ error: 'Chat not found' });
       return;
     }
-
-    const activeSnapshot = project.activeSnapshotId
+    const branch = await resolveProjectBranch({
+      project,
+      branchId: chat?.branchId
+    });
+    if (!branch || (chat?.branchId && !branch._id.equals(chat.branchId))) {
+      res.status(404).json({ error: 'Chat branch not found' });
+      return;
+    }
+    const baseSnapshot = branch.headSnapshotId
       ? await ProjectSnapshot.findOne({
-          _id: project.activeSnapshotId,
-          projectId: body.projectId,
+          _id: branch.headSnapshotId,
+          projectId: project._id,
           userId,
           'validation.status': { $ne: 'failed' }
         })
       : null;
-    const baseSnapshot = activeSnapshot ?? await ProjectSnapshot.findOne({
-        projectId: body.projectId,
-        userId,
-        'validation.status': { $ne: 'failed' }
-      }).sort({ createdAt: -1 });
 
     if (body.mode === 'edit' && !baseSnapshot) {
       res.status(400).json({ error: 'Edit mode requires an existing project snapshot' });
@@ -107,12 +118,15 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
     const config = getAgentConfig();
     const run = await AgentRun.create({
       userId,
+      workspaceId: project.workspaceId,
       projectId: body.projectId,
+      branchId: branch._id,
       chatId: body.chatId,
       prompt: body.prompt,
       mode: body.mode,
       baseSnapshotId: baseSnapshot?._id,
-      baseSnapshotRevision: project.activeSnapshotRevision ?? 0,
+      baseSnapshotRevision: branch.headVersion,
+      baseHeadVersion: branch.headVersion,
       status: 'queued',
       model: config.model,
       maxRepairAttempts: config.maxRepairAttempts
@@ -161,6 +175,10 @@ router.post(
         res.status(409).json({ error: 'Run is not retryable' });
         return;
       }
+      if (!await canAccessRunProject(source, userId)) {
+        res.status(404).json({ error: 'Run not found' });
+        return;
+      }
       const candidate = await ValidationCandidate.findOne({
         _id: source.validationCandidateId,
         userId,
@@ -176,6 +194,7 @@ router.post(
         userId,
         status: {
           $in: [
+            'waiting_for_capacity',
             'queued',
             'running',
             'planning',
@@ -193,12 +212,15 @@ router.post(
 
       const run = await AgentRun.create({
         userId,
+        workspaceId: source.workspaceId,
         projectId: source.projectId,
+        branchId: source.branchId,
         chatId: source.chatId,
         prompt: source.prompt,
         mode: source.mode,
         baseSnapshotId: source.baseSnapshotId,
         baseSnapshotRevision: source.baseSnapshotRevision,
+        baseHeadVersion: source.baseHeadVersion,
         retryOfRunId: source._id,
         validationCandidateId: candidate._id,
         status: 'queued',
@@ -234,6 +256,10 @@ router.get('/runs/:runId', async (req: AuthRequest, res, next) => {
       res.status(404).json({ error: 'Run not found' });
       return;
     }
+    if (!await canAccessRunProject(run, userId)) {
+      res.status(404).json({ error: 'Run not found' });
+      return;
+    }
 
     const events = await AgentEvent.find({ runId, userId })
       .sort({ sequence: 1 })
@@ -264,6 +290,10 @@ router.get('/runs/:runId/events', async (req: AuthRequest, res, next) => {
     const run = await AgentRun.findOne({ _id: runId, userId });
 
     if (!run) {
+      res.status(404).json({ error: 'Run not found' });
+      return;
+    }
+    if (!await canAccessRunProject(run, userId)) {
       res.status(404).json({ error: 'Run not found' });
       return;
     }
@@ -302,6 +332,10 @@ router.post('/runs/:runId/cancel', async (req: AuthRequest, res, next) => {
       res.status(404).json({ error: 'Run not found' });
       return;
     }
+    if (!await canAccessRunProject(run, userId)) {
+      res.status(404).json({ error: 'Run not found' });
+      return;
+    }
 
     if (run.status === 'persisting') {
       res.status(409).json({ error: 'Run is finalizing and can no longer be cancelled' });
@@ -314,7 +348,15 @@ router.post('/runs/:runId/cancel', async (req: AuthRequest, res, next) => {
           _id: runId,
           userId,
           status: {
-            $in: ['queued', 'running', 'planning', 'generating', 'validating', 'repairing']
+            $in: [
+              'waiting_for_capacity',
+              'queued',
+              'running',
+              'planning',
+              'generating',
+              'validating',
+              'repairing'
+            ]
           }
         },
         {

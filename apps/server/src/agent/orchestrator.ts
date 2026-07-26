@@ -349,6 +349,7 @@ const publicAgentError = (
   };
   const knownCodes = new Set([
     'PROJECT_NOT_FOUND',
+    'INVALID_CHAT_BRANCH',
     'INVALID_BASE_SNAPSHOT',
     'INVALID_MODEL_OUTPUT',
     'MODEL_REQUEST_FAILED',

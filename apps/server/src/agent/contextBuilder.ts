@@ -89,7 +89,8 @@ export const loadAgentContext = async (
 ): Promise<AgentContext> => {
   const project = await Project.findOne({
     _id: run.projectId,
-    userId: run.userId
+    userId: run.userId,
+    workspaceId: run.workspaceId
   });
 
   if (!project) {
@@ -100,9 +101,17 @@ export const loadAgentContext = async (
     ? await Chat.findOne({
         _id: run.chatId,
         userId: run.userId,
-        projectId: run.projectId
+        projectId: run.projectId,
+        branchId: run.branchId
       })
     : null;
+
+  if (run.chatId && !chat) {
+    throw agentError(
+      'INVALID_CHAT_BRANCH',
+      'Chat no longer belongs to the AgentRun branch'
+    );
+  }
 
   const baseSnapshot = run.baseSnapshotId
     ? await ProjectSnapshot.findOne({
