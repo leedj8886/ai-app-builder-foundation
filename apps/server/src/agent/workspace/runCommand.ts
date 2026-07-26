@@ -16,6 +16,23 @@ export interface CommandResult {
   durationMs: number;
 }
 
+export const pickValidationEnvironment = (
+  env: NodeJS.ProcessEnv
+): NodeJS.ProcessEnv => {
+  const allowed = [
+    'PATH',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'NO_PROXY',
+    'NODE_EXTRA_CA_CERTS',
+    'NPM_CONFIG_REGISTRY',
+    'npm_config_registry'
+  ];
+  return Object.fromEntries(
+    allowed.flatMap(key => env[key] === undefined ? [] : [[key, env[key]]])
+  );
+};
+
 const appendBounded = (
   current: string,
   chunk: Buffer | string,

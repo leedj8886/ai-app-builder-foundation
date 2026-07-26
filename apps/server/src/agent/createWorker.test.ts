@@ -30,3 +30,23 @@ test('createAgentJobProcessor delegates agent-run jobs with injected dependencie
 
   assert.deepEqual(calls, [[data, modelClient, validator]]);
 });
+
+test('createAgentJobProcessor routes retry-validation jobs separately', async () => {
+  const calls: unknown[][] = [];
+  const data = {
+    runId: 'run-2',
+    kind: 'retry-validation' as const,
+    candidateId: 'candidate-1'
+  };
+  const processor = createAgentJobProcessor({
+    modelClient,
+    validator,
+    processValidation: async (...args) => {
+      calls.push(args);
+    }
+  });
+
+  await processor({ name: 'retry-validation', data });
+
+  assert.deepEqual(calls, [[data, validator]]);
+});

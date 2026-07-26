@@ -28,6 +28,7 @@ export const agentEventTypes = [
   'agent.plan',
   'file.changed',
   'validation.started',
+  'validation.step',
   'validation.failed',
   'validation.passed',
   'repair.started',
@@ -40,6 +41,8 @@ export type AgentEventType = (typeof agentEventTypes)[number];
 
 export interface AgentRunJobData {
   runId: string;
+  kind?: 'generate' | 'retry-validation';
+  candidateId?: string;
 }
 
 export interface AgentErrorPayload {
@@ -65,18 +68,43 @@ export interface ProjectSnapshotPackageJson {
   scripts: Record<string, string>;
 }
 
+export const validationPhases = [
+  'structure',
+  'dependencies',
+  'type-check',
+  'build'
+] as const;
+
+export type ValidationPhase = (typeof validationPhases)[number];
+
+export const validationErrorCategories = [
+  'CODE_ERROR',
+  'DEPENDENCY_ERROR',
+  'INFRA_ERROR'
+] as const;
+
+export type ValidationErrorCategory =
+  (typeof validationErrorCategories)[number];
+
 export interface ValidationCheckResult {
-  name: 'install' | 'type-check' | 'build';
-  command: string;
-  exitCode: number;
+  name: 'structure' | 'install' | 'type-check' | 'build';
+  phase?: ValidationPhase;
+  status?: 'passed' | 'failed' | 'retrying' | 'skipped';
+  category?: ValidationErrorCategory;
+  command?: string;
+  exitCode?: number;
   stdout: string;
   stderr: string;
   durationMs: number;
+  cache?: 'hit' | 'miss' | 'not-applicable';
+  attempt?: number;
 }
 
 export interface ValidationResult {
   status: 'passed' | 'failed' | 'skipped';
   checks: ValidationCheckResult[];
+  category?: ValidationErrorCategory;
+  retryable?: boolean;
 }
 
 export type FileOperation =
@@ -159,4 +187,7 @@ export interface ModelClient {
   generatePlan(input: PlanInput): Promise<ModelResult<AgentPlan>>;
   generateFiles(input: GenerateInput): Promise<ModelResult<GenerationResult>>;
   repairFiles(input: RepairInput): Promise<ModelResult<GenerationResult>>;
+  repairDependencies?(
+    input: RepairInput
+  ): Promise<ModelResult<GenerationResult>>;
 }

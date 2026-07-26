@@ -34,6 +34,49 @@ export const terminalStatuses = new Set<ChatTimelineTurn['agent']['status']>([
 export const canToggleTurn = (turn: ChatTimelineTurn): boolean =>
   terminalStatuses.has(turn.agent.status)
 
+export interface ValidationEventPayload {
+  phase: 'structure' | 'dependencies' | 'type-check' | 'build'
+  status: 'passed' | 'failed' | 'retrying' | 'skipped'
+  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR'
+  attempt: number
+  retryDelayMs?: number
+  cache?: 'hit' | 'miss' | 'not-applicable'
+}
+
+export const validationEventLabel = (
+  payload: ValidationEventPayload,
+): string => {
+  if (
+    payload.phase === 'dependencies'
+    && payload.status === 'retrying'
+    && payload.category === 'INFRA_ERROR'
+  ) {
+    const seconds = Math.max(1, Math.round((payload.retryDelayMs ?? 0) / 1_000))
+    return `依赖服务暂时不可用，${seconds} 秒后重试（${payload.attempt}/2）`
+  }
+  if (payload.phase === 'dependencies' && payload.status === 'passed') {
+    return payload.cache === 'hit' ? '依赖缓存命中' : '依赖安装完成'
+  }
+  const phaseLabel = {
+    structure: '项目结构检查',
+    dependencies: '依赖准备',
+    'type-check': 'TypeScript 检查',
+    build: '生产构建',
+  }[payload.phase]
+  const statusLabel = {
+    passed: '通过',
+    failed: '失败',
+    retrying: '重试中',
+    skipped: '已跳过',
+  }[payload.status]
+  return `${phaseLabel}${statusLabel}`
+}
+
+export const canRetryValidation = (turn: ChatTimelineTurn): boolean =>
+  turn.agent.status === 'failed'
+  && turn.agent.retryable === true
+  && turn.agent.error?.code === 'VALIDATION_INFRA_ERROR'
+
 export const formatPlanningDuration = (
   durationMs?: number,
 ): string | undefined => durationMs === undefined

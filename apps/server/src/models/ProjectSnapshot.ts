@@ -60,19 +60,42 @@ const ValidationSchema = new Schema<ValidationResult>(
         {
           name: {
             type: String,
-            enum: ['install', 'type-check', 'build'],
+            enum: ['structure', 'install', 'type-check', 'build'],
             required: true
           },
-          command: { type: String, required: true },
-          exitCode: { type: Number, required: true },
+          phase: {
+            type: String,
+            enum: ['structure', 'dependencies', 'type-check', 'build']
+          },
+          status: {
+            type: String,
+            enum: ['passed', 'failed', 'retrying', 'skipped']
+          },
+          category: {
+            type: String,
+            enum: ['CODE_ERROR', 'DEPENDENCY_ERROR', 'INFRA_ERROR']
+          },
+          command: String,
+          exitCode: Number,
           stdout: { type: String, default: '' },
           stderr: { type: String, default: '' },
-          durationMs: { type: Number, required: true, default: 0 }
+          durationMs: { type: Number, required: true, default: 0 },
+          cache: {
+            type: String,
+            enum: ['hit', 'miss', 'not-applicable'],
+            default: 'not-applicable'
+          },
+          attempt: { type: Number, default: 0 }
         }
       ],
       required: true,
       default: []
-    }
+    },
+    category: {
+      type: String,
+      enum: ['CODE_ERROR', 'DEPENDENCY_ERROR', 'INFRA_ERROR']
+    },
+    retryable: Boolean
   },
   { _id: false }
 );

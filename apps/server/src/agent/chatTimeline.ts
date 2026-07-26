@@ -16,6 +16,7 @@ export interface TimelineRunSource {
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
+  retryable?: boolean;
 }
 
 export interface TimelineEventSource {
@@ -56,6 +57,7 @@ export interface ChatTimelineTurn {
     plan?: AgentPlan;
     events: ChatTimelineEvent[];
     error?: AgentErrorPayload;
+    retryable?: boolean;
   };
   snapshot?: {
     id: string;
@@ -199,7 +201,10 @@ export const buildChatTimelineTurn = (
         ...(event.payload === undefined ? {} : { payload: event.payload }),
         createdAt: event.createdAt.toISOString()
       })),
-      ...(input.run.error ? { error: input.run.error } : {})
+      ...(input.run.error ? { error: input.run.error } : {}),
+      ...(input.run.retryable !== undefined
+        ? { retryable: input.run.retryable }
+        : {})
     },
     ...(input.snapshot ? {
       snapshot: {

@@ -45,12 +45,17 @@ export interface SnapshotPackageJson {
 }
 
 export interface SnapshotValidationCheck {
-  name: 'install' | 'type-check' | 'build'
-  command: string
-  exitCode: number
+  name: 'structure' | 'install' | 'type-check' | 'build'
+  phase?: 'structure' | 'dependencies' | 'type-check' | 'build'
+  status?: 'passed' | 'failed' | 'retrying' | 'skipped'
+  category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR'
+  command?: string
+  exitCode?: number
   stdout: string
   stderr: string
   durationMs: number
+  cache?: 'hit' | 'miss' | 'not-applicable'
+  attempt?: number
 }
 
 export interface SnapshotValidation {
@@ -433,7 +438,8 @@ export const applyAgentRunDetail = (
     : state.snapshot
 
   const failedCheck = detail.run.error?.details?.checks.find(
-    (check) => check.exitCode !== 0,
+    (check) => check.status === 'failed'
+      || (check.exitCode !== undefined && check.exitCode !== 0),
   )
   const diagnostic = [failedCheck?.stderr, failedCheck?.stdout]
     .flatMap((output) => output?.split('\n') ?? [])

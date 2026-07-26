@@ -57,6 +57,9 @@ export interface AgentRun {
   model?: string;
   baseSnapshotId?: string;
   resultSnapshotId?: string;
+  retryOfRunId?: string;
+  validationCandidateId?: string;
+  retryable?: boolean;
   error?: {
     code?: string;
     message?: string;
@@ -95,12 +98,17 @@ export interface ProjectSnapshot {
   validation: {
     status: 'passed' | 'failed' | 'skipped';
     checks: Array<{
-      name: 'install' | 'type-check' | 'build';
-      command: string;
-      exitCode: number;
+      name: 'structure' | 'install' | 'type-check' | 'build';
+      phase?: 'structure' | 'dependencies' | 'type-check' | 'build';
+      status?: 'passed' | 'failed' | 'retrying' | 'skipped';
+      category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR';
+      command?: string;
+      exitCode?: number;
       stdout: string;
       stderr: string;
       durationMs: number;
+      cache?: 'hit' | 'miss' | 'not-applicable';
+      attempt?: number;
     }>;
   };
 }
@@ -175,6 +183,7 @@ export interface ChatTimelineTurn {
       code?: string;
       message: string;
     };
+    retryable?: boolean;
   };
   snapshot?: {
     id: string;
@@ -211,6 +220,10 @@ export const agentApi = {
     }),
   cancelRun: (runId: string) =>
     api.post<{ run: AgentRun }>(`/api/agent/runs/${runId}/cancel`),
+  retryValidation: (runId: string) =>
+    api.post<{ run: AgentRun }>(
+      `/api/agent/runs/${runId}/retry-validation`,
+    ),
 };
 
 // Chat API

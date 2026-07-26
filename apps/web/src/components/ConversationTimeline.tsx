@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -16,8 +17,10 @@ import {
 } from 'react'
 import {
   canToggleTurn,
+  canRetryValidation,
   formatCollapsedTurnLabel,
   formatPlanningDuration,
+  validationEventLabel,
   type ChatTimelineState,
 } from '@/lib/chatTimeline'
 import type {
@@ -33,6 +36,8 @@ interface ConversationTimelineProps {
   onRetry: () => void
   onSelectSnapshot: (snapshotId: string) => void
   onCancelRun: (runId: string) => void
+  retryingRunId?: string
+  onRetryValidation: (runId: string) => void
 }
 
 const terminalStatuses = new Set([
@@ -57,6 +62,21 @@ const statusLabel = (
 })[status]
 
 const eventLabel = (event: ChatTimelineEvent): string => {
+  if (
+    event.type === 'validation.step'
+    && typeof event.payload?.phase === 'string'
+    && typeof event.payload?.status === 'string'
+    && typeof event.payload?.attempt === 'number'
+  ) {
+    return validationEventLabel(event.payload as {
+      phase: 'structure' | 'dependencies' | 'type-check' | 'build'
+      status: 'passed' | 'failed' | 'retrying' | 'skipped'
+      category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR'
+      attempt: number
+      retryDelayMs?: number
+      cache?: 'hit' | 'miss' | 'not-applicable'
+    })
+  }
   const phase = typeof event.payload?.phase === 'string'
     ? event.payload.phase
     : undefined
@@ -112,13 +132,15 @@ function ActivityRow({
 }: {
   icon: ReactNode
   children: ReactNode
-  tone?: 'neutral' | 'success' | 'danger'
+  tone?: 'neutral' | 'success' | 'warning' | 'danger'
 }) {
   return (
     <div
       className={`flex items-start gap-2 text-xs leading-5 ${
         tone === 'success'
           ? 'text-emerald-700'
+          : tone === 'warning'
+            ? 'text-amber-700'
           : tone === 'danger'
             ? 'text-red-700'
             : 'text-neutral-500'
@@ -192,6 +214,12 @@ function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
               || event.type === 'validation.failed'
             const isSuccess = event.type === 'run.completed'
               || event.type === 'validation.passed'
+              || (
+                event.type === 'validation.step'
+                && event.payload?.status === 'passed'
+              )
+            const isWarning = event.type === 'validation.step'
+              && event.payload?.category === 'INFRA_ERROR'
             const path = typeof event.payload?.path === 'string'
               ? event.payload.path
               : undefined
@@ -201,13 +229,23 @@ function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
                 icon={
                   isFailure
                     ? <AlertCircle className="h-3.5 w-3.5" />
+                    : isWarning
+                      ? <AlertTriangle className="h-3.5 w-3.5" />
                     : isSuccess
                       ? <CheckCircle2 className="h-3.5 w-3.5" />
                       : event.type === 'file.changed'
                         ? <FileCode2 className="h-3.5 w-3.5" />
                         : <Circle className="h-3.5 w-3.5" />
                 }
-                tone={isFailure ? 'danger' : isSuccess ? 'success' : 'neutral'}
+                tone={
+                  isFailure
+                    ? 'danger'
+                    : isWarning
+                      ? 'warning'
+                      : isSuccess
+                        ? 'success'
+                        : 'neutral'
+                }
               >
                 {eventLabel(event)}
                 {path ? ` · ${path}` : ''}
@@ -298,6 +336,8 @@ function AgentTurn({
   onToggle,
   onSelectSnapshot,
   onCancelRun,
+  retryingRunId,
+  onRetryValidation,
 }: {
   turn: ChatTimelineTurn
   expanded: boolean
@@ -305,6 +345,8 @@ function AgentTurn({
   onToggle: () => void
   onSelectSnapshot: (snapshotId: string) => void
   onCancelRun: (runId: string) => void
+  retryingRunId?: string
+  onRetryValidation: (runId: string) => void
 }) {
   const terminal = terminalStatuses.has(turn.agent.status)
   const isActive = activeRunId === turn.runId && !terminal
@@ -328,6 +370,16 @@ function AgentTurn({
           className="ml-1 mt-3 border-l-2 border-neutral-200 pl-4"
         >
           <AgentActivity turn={turn} />
+
+          {canRetryValidation(turn) ? (
+            <button
+              className="mt-3 inline-flex h-8 items-center rounded-md bg-neutral-950 px-3 text-xs font-medium text-white disabled:opacity-50"
+              disabled={retryingRunId === turn.runId}
+              onClick={() => onRetryValidation(turn.runId)}
+            >
+              {retryingRunId === turn.runId ? '正在重新验证…' : '重新验证'}
+            </button>
+          ) : null}
 
           {turn.agent.summary && turn.agent.summary !== turn.agent.plan?.summary ? (
             <p className="mt-4 text-sm leading-6 text-neutral-700">
@@ -364,6 +416,8 @@ export function ConversationTimeline({
   onRetry,
   onSelectSnapshot,
   onCancelRun,
+  retryingRunId,
+  onRetryValidation,
 }: ConversationTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -455,6 +509,8 @@ export function ConversationTimeline({
                   onToggle={() => onToggleTurn(turn.runId)}
                   onSelectSnapshot={onSelectSnapshot}
                   onCancelRun={onCancelRun}
+                  retryingRunId={retryingRunId}
+                  onRetryValidation={onRetryValidation}
                 />
               </li>
             ))}

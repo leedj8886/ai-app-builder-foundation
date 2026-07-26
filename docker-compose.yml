@@ -44,7 +44,11 @@ services:
       - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
       - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
       - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
+      - AGENT_VALIDATION_NPM_CACHE_ROOT=/var/cache/v0-agent/npm
+      - AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT=/var/cache/v0-agent/dependencies
       - NODE_ENV=production
+    volumes:
+      - agent_validation_cache:/var/cache/v0-agent
     depends_on:
       - mongodb
       - redis
@@ -92,6 +96,7 @@ services:
 
 volumes:
   mongodb_data:
+  agent_validation_cache:
 
 networks:
   v0-network:

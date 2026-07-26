@@ -9,6 +9,7 @@ const PUBLIC_AGENT_EVENT_TYPES = new Set([
   'agent.plan',
   'file.changed',
   'validation.started',
+  'validation.step',
   'validation.failed',
   'validation.passed',
   'repair.started',
