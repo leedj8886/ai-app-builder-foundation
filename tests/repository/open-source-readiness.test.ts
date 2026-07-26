@@ -34,6 +34,12 @@ test('repository contains the approved open-source governance files', async () =
   );
   assert.match(contributing, /npm run test:readiness/);
   assert.match(contributing, /npm run test:smoke/);
+  assert.match(contributing, /应用层 Agent 框架.*默认不进入核心包/s);
+  assert.match(contributing, /独立、可选的 Adapter/);
+  assert.match(
+    contributing,
+    /默认启动、测试、构建或自托管流程的前置条件/
+  );
 
   const security = await readFile(repositoryFile('SECURITY.md'), 'utf8');
   assert.match(security, /不要在公开 Issue 中披露/);

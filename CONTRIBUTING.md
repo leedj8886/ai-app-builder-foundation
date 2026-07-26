@@ -47,6 +47,16 @@ npm run test:smoke
 - 不提交 `.env`、模型密钥、生成缓存、构建产物或测试录屏。
 - 用户可见行为变化需要同步更新 README 或相关文档。
 
+## 核心依赖和 Adapter
+
+- LangChain、LangGraph、AI SDK 等应用层 Agent 框架默认不进入核心包。
+- 如果第三方框架或内部平台具有集成价值，应优先实现为独立、可选的 Adapter。
+- Adapter 不得成为默认启动、测试、构建或自托管流程的前置条件。
+- Orchestrator、状态模型和验证流水线不得暴露厂商 SDK 或第三方框架的专有类型。
+- 新增抽象必须由当前用例驱动，不为假设中的框架兼容性预先设计接口。
+
+相关 PR 需要说明集成边界、可选安装方式，以及移除该 Adapter 是否会影响核心运行路径。
+
 ## Commit 和 Pull Request
 
 使用简洁的 Conventional Commit 风格，例如：
