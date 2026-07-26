@@ -4,12 +4,22 @@ import { Project } from '../models/Project';
 import { Chat } from '../models/Chat';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { objectIdParamSchema } from '../agent/schemas';
+import {
+  objectIdParamSchema,
+  objectIdStringSchema
+} from '../agent/schemas';
 import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
 import {
   findOwnedWorkspaceProject,
   workspaceIdsForUser
 } from '../workspaces/projectAccess';
+import {
+  createProjectBranch,
+  ensureMainBranch,
+  resolveProjectBranch,
+  setBranchHead
+} from '../branches/branchService';
+import { ProjectBranch } from '../models/ProjectBranch';
 
 const router = Router();
 
@@ -75,6 +85,16 @@ router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
       res.status(404).json({ error: 'Project not found' });
       return;
     }
+    const branch = await resolveProjectBranch({
+      project,
+      branchId: typeof req.query.branchId === 'string'
+        ? req.query.branchId
+        : undefined
+    });
+    if (!branch) {
+      res.status(404).json({ error: 'Branch not found' });
+      return;
+    }
 
     const snapshots = await ProjectSnapshot.find({ projectId: id, userId })
       .sort({ createdAt: -1 })
@@ -89,7 +109,7 @@ router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
         summary: snapshot.summary,
         packageJson: snapshot.packageJson,
         validation: snapshot.validation,
-        isActive: project.activeSnapshotId?.toString() === snapshot._id.toString(),
+        isActive: branch.headSnapshotId?.toString() === snapshot._id.toString(),
         fileCount: snapshot.files.length,
         createdAt: snapshot.createdAt
       }))
@@ -114,6 +134,17 @@ router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res,
       res.status(404).json({ error: 'Project not found' });
       return;
     }
+    const branchId = typeof req.body?.branchId === 'string'
+      ? req.body.branchId
+      : undefined;
+    const branch = await resolveProjectBranch({
+      project: ownedProject,
+      branchId
+    });
+    if (!branch) {
+      res.status(404).json({ error: 'Branch not found' });
+      return;
+    }
     const snapshot = await ProjectSnapshot.findOne({
       _id: snapshotId,
       projectId: id,
@@ -126,14 +157,25 @@ router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res,
       return;
     }
 
-    const project = await Project.findByIdAndUpdate(
-      ownedProject._id,
-      {
-        $set: { activeSnapshotId: snapshot._id },
-        $inc: { activeSnapshotRevision: 1 }
-      },
-      { new: true }
-    );
+    const updatedBranch = await setBranchHead({
+      branchId: branch._id,
+      expectedHeadVersion: branch.headVersion,
+      snapshotId: snapshot._id
+    });
+    if (!updatedBranch) {
+      res.status(409).json({ error: 'Branch head changed; reload and retry' });
+      return;
+    }
+    const project = branch.name === 'main'
+      ? await Project.findByIdAndUpdate(
+          ownedProject._id,
+          {
+            $set: { activeSnapshotId: snapshot._id },
+            $inc: { activeSnapshotRevision: 1 }
+          },
+          { new: true }
+        )
+      : ownedProject;
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
@@ -209,8 +251,57 @@ router.post('/', async (req: AuthRequest, res, next) => {
     });
 
     await project.save();
+    await ensureMainBranch(project);
 
     res.status(201).json({ project });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/branches', async (req: AuthRequest, res, next) => {
+  try {
+    const project = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    await ensureMainBranch(project);
+    const branches = await ProjectBranch.find({
+      workspaceId: project.workspaceId,
+      projectId: project._id
+    }).sort({ createdAt: 1 });
+    res.json({ branches });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/branches', async (req: AuthRequest, res, next) => {
+  try {
+    const body = z.object({
+      name: z.string().trim().min(1).max(80),
+      fromSnapshotId: objectIdStringSchema.optional()
+    }).parse(req.body);
+    const project = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const branch = await createProjectBranch({
+      project,
+      name: body.name,
+      fromSnapshotId: body.fromSnapshotId
+    });
+    res.status(201).json({ branch });
   } catch (error) {
     next(error);
   }
@@ -285,11 +376,19 @@ router.post('/:id/chats', async (req: AuthRequest, res, next) => {
       res.status(404).json({ error: 'Chat not found' });
       return;
     }
+    const branch = chat.branchId
+      ? await resolveProjectBranch({ project, branchId: chat.branchId })
+      : await ensureMainBranch(project);
+    if (!branch) {
+      res.status(404).json({ error: 'Branch not found' });
+      return;
+    }
 
     // Add chat to project if not already added
     if (!project.chatIds.includes(chat._id)) {
       project.chatIds.push(chat._id);
       chat.projectId = project._id;
+      chat.branchId = branch._id;
       await Promise.all([project.save(), chat.save()]);
     }
 
@@ -319,7 +418,7 @@ router.delete('/:id/chats/:chatId', async (req: AuthRequest, res, next) => {
 
     // Remove project reference from chat
     await Chat.findByIdAndUpdate(req.params.chatId, {
-      $unset: { projectId: 1 }
+      $unset: { projectId: 1, branchId: 1 }
     });
 
     res.json({ project });
@@ -345,7 +444,7 @@ router.delete('/:id', async (req: AuthRequest, res, next) => {
     // Remove project reference from all chats
     await Chat.updateMany(
       { projectId: req.params.id },
-      { $unset: { projectId: 1 } }
+      { $unset: { projectId: 1, branchId: 1 } }
     );
 
     res.json({ message: 'Project deleted' });

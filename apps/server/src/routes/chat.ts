@@ -10,11 +10,16 @@ import {
 import { Chat } from '../models/Chat';
 import { AgentEvent } from '../models/AgentEvent';
 import { AgentRun } from '../models/AgentRun';
-import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { objectIdStringSchema } from '../agent/schemas';
 import { projectChatListItem } from '../chat/chatList';
+import {
+  findOwnedWorkspaceChat,
+  findOwnedWorkspaceProject,
+  ownedProjectIdsForUser
+} from '../workspaces/projectAccess';
+import { resolveProjectBranch } from '../branches/branchService';
 
 const router = Router();
 
@@ -36,9 +41,16 @@ router.use(authMiddleware);
 // Get all chats for user
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const chats = await Chat.find({ userId: req.userId })
+    const projectIds = await ownedProjectIdsForUser(req.userId!);
+    const chats = await Chat.find({
+      userId: req.userId,
+      $or: [
+        { projectId: { $exists: false } },
+        { projectId: { $in: projectIds } }
+      ]
+    })
       .sort({ updatedAt: -1 })
-      .select('_id title projectId messages createdAt updatedAt')
+      .select('_id title projectId branchId messages createdAt updatedAt')
       .lean();
 
     res.json({ chats: chats.map(projectChatListItem) });
@@ -50,10 +62,10 @@ router.get('/', async (req: AuthRequest, res, next) => {
 router.get('/:id/timeline', async (req: AuthRequest, res, next) => {
   try {
     const { limit, before } = timelineQuerySchema.parse(req.query);
-    const chat = await Chat.findOne({
-      _id: req.params.id,
-      userId: req.userId
-    }).select('_id title projectId');
+    const chat = await findOwnedWorkspaceChat({
+      chatId: req.params.id,
+      userId: req.userId!
+    });
 
     if (!chat) {
       res.status(404).json({ error: 'Chat not found' });
@@ -126,7 +138,8 @@ router.get('/:id/timeline', async (req: AuthRequest, res, next) => {
       chat: {
         id: chat._id,
         title: chat.title,
-        projectId: chat.projectId
+        projectId: chat.projectId,
+        branchId: chat.branchId
       },
       turns,
       pageInfo: {
@@ -147,9 +160,9 @@ router.get('/:id/timeline', async (req: AuthRequest, res, next) => {
 // Get single chat
 router.get('/:id', async (req: AuthRequest, res, next) => {
   try {
-    const chat = await Chat.findOne({
-      _id: req.params.id,
-      userId: req.userId
+    const chat = await findOwnedWorkspaceChat({
+      chatId: req.params.id,
+      userId: req.userId!
     });
 
     if (!chat) {
@@ -166,32 +179,39 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
 // Create new chat
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
-    const { projectId, titleSeed } = z.object({
+    const { projectId, branchId, titleSeed } = z.object({
       projectId: objectIdStringSchema,
+      branchId: objectIdStringSchema.optional(),
       titleSeed: z.string().trim().min(1)
     }).parse(req.body);
 
-    const project = await Project.findOne({
-      _id: projectId,
-      userId: req.userId
+    const project = await findOwnedWorkspaceProject({
+      projectId,
+      userId: req.userId!
     });
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
       return;
     }
+    const branch = await resolveProjectBranch({ project, branchId });
+    if (!branch) {
+      res.status(404).json({ error: 'Branch not found' });
+      return;
+    }
 
     const chat = await Chat.create({
       userId: req.userId,
       projectId,
+      branchId: branch._id,
       title: toChatTitle(titleSeed),
       messages: []
     });
 
-    await Project.updateOne(
-      { _id: projectId, userId: req.userId },
-      { $addToSet: { chatIds: chat._id } }
-    );
+    if (!project.chatIds.some(id => id.equals(chat._id))) {
+      project.chatIds.push(chat._id);
+    }
+    await project.save();
 
     res.status(201).json({ chat });
   } catch (error) {
@@ -206,9 +226,9 @@ router.post('/:id/messages', async (req: AuthRequest, res, next) => {
       content: z.string().min(1)
     }).parse(req.body);
 
-    const chat = await Chat.findOne({
-      _id: req.params.id,
-      userId: req.userId
+    const chat = await findOwnedWorkspaceChat({
+      chatId: req.params.id,
+      userId: req.userId!
     });
 
     if (!chat) {
@@ -239,11 +259,13 @@ router.patch('/:id', async (req: AuthRequest, res, next) => {
       title: z.string().min(1)
     }).parse(req.body);
 
-    const chat = await Chat.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
-      { title },
-      { new: true }
-    );
+    const ownedChat = await findOwnedWorkspaceChat({
+      chatId: req.params.id,
+      userId: req.userId!
+    });
+    const chat = ownedChat
+      ? await Chat.findByIdAndUpdate(ownedChat._id, { title }, { new: true })
+      : null;
 
     if (!chat) {
       res.status(404).json({ error: 'Chat not found' });
@@ -259,10 +281,13 @@ router.patch('/:id', async (req: AuthRequest, res, next) => {
 // Delete chat
 router.delete('/:id', async (req: AuthRequest, res, next) => {
   try {
-    const chat = await Chat.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.userId
+    const ownedChat = await findOwnedWorkspaceChat({
+      chatId: req.params.id,
+      userId: req.userId!
     });
+    const chat = ownedChat
+      ? await Chat.findByIdAndDelete(ownedChat._id)
+      : null;
 
     if (!chat) {
       res.status(404).json({ error: 'Chat not found' });

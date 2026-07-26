@@ -14,6 +14,9 @@ import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { User } from '../models/User';
 import { ValidationCandidate } from '../models/ValidationCandidate';
+import { ProjectBranch } from '../models/ProjectBranch';
+import { ensureMainBranch } from '../branches/branchService';
+import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
 import {
   createIntegrationEnvironment,
   type IntegrationEnvironment
@@ -39,9 +42,13 @@ const fixtures = async () => {
     { email: 'owner@example.test', password: 'password', name: 'Owner' },
     { email: 'stranger@example.test', password: 'password', name: 'Stranger' }
   ]);
+  const [{ workspace }] = await Promise.all([
+    ensureDefaultWorkspaceForUser(owner._id),
+    ensureDefaultWorkspaceForUser(stranger._id)
+  ]);
   const [project, otherProject] = await Project.create([
-    { userId: owner._id, name: 'Owner project' },
-    { userId: owner._id, name: 'Other project' }
+    { workspaceId: workspace._id, userId: owner._id, name: 'Owner project' },
+    { workspaceId: workspace._id, userId: owner._id, name: 'Other project' }
   ]);
 
   return {
@@ -67,6 +74,84 @@ const createRun = async (
   baseSnapshotRevision: 0,
   maxRepairAttempts: 2,
   model: 'test-model'
+});
+
+test('Project creation creates one main Branch', async () => {
+  const user = await User.create({
+    email: 'branch-owner@example.test',
+    password: 'password',
+    name: 'Branch owner'
+  });
+  const token = generateToken(user._id.toString());
+
+  const response = await request(app)
+    .post('/api/projects')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Branched project' })
+    .expect(201);
+
+  const branches = await ProjectBranch.find({
+    projectId: response.body.project._id
+  });
+  assert.equal(branches.length, 1);
+  assert.equal(branches[0]?.name, 'main');
+  assert.equal(branches[0]?.headVersion, 0);
+});
+
+test('Chat creation binds to main or an explicitly selected Branch', async () => {
+  const { ownerToken, project } = await fixtures();
+  const main = await ensureMainBranch(project);
+  const feature = await ProjectBranch.create({
+    workspaceId: project.workspaceId,
+    projectId: project._id,
+    name: 'feature',
+    headVersion: 0
+  });
+
+  const first = await request(app)
+    .post('/api/chat')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ projectId: project._id, titleSeed: 'Main chat' })
+    .expect(201);
+  const second = await request(app)
+    .post('/api/chat')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      projectId: project._id,
+      branchId: feature._id,
+      titleSeed: 'Feature chat'
+    })
+    .expect(201);
+
+  assert.equal(first.body.chat.branchId, main._id.toString());
+  assert.equal(second.body.chat.branchId, feature._id.toString());
+});
+
+test('Branch creation can start from a validated Snapshot', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const sourceRun = await createRun(owner._id, project._id);
+  const snapshot = await ProjectSnapshot.create({
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId: sourceRun._id,
+    files: [],
+    packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
+    validation: { status: 'passed', checks: [] },
+    summary: 'Branch point'
+  });
+
+  const response = await request(app)
+    .post(`/api/projects/${project._id}/branches`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ name: 'experiment', fromSnapshotId: snapshot._id })
+    .expect(201);
+
+  assert.equal(response.body.branch.name, 'experiment');
+  assert.equal(
+    response.body.branch.headSnapshotId,
+    snapshot._id.toString()
+  );
+  assert.equal(response.body.branch.headVersion, 0);
 });
 
 test('authenticated run creation persists its event and BullMQ job', async () => {
