@@ -23,6 +23,7 @@ interface DependencyCacheOptions {
   root: string;
   pollIntervalMs?: number;
   lockTimeoutMs?: number;
+  now?: () => number;
 }
 
 const exists = async (target: string): Promise<boolean> => {
@@ -42,6 +43,7 @@ export const createDependencyCache = (
 ): DependencyCache => {
   const pollIntervalMs = options.pollIntervalMs ?? 100;
   const lockTimeoutMs = options.lockTimeoutMs ?? 300_000;
+  const now = options.now ?? Date.now;
 
   return {
     prepare: async input => {
@@ -52,6 +54,12 @@ export const createDependencyCache = (
       const locksPath = path.join(root, '.locks');
       const stagingRoot = path.join(root, '.staging');
       const lockPath = path.join(locksPath, `${input.fingerprint}.lock`);
+      const markUsed = async (): Promise<void> => {
+        await writeFile(
+          completePath,
+          JSON.stringify({ fingerprint: input.fingerprint, lastUsedAt: now() })
+        );
+      };
       await Promise.all([
         mkdir(root, { recursive: true }),
         mkdir(locksPath, { recursive: true }),
@@ -67,6 +75,7 @@ export const createDependencyCache = (
       };
 
       if (await exists(completePath) && await exists(nodeModulesPath)) {
+        await markUsed();
         await linkIntoWorkspace();
         return { cache: 'hit', nodeModulesPath };
       }
@@ -79,6 +88,7 @@ export const createDependencyCache = (
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
           if (await exists(completePath) && await exists(nodeModulesPath)) {
+            await markUsed();
             await linkIntoWorkspace();
             return { cache: 'hit', nodeModulesPath };
           }
@@ -92,6 +102,7 @@ export const createDependencyCache = (
       let stagingPath: string | undefined;
       try {
         if (await exists(completePath) && await exists(nodeModulesPath)) {
+          await markUsed();
           await linkIntoWorkspace();
           return { cache: 'hit', nodeModulesPath };
         }
@@ -106,7 +117,7 @@ export const createDependencyCache = (
         }
         await writeFile(
           path.join(stagingPath, 'complete.json'),
-          JSON.stringify({ fingerprint: input.fingerprint, lastUsedAt: Date.now() })
+          JSON.stringify({ fingerprint: input.fingerprint, lastUsedAt: now() })
         );
         await rm(entryPath, { recursive: true, force: true });
         await rename(stagingPath, entryPath);

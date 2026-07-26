@@ -18,7 +18,12 @@ const withRoot = async (
 
 test('dependency cache installs once then returns a cache hit', async () => {
   await withRoot(async root => {
-    const cache = createDependencyCache({ root, pollIntervalMs: 5 });
+    let now = 100;
+    const cache = createDependencyCache({
+      root,
+      pollIntervalMs: 5,
+      now: () => now
+    });
     const firstWorkspace = path.join(root, 'workspace-1');
     const secondWorkspace = path.join(root, 'workspace-2');
     await Promise.all([mkdir(firstWorkspace), mkdir(secondWorkspace)]);
@@ -37,6 +42,7 @@ test('dependency cache installs once then returns a cache hit', async () => {
       workspacePath: firstWorkspace,
       install
     });
+    now = 200;
     const second = await cache.prepare({
       fingerprint: 'fingerprint',
       workspacePath: secondWorkspace,
@@ -46,6 +52,12 @@ test('dependency cache installs once then returns a cache hit', async () => {
     assert.equal(first.cache, 'miss');
     assert.equal(second.cache, 'hit');
     assert.equal(installs, 1);
+    assert.equal(
+      JSON.parse(
+        await readFile(path.join(root, 'fingerprint', 'complete.json'), 'utf8')
+      ).lastUsedAt,
+      200
+    );
     assert.equal(
       await readFile(
         path.join(secondWorkspace, 'node_modules', 'installed.txt'),

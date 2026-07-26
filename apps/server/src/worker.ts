@@ -6,6 +6,7 @@ import { createProductionModelClient } from './agent/modelClient';
 import { createProjectValidator } from './agent/validator';
 import { createAgentWorker } from './agent/createWorker';
 import { getDeepSeekConfig } from './services/modelProvider';
+import { cleanupDependencyCache } from './agent/validation/cacheCleanup';
 
 dotenv.config();
 
@@ -29,6 +30,31 @@ const startWorker = async () => {
     modelClient,
     validator
   });
+  const cleanupCache = async (): Promise<void> => {
+    try {
+      const result = await cleanupDependencyCache({
+        root: config.validation.dependencyCacheRoot,
+        retentionMs: config.validation.cacheRetentionMs,
+        maxBytes: config.validation.cacheMaxBytes
+      });
+      if (result.removedEntries > 0) {
+        console.log(
+          `Validation cache cleanup removed ${result.removedEntries} entries`
+        );
+      }
+    } catch (error) {
+      console.warn(
+        'Validation cache cleanup failed:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+  };
+  void cleanupCache();
+  const cleanupTimer = setInterval(
+    () => void cleanupCache(),
+    6 * 60 * 60 * 1_000
+  );
+  cleanupTimer.unref();
 
   worker.on('completed', job => {
     console.log(`Agent run job completed: ${job.id}`);
@@ -39,6 +65,7 @@ const startWorker = async () => {
   });
 
   const shutdown = async () => {
+    clearInterval(cleanupTimer);
     await worker.close();
     await connection.quit();
     await disconnectDB();
