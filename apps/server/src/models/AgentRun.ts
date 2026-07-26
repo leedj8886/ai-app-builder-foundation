@@ -41,9 +41,17 @@ export interface IAgentRun {
 const AgentRunSchema = new Schema<IAgentRun>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace' },
+    workspaceId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: true
+    },
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
-    branchId: { type: Schema.Types.ObjectId, ref: 'ProjectBranch' },
+    branchId: {
+      type: Schema.Types.ObjectId,
+      ref: 'ProjectBranch',
+      required: true
+    },
     chatId: { type: Schema.Types.ObjectId, ref: 'Chat' },
     prompt: { type: String, required: true, trim: true },
     status: {
@@ -60,7 +68,7 @@ const AgentRunSchema = new Schema<IAgentRun>(
     },
     baseSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     baseSnapshotRevision: { type: Number, required: true, default: 0 },
-    baseHeadVersion: { type: Number },
+    baseHeadVersion: { type: Number, required: true },
     resultSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     retryOfRunId: { type: Schema.Types.ObjectId, ref: 'AgentRun' },
     validationCandidateId: {

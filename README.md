@@ -1,5 +1,19 @@
 # v0-by-kimi
 
+### Workspace/Branch 数据迁移
+
+升级到包含 ProjectBranch 的版本时，先停止 API Server 和 Agent Worker，
+备份 MongoDB，然后执行：
+
+```bash
+npm run build --workspace @v0/server
+npm run start:migrate:workspace-branches --workspace @v0/server
+```
+
+命令可重复执行。只有看到 `Workspace/Branch migration completed` 后才能启动
+新版本 Server 和 Worker。迁移会创建一个默认 Workspace、把现有用户加入该
+Workspace、为每个 Project 创建 `main` Branch，并回填 Chat 和 AgentRun。
+
 一个基于自然语言的多轮对话生成 Web 站点的平台，类似于 v0.dev。
 
 ## 功能特性

@@ -144,3 +144,39 @@ test('ProjectSnapshot accepts successful validation checks with empty output str
 
   assert.equal(snapshot.validateSync(), undefined);
 });
+
+test('new persisted domain records require Workspace and Branch references', () => {
+  const userId = new Types.ObjectId();
+  const projectId = new Types.ObjectId();
+
+  const project = new Project({
+    userId,
+    name: 'Missing Workspace'
+  });
+  assert.equal(
+    project.validateSync()?.errors.workspaceId?.kind,
+    'required'
+  );
+
+  const run = new AgentRun({
+    userId,
+    projectId,
+    prompt: 'Missing Branch baseline',
+    status: 'queued',
+    mode: 'create',
+    baseSnapshotRevision: 0,
+    maxRepairAttempts: 2,
+    model: 'test-model'
+  });
+  const runErrors = run.validateSync()?.errors;
+  assert.equal(runErrors?.workspaceId?.kind, 'required');
+  assert.equal(runErrors?.branchId?.kind, 'required');
+  assert.equal(runErrors?.baseHeadVersion?.kind, 'required');
+
+  const standaloneChat = new Chat({
+    userId,
+    title: 'Standalone legacy chat',
+    messages: []
+  });
+  assert.equal(standaloneChat.validateSync(), undefined);
+});

@@ -9,6 +9,8 @@
     "start": "node dist/index.js",
     "start:worker": "node dist/worker.js",
     "start:smoke-worker": "node dist/smokeWorker.js",
+    "migrate:workspace-branches": "tsx src/migrate.ts",
+    "start:migrate:workspace-branches": "node dist/migrate.js",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "test:integration": "node --import tsx --test --test-concurrency=1 \"src/integration/**/*.integration.ts\"",
     "type-check": "tsc --noEmit"

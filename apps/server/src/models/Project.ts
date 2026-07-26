@@ -20,7 +20,8 @@ export interface IProject extends Document {
 const ProjectSchema = new Schema<IProject>({
   workspaceId: {
     type: Schema.Types.ObjectId,
-    ref: 'Workspace'
+    ref: 'Workspace',
+    required: true
   },
   userId: {
     type: Schema.Types.ObjectId,

@@ -54,7 +54,10 @@ const ChatSchema = new Schema<IChat>({
   },
   branchId: {
     type: Schema.Types.ObjectId,
-    ref: 'ProjectBranch'
+    ref: 'ProjectBranch',
+    required(this: IChat): boolean {
+      return this.projectId !== undefined;
+    }
   },
   title: {
     type: String,
