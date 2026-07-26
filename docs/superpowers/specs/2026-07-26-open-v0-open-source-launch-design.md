@@ -1,326 +1,267 @@
-# Open v0 Open-Source Launch Design
+# Open v0 开源发布设计
 
-**Date:** 2026-07-26
-**Status:** Approved direction, pending written-spec review
+**日期：** 2026-07-26
+**状态：** 方向已确认，等待书面设计稿审阅
 
-## 1. Objective
+## 1. 目标
 
-Prepare this repository for an open-source launch as a foundation that helps
-teams build and operate their own v0-style AI application platform.
+将本仓库建设为一个帮助团队搭建和运营自有 v0 式 AI 应用生成平台的开源底座，并为正式开源发布做好准备。
 
-The launch must not position the project as another free end-user clone of v0,
-Lovable, Bolt, or Dyad. Its primary value is the reusable platform architecture:
-multi-user project management, asynchronous agent execution, auditable progress,
-project snapshots, real build validation, failure classification, and targeted
-repair.
+本项目不应被定位为另一个面向终端用户的免费 v0、Lovable、Bolt 或 Dyad 克隆。它的核心价值是可复用的平台架构：多用户项目管理、异步 Agent 执行、可审计进度、项目快照、真实构建验证、失败分类和定向修复。
 
-The launch succeeds when a developer who does not know the project can:
+当一个不了解本项目的开发者能够完成以下事项时，发布才算成功：
 
-1. Understand the differentiation from the repository landing page.
-2. Start the complete system without private setup instructions.
-3. Generate and iteratively edit a React application.
-4. Observe the validation and recovery pipeline.
-5. Identify how to customize the model provider, agent behavior, UI, and
-   infrastructure for an internal or commercial platform.
+1. 从仓库首页理解项目与现有 AI App Builder 的差异。
+2. 不依赖私下提供的说明启动完整系统。
+3. 通过多轮自然语言对话生成和修改 React 应用。
+4. 观察代码验证和失败恢复过程。
+5. 理解如何替换模型提供商、Agent 行为、用户界面和基础设施，以构建内部或商业平台。
 
-## 2. Target Audience
+## 2. 目标用户
 
-### Primary audience
+### 主要用户
 
-- Platform and developer-experience teams building internal AI development
-  tools.
-- Startups building a vertical AI app builder.
-- Engineering teams that need a self-hosted prompt-to-app environment.
-- Developers studying production-oriented AI coding agent architecture.
+- 正在建设内部 AI 开发工具的平台团队和研发效能团队。
+- 正在建设垂直 AI App Builder 的创业团队。
+- 需要私有部署 prompt-to-app 环境的工程团队。
+- 希望研究生产级 AI Coding Agent 架构的开发者。
 
-### Secondary audience
+### 次要用户
 
-- Individual developers who want to run and extend a multi-user AI app builder.
-- DeepSeek, Kimi, and OpenAI-compatible API users looking for a complete
-  reference project.
-- Open-source contributors interested in agent reliability, validation, and
-  recovery.
+- 希望自行运行和扩展多用户 AI App Builder 的独立开发者。
+- 寻找完整参考项目的 DeepSeek、Kimi 和 OpenAI-compatible API 用户。
+- 对 Agent 可靠性、构建验证和失败恢复感兴趣的开源贡献者。
 
-### Explicit non-goal
+### 明确不做
 
-The initial launch will not claim to be the most polished consumer alternative
-to v0, Lovable, Dyad, or Bolt. Competing feature-for-feature with mature
-end-user products would obscure the platform-builder use case and create
-expectations the current release does not meet.
+首发版本不宣称自己是体验最完善的 v0、Lovable、Dyad 或 Bolt 消费级替代品。与成熟终端产品逐项竞争功能，会掩盖“帮助团队搭建平台”这一核心场景，并制造当前版本无法满足的预期。
 
-## 3. Positioning
+## 3. 产品定位
 
-### Category
+### 所属品类
 
-Open-source, self-hostable foundation for building a v0-style AI app platform.
+帮助团队搭建自有 v0 式 AI App Builder 的开源、自托管平台底座。
 
-### English positioning statement
+### 中文定位
 
-> An open-source, self-hostable foundation for building your own v0-style AI
-> app platform—with auditable agent runs and build-verified code generation.
+> 面向开发团队的开源、自托管 AI App Builder 平台底座，内置多用户项目管理、异步 Agent、实时执行轨迹、代码快照、真实构建验证和定向错误修复。
 
-### Chinese positioning statement
+### 英文定位
 
-> 面向开发团队的开源、自托管 AI App Builder 平台底座，内置多用户项目管理、
-> 异步 Agent、实时执行轨迹、代码快照、真实构建验证和定向错误修复。
+> An open-source, self-hostable foundation for building your own v0-style AI app platform—with auditable agent runs and build-verified code generation.
 
-### Primary message
-
-> Do not just generate code. Generate code that builds.
-
-Chinese:
+### 核心口号
 
 > 不只是生成代码，而是生成能够通过真实构建的代码。
 
-### Differentiation
-
-The project should consistently emphasize three differentiators:
-
-1. **Build-verified generation:** a run is not complete until the generated
-   project passes structural validation, dependency preparation, TypeScript
-   checking, and a production build.
-2. **Targeted recovery:** failures are classified as code, dependency, or
-   infrastructure errors so the platform can repair or retry the correct layer
-   instead of blindly regenerating the whole application.
-3. **Platform architecture:** the repository provides authentication, projects,
-   asynchronous workers, durable events, real-time progress, snapshots, and
-   self-hosted infrastructure rather than only a prompt-and-preview component.
-
-Model-provider branding is supporting evidence, not the main category. The
-project should present DeepSeek, Kimi, or other OpenAI-compatible providers as
-replaceable configuration.
-
-## 4. Naming and Repository Identity
-
-The current names `v0-by-kimi` and `my-v0` do not match the implementation or
-the intended long-term positioning. Before public promotion, the project needs
-an independent, provider-neutral identity.
-
-The final name must:
-
-- Avoid implying an official relationship with Vercel or v0.
-- Avoid coupling the project to one model provider.
-- Be easy to pronounce and search.
-- Support a repository name, package namespace, and future website.
-
-Renaming will be a separate decision. Until a name is selected, launch assets
-should use the descriptive category rather than inventing a temporary brand.
-
-## 5. Repository Landing Page
-
-The README is the primary landing page and must use the following information
-order:
-
-1. Project name and one-sentence positioning.
-2. Live demo, quick start, architecture, and roadmap links.
-3. A 20–30 second demo showing generation, validation failure, targeted repair,
-   successful build, and snapshot preview.
-4. A short "Why this project?" section.
-5. The validation pipeline:
-
-   `Plan → Generate → Install → Type-check → Build → Diagnose → Repair → Snapshot`
+英文版本：
 
-6. Four headline capabilities:
-   - Build-verified generation
-   - Targeted repair instead of blind regeneration
-   - Auditable real-time agent runs
-   - Self-hosted multi-user platform
-7. A reproducible quick start.
-8. Architecture and extension points.
-9. Current capabilities and honest limitations.
-10. Configuration, model providers, troubleshooting, roadmap, contribution,
-    security, and license information.
-
-The README must not lead with a long technology-stack list. The technology
-stack should support the value proposition after the reader understands the
-problem being solved.
-
-## 6. Launch Demo
+> Do not just generate code. Generate code that builds.
 
-The flagship launch asset is a short, authentic failure-recovery demonstration.
+### 核心差异
 
-### Scenario
+项目的所有对外材料都应持续强调以下三个差异点：
 
-1. Prompt for a recognizable application such as an operations dashboard with
-   charts and filters.
-2. Show the generated plan and file operations.
-3. Show a real dependency or TypeScript validation failure.
-4. Show the failure classification and concise diagnostic.
-5. Show a targeted repair without regenerating the entire project.
-6. Show type checking and production build succeeding.
-7. Show the validated snapshot in the preview.
+1. **经过构建验证的代码生成：** 生成项目只有通过结构校验、依赖准备、TypeScript 检查和生产构建后，运行才会被标记为完成。
+2. **定向恢复：** 系统将失败分为代码错误、依赖错误和基础设施错误，在正确的层级执行修复或重试，而不是盲目重新生成整个应用。
+3. **完整的平台架构：** 仓库提供认证、项目管理、异步 Worker、持久化事件、实时进度、项目快照和自托管基础设施，而不只是一个提示词输入框和预览组件。
 
-### Constraints
+模型品牌属于辅助能力，不应成为项目所属品类。DeepSeek、Kimi 和其他 OpenAI-compatible 模型应作为可替换配置出现。
 
-- The recording must represent behavior available in the tagged release.
-- It must not imply that every prompt succeeds.
-- It must not hide manual steps needed by a new user.
-- The same scenario and prompt must be documented so another user can reproduce
-  it.
+## 4. 项目命名与仓库身份
 
-### Reusable visual message
+当前的 `v0-by-kimi` 和 `my-v0` 与实际实现及长期定位均不一致。正式推广前，项目需要一个独立且不绑定模型提供商的名称。
 
-`Prompt → Plan → Generate → Real Build → Diagnose → Targeted Repair → Verified Snapshot`
+最终名称必须满足：
 
-## 7. Open-Source Readiness
+- 不暗示项目与 Vercel 或 v0 存在官方关系。
+- 不将项目绑定到单一模型提供商。
+- 易于发音、记忆和搜索。
+- 可以同时用作仓库名、包命名空间和未来网站名称。
 
-The launch is blocked until the following items are complete:
+重命名将作为单独决策处理。在确定最终名称之前，发布材料应使用明确的品类描述，而不是发明一个临时品牌。
 
-- The repository uses Apache-2.0. Its explicit patent grant is appropriate for a
-  reusable platform foundation and is more protective for organizational
-  adopters than a license without patent terms.
-- `.env.example` documents every required and commonly customized setting
-  without secrets.
-- A clean-machine quick-start path launches MongoDB, Redis, the API server, the
-  worker, and the web app.
-- The README correctly distinguishes development, smoke, and production-model
-  execution.
-- No private credentials, internal URLs, or local-only assumptions are tracked.
-- `CONTRIBUTING.md`, security reporting guidance, and a public roadmap exist.
-- GitHub description, social preview, topics, and release metadata are set.
-- The repository contains at least one reproducible example prompt.
-- Current limitations are documented.
+## 5. 仓库首页
 
-The default quick start should optimize for the shortest reliable path. Docker
-Compose is the preferred default if it can provide a complete working system;
-manual workspace commands should remain available for contributors.
+README 是最重要的项目落地页，应按以下顺序组织信息：
 
-## 8. Validation and Acceptance Criteria
+1. 项目名称和一句话定位。
+2. 在线演示、快速开始、架构和路线图入口。
+3. 一段 20–30 秒的演示，展示生成、验证失败、定向修复、构建成功和快照预览。
+4. 简短的“为什么做这个项目”。
+5. 完整验证流程：
 
-Before the public announcement, at least five people who did not build the
-project should test the release using only public documentation.
+   `规划 → 生成 → 安装依赖 → 类型检查 → 生产构建 → 诊断 → 修复 → 快照`
 
-The release is ready when:
+6. 四项核心能力：
+   - 经过构建验证的代码生成
+   - 定向修复，而不是盲目重新生成
+   - 可审计的实时 Agent 执行过程
+   - 可自托管的多用户平台
+7. 可复现的快速开始。
+8. 系统架构和扩展点。
+9. 当前已有能力和明确限制。
+10. 配置、模型提供商、故障排查、路线图、贡献、安全和许可证信息。
 
-- At least four of five testers can start the system within ten minutes.
-- Testers do not require private setup instructions.
-- Each successful tester can complete one generation and one iterative edit.
-- The documented demo prompt can reach a validated snapshot.
-- Installation failures produce actionable troubleshooting information.
-- Server and web unit tests pass.
-- The production build passes.
-- Any unverified integration or platform behavior is explicitly disclosed.
+README 不应以冗长的技术栈列表开场。读者先理解项目解决的问题，再了解技术栈如何支撑这一价值。
 
-The current unit-test and build results are useful release evidence, but they do
-not replace clean-machine onboarding validation.
+## 6. 首发演示
 
-## 9. Promotion Sequence
+首发最重要的视觉材料是一段简短、真实的失败恢复演示。
 
-Promotion will be staggered so early onboarding failures can be fixed before
-larger audiences arrive.
+### 演示场景
 
-### Stage 1: controlled release
+1. 输入一个容易理解的需求，例如生成带图表和筛选器的运营 Dashboard。
+2. 展示生成计划和文件操作。
+3. 展示一次真实的依赖或 TypeScript 验证失败。
+4. 展示错误分类和简洁诊断信息。
+5. 展示定向修复过程，不重新生成整个项目。
+6. 展示类型检查和生产构建通过。
+7. 在右侧预览经过验证的快照。
 
-- Publish a tagged release and complete repository landing page.
-- Invite a small group of platform engineers, AI coding developers, and
-  self-hosting users.
-- Fix installation and first-run problems.
+### 约束
 
-### Stage 2: technical communities
+- 录制内容必须对应已发布版本中真实存在的行为。
+- 不暗示所有提示词都能成功生成。
+- 不隐藏新用户必须执行的人工步骤。
+- 记录使用的场景和提示词，使其他用户可以复现演示。
 
-- Reddit communities focused on local models, self-hosting, open source, and AI
-  coding.
-- V2EX and Chinese developer communities with an architecture-focused
-  development retrospective.
-- X with the short recovery demo and a technical thread.
-- Hacker News only after the public setup and demo are reliable.
+### 可复用的视觉信息
 
-### Stage 3: durable content
+`提示词 → 规划 → 生成 → 真实构建 → 诊断失败 → 定向修复 → 验证后快照`
 
-- Why AI-generated code needs real build validation.
-- How to distinguish code, dependency, and infrastructure failures.
-- How to design recoverable and auditable coding-agent event flows.
-- A release driven by concrete community feedback.
+## 7. 开源准备
 
-Product Hunt and broad no-code audiences are deferred until the hosted demo and
-onboarding are polished enough for non-developers.
+完成以下事项之前，不应正式发布：
 
-## 10. Success Metrics
+- 仓库采用 Apache-2.0 许可证。它包含明确的专利授权，适合可复用的平台底座，相比不包含专利条款的许可证能为组织采用者提供更清晰的保护。
+- `.env.example` 记录所有必需和常用配置，不包含密钥。
+- 在全新环境中，可以通过公开文档启动 MongoDB、Redis、API Server、Worker 和 Web。
+- README 正确区分开发模式、Smoke 模式和真实模型生产模式。
+- 版本库中不存在私人凭证、内部地址或仅适用于作者本机的隐含假设。
+- 提供 `CONTRIBUTING.md`、安全问题报告方式和公开路线图。
+- 配置 GitHub description、social preview、topics 和 Release 信息。
+- 仓库中至少提供一个可复现的示例提示词。
+- 明确记录当前版本限制。
 
-Stars are a useful distribution signal but not the primary proof of product
-value.
+默认快速开始应追求最短且最可靠的路径。如果 Docker Compose 能启动完整系统，应将其作为默认方式；同时为贡献者保留手动启动各 workspace 的说明。
 
-Initial launch goals:
+## 8. 验证与验收标准
 
-- 20 people run the project successfully.
-- 5 substantive external issues or discussions are created.
-- 2 external contributors submit useful changes.
-- 1 independent tutorial, article, or demo is published.
-- The project receives concrete inquiries about internal deployment,
-  customization, or provider integration.
+正式公开推广前，至少邀请五名未参与项目开发的人，只依据公开文档测试发布版本。
 
-A smaller audience asking how to deploy the platform internally is a stronger
-validation of this positioning than a larger number of passive stars.
+满足以下条件后才可发布：
 
-## 11. Scope and Delivery Order
+- 至少四名测试者能在十分钟内启动系统。
+- 测试者不需要私下提供的补充说明。
+- 每名成功启动的测试者都能完成一次生成和一次后续修改。
+- 文档中的演示提示词能够生成通过验证的快照。
+- 安装失败时，故障排查信息具有可操作性。
+- Server 和 Web 单元测试通过。
+- 生产构建通过。
+- 对未验证的集成或平台行为进行明确披露。
 
-### Launch-critical
+当前单元测试和构建结果可以作为发布证据，但不能替代全新环境的 onboarding 验证。
 
-- Provider-neutral project identity
-- License
-- README and screenshots/demo
-- Complete quick start and environment example
-- Architecture documentation
-- Contribution, security, and roadmap documents
-- GitHub repository metadata
-- Tagged release
+## 9. 推广顺序
 
-### Valuable after the launch baseline
+推广应分阶段进行，使团队能在大规模用户到来前修复早期 onboarding 问题。
 
-- Additional OpenAI-compatible provider configuration
-- Public hosted demo
-- One-click deployment
-- Example gallery and prompts
-- Runtime cost and reliability measurements
+### 第一阶段：受控发布
 
-### Deferred
+- 发布带版本号的 Release 和完整仓库首页。
+- 邀请少量平台工程师、AI Coding 开发者和自托管用户试用。
+- 优先修复安装和首次运行问题。
 
-- Visual design editor parity
-- Broad template library
-- GitHub two-way synchronization
-- Team collaboration features
-- MCP integrations
-- Multiple production deployment targets
-- Mobile application generation
+### 第二阶段：技术社区
 
-The launch work must not expand into feature parity with mature consumer AI app
-builders.
+- 面向本地模型、自托管、开源和 AI Coding 的 Reddit 社区。
+- 在 V2EX 和中文开发者社区发布以系统架构为主的开发复盘。
+- 在 X 发布失败恢复短视频和技术 Thread。
+- 只有在公开安装流程和演示足够可靠后，才发布 Show HN。
 
-## 12. Risks and Mitigations
+### 第三阶段：长期内容
 
-### "Another v0 clone" perception
+- 为什么 AI 生成代码需要真实构建验证。
+- 如何区分代码、依赖和基础设施错误。
+- 如何设计可恢复、可审计的 Coding Agent 事件流。
+- 发布一个由真实社区反馈驱动的新版本。
 
-Lead with platform builders, validation, auditability, and recovery. Do not lead
-with visual similarity to v0.
+在在线演示和 onboarding 足以服务非开发者之前，暂不优先投入 Product Hunt 和泛 no-code 人群。
 
-### Setup complexity
+## 10. 成功指标
 
-Treat clean-machine onboarding as a release acceptance test and provide one
-canonical startup path.
+Stars 是传播信号，但不是产品价值的主要证明。
 
-### Provider-name confusion
+首发阶段目标：
 
-Adopt a provider-neutral identity and document model providers as adapters.
+- 20 人成功运行项目。
+- 产生 5 个有实际内容的外部 Issue 或 Discussion。
+- 2 名外部贡献者提交有效改动。
+- 出现 1 篇独立教程、文章或演示。
+- 收到关于内部部署、定制或模型接入的具体咨询。
 
-### Overclaiming reliability
+如果受众规模较小，但持续有人询问如何在企业内部部署平台，这比大量被动 stars 更能证明当前定位成立。
 
-Publish the validation behavior and limitations. Do not claim production
-readiness or universal prompt success without measured evidence.
+## 11. 范围与交付顺序
 
-### Trademark confusion
+### 发布必需
 
-Use "v0-style" only to explain the category and state that the project is not
-affiliated with Vercel. Obtain legal review before using another company's mark
-in permanent branding.
+- 不绑定模型提供商的项目身份
+- Apache-2.0 License
+- README 和截图/演示
+- 完整快速开始和环境变量示例
+- 架构文档
+- 贡献指南、安全说明和路线图
+- GitHub 仓库元数据
+- 带版本号的 Release
 
-### Contributor inactivity
+### 完成发布基线后有价值
 
-Seed a small, prioritized roadmap and good-first issues, respond quickly during
-the launch window, and publish follow-up releases based on real feedback.
+- 更多 OpenAI-compatible 模型配置
+- 公开在线演示
+- 一键部署
+- 示例项目和提示词
+- 运行成本和可靠性指标
 
-## 13. Next Step
+### 暂缓
 
-After this written design is reviewed, create a repository implementation plan
-that breaks the launch work into independently verifiable changes. The plan
-must preserve existing uncommitted product work and must not combine unrelated
-feature development with open-source launch preparation.
+- 与成熟产品一致的可视化设计编辑器
+- 大规模模板库
+- GitHub 双向同步
+- 团队实时协作
+- MCP 集成
+- 多个生产部署目标
+- 移动应用生成
+
+开源发布工作不得扩张为与成熟消费级 AI App Builder 全面竞争功能。
+
+## 12. 风险与应对
+
+### 被认为是“又一个 v0 clone”
+
+持续强调平台搭建者、构建验证、可审计性和失败恢复，不以视觉上模仿 v0 作为核心卖点。
+
+### 安装复杂
+
+将全新环境 onboarding 作为发布验收测试，并只提供一条权威的默认启动路径。
+
+### 模型品牌造成混乱
+
+采用不绑定模型提供商的项目身份，将不同模型记录为可替换适配器。
+
+### 过度承诺可靠性
+
+公开验证行为和已知限制。在没有测量证据之前，不宣称达到生产级，也不宣称所有提示词都能成功。
+
+### 商标混淆
+
+仅使用“v0 式”说明项目所属品类，并明确项目与 Vercel 无关。在永久品牌中使用其他公司的商标前，应进行法律审查。
+
+### 贡献者活跃度不足
+
+准备规模较小且有优先级的公开路线图和 good first issues；在首发期快速响应；依据真实反馈持续发布新版本。
+
+## 13. 下一步
+
+书面设计稿通过审阅后，创建仓库改造实施计划，将发布工作拆分为可以独立验证的小改动。实施计划必须保留当前尚未提交的产品代码，不将无关功能开发混入开源发布准备。
