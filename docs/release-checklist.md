@@ -1,0 +1,39 @@
+# 开源发布清单
+
+## 仓库
+
+- [ ] Apache-2.0、贡献指南、安全策略和路线图已存在
+- [ ] README 定位、快速开始、限制和文档链接准确
+- [ ] `.env.example` 不含真实密钥
+- [ ] GitHub description、topics 和 social preview 已准备
+- [ ] 正式品牌及与 Vercel 无关的声明已确认
+
+## 自动验证
+
+- [ ] `npm run test:readiness`
+- [ ] `npm run test --workspace @v0/server`
+- [ ] `npm run test --workspace @v0/web`
+- [ ] `npm run build`
+- [ ] `docker compose --env-file .env.example config --quiet`
+- [ ] `npm run test:smoke`
+
+## 全新环境验证
+
+- [ ] 五名未参与开发的测试者只使用公开文档
+- [ ] 至少四名测试者在十分钟内启动
+- [ ] 每名成功测试者完成一次生成和一次修改
+- [ ] 示例 Dashboard 到达经过验证的 Snapshot
+- [ ] 安装失败可以通过公开故障排查解决
+
+## 发布物料
+
+- [ ] 20–30 秒失败恢复演示对应真实 Release
+- [ ] 架构图与当前实现一致
+- [ ] Release Notes 明确新增能力、限制和升级方式
+- [ ] Show HN、Reddit、V2EX 和 X 文案按社区分别撰写
+
+## 发布后
+
+- [ ] 首日集中响应安装问题
+- [ ] 记录成功运行人数、有效 Issue 和外部贡献者
+- [ ] 依据真实反馈安排下一个小版本

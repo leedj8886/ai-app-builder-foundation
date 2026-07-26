@@ -162,6 +162,8 @@ AGENT_MODEL=
 
 - [系统架构](docs/architecture.md)
 - [故障排查](docs/troubleshooting.md)
+- [经过构建验证的 Dashboard 示例](docs/examples/verified-dashboard.md)
+- [开源发布清单](docs/release-checklist.md)
 - [路线图](ROADMAP.md)
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)

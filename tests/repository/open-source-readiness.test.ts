@@ -96,3 +96,32 @@ test('README presents the platform-builder positioning and valid core docs', asy
     ));
   }
 });
+
+test('repository includes contribution templates and a reproducible example', async () => {
+  const requiredFiles = [
+    '.github/ISSUE_TEMPLATE/bug_report.yml',
+    '.github/ISSUE_TEMPLATE/feature_request.yml',
+    '.github/ISSUE_TEMPLATE/config.yml',
+    '.github/PULL_REQUEST_TEMPLATE.md',
+    'docs/examples/verified-dashboard.md',
+    'docs/release-checklist.md'
+  ];
+
+  await Promise.all(
+    requiredFiles.map(relativePath => access(repositoryFile(relativePath)))
+  );
+
+  const example = await readFile(
+    repositoryFile('docs/examples/verified-dashboard.md'),
+    'utf8'
+  );
+  assert.match(example, /生成一个运营 Dashboard/);
+  assert.match(example, /Add a compact activity section/);
+
+  const checklist = await readFile(
+    repositoryFile('docs/release-checklist.md'),
+    'utf8'
+  );
+  assert.match(checklist, /npm run test:smoke/);
+  assert.match(checklist, /四名测试者/);
+});

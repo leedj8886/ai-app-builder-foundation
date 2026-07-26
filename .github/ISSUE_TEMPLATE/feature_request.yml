@@ -1,0 +1,38 @@
+name: 功能建议
+description: 描述团队搭建自有 AI App Builder 时遇到的真实场景
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 场景和问题
+      description: 哪类团队在什么流程中遇到了什么限制？
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 期望结果
+      description: 描述结果和验收方式，不只描述界面。
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 能力领域
+      options:
+        - 模型 Provider
+        - Agent 编排
+        - 生成项目验证
+        - 项目与快照
+        - 自托管与部署
+        - Web 体验
+        - 文档和示例
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 已尝试方案
+      description: 当前如何绕过，为什么不够？
