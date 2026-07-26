@@ -62,6 +62,12 @@ Repair the provided validation failures with the smallest set of complete-file o
 Use the diagnostics as evidence. Do not return commands or change server-owned scripts. Return:
 {"message":"...","operations":[{"type":"update","path":"src/App.tsx","content":"..."}],"dependencies":{},"devDependencies":{}}`;
 
+const dependencyRepairSystemInstruction = `${sharedSystemInstruction}
+Repair dependency declaration failures with the smallest possible dependency changes.
+Prefer dependency and devDependency updates. Only change source files when an import must
+match the corrected dependency. Do not return commands or change server-owned scripts. Return:
+{"message":"...","operations":[],"dependencies":{},"devDependencies":{}}`;
+
 const modelError = (code: string, message: string): Error & { code: string } =>
   Object.assign(new Error(message), { code });
 
@@ -135,7 +141,11 @@ export const createOpenAIModelClient = (
     generateFiles: (input: GenerateInput): Promise<ModelResult<GenerationResult>> =>
       request(generationSystemInstruction, input, generationResultSchema),
     repairFiles: (input: RepairInput): Promise<ModelResult<GenerationResult>> =>
-      request(repairSystemInstruction, input, generationResultSchema)
+      request(repairSystemInstruction, input, generationResultSchema),
+    repairDependencies: (
+      input: RepairInput
+    ): Promise<ModelResult<GenerationResult>> =>
+      request(dependencyRepairSystemInstruction, input, generationResultSchema)
   };
 };
 

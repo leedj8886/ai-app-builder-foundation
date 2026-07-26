@@ -10,6 +10,7 @@ import { loadAgentContext } from './contextBuilder';
 import { mergeProjectPackageJson } from './dependencies';
 import { emitAgentEvent } from './eventBus';
 import { applyFileOperations } from './fileOperations';
+import { diagnosticFingerprint } from './validation/classify';
 import { resolveProjectBaseFiles } from './projectTemplate';
 import { assertAgentRunTransition } from './stateMachine';
 import {
@@ -166,6 +167,7 @@ export const runAgentGenerationWithValidation = async (
   let summary = generated.summary;
   let usage = generated.usage;
   let repairAttempts = 0;
+  const seenDiagnostics = new Set<string>();
 
   while (true) {
     await input.onEvent({
@@ -175,7 +177,14 @@ export const runAgentGenerationWithValidation = async (
     });
     const validation = await input.validator.validate({
       runId: `${input.runId}-${repairAttempts}`,
-      files
+      files,
+      onProgress: async progress => {
+        await input.onEvent({
+          type: 'validation.step',
+          message: progress.message,
+          payload: progress
+        });
+      }
     });
 
     if (validation.status === 'passed') {
@@ -201,6 +210,28 @@ export const runAgentGenerationWithValidation = async (
       payload: validation
     });
 
+    if (validation.category === 'INFRA_ERROR') {
+      throw Object.assign(
+        new Error('Validation environment is temporarily unavailable'),
+        {
+          code: 'VALIDATION_INFRA_ERROR',
+          details: validation
+        }
+      );
+    }
+
+    const failureFingerprint = diagnosticFingerprint(validation);
+    if (seenDiagnostics.has(failureFingerprint)) {
+      throw Object.assign(
+        new Error('Validation repair repeated the same failure'),
+        {
+          code: 'REPEATED_VALIDATION_FAILURE',
+          details: validation
+        }
+      );
+    }
+    seenDiagnostics.add(failureFingerprint);
+
     if (repairAttempts >= input.maxRepairAttempts) {
       throw Object.assign(new Error('Generated project failed validation'), {
         code: 'VALIDATION_FAILED',
@@ -214,19 +245,42 @@ export const runAgentGenerationWithValidation = async (
       message: `Repair attempt ${repairAttempts} started`,
       payload: { phase: 'repairing', attempt: repairAttempts }
     });
-    const repaired = await input.modelClient.repairFiles({
+    const repairInput = {
       context: input.context,
       plan: generated.plan,
       attempt: repairAttempts,
       files,
       validation
-    });
+    };
+    const repaired = validation.category === 'DEPENDENCY_ERROR'
+      ? await (
+        input.modelClient.repairDependencies ??
+        input.modelClient.repairFiles
+      )(repairInput)
+      : await input.modelClient.repairFiles(repairInput);
+    const currentPackageJson = packageJson;
     packageJson = mergeProjectPackageJson(packageJson, repaired.value);
+    const dependencyChanged =
+      JSON.stringify(packageJson) !== JSON.stringify(currentPackageJson);
+    const filesBeforeRepair = new Map(
+      files.map(file => [file.path, file.content])
+    );
     files = applyFileOperations(
       files,
       repaired.value.operations,
       input.generatedByRunId
     );
+    const fileChanged = files.some(
+      file => filesBeforeRepair.get(file.path) !== file.content
+    ) || [...filesBeforeRepair].some(
+      ([filePath]) => !files.some(file => file.path === filePath)
+    );
+    if (!dependencyChanged && !fileChanged) {
+      throw Object.assign(
+        new Error('The model did not produce any effective repair changes'),
+        { code: 'NO_EFFECTIVE_CHANGES' }
+      );
+    }
     files = writeServerPackageJson(
       files,
       packageJson,
@@ -268,6 +322,9 @@ const publicAgentError = (
     'INVALID_MODEL_OUTPUT',
     'MODEL_REQUEST_FAILED',
     'MODEL_CONFIGURATION_ERROR',
+    'NO_EFFECTIVE_CHANGES',
+    'REPEATED_VALIDATION_FAILURE',
+    'VALIDATION_INFRA_ERROR',
     'VALIDATION_FAILED'
   ]);
   const code = typeof candidate.code === 'string' && knownCodes.has(candidate.code)

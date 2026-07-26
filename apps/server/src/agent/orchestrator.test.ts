@@ -345,7 +345,87 @@ test('runAgentGenerationWithValidation does not repair a passing candidate', asy
   assert.equal(repairs, 0);
 });
 
-test('runAgentGenerationWithValidation fails after exhausting repairs', async () => {
+test('infrastructure validation failure never invokes model repair', async () => {
+  let repairs = 0;
+
+  await assert.rejects(
+    runAgentGenerationWithValidation({
+      context: {
+        prompt: 'Build app',
+        mode: 'create',
+        project: {
+          name: 'App',
+          framework: 'react',
+          styling: 'tailwind',
+          uiLibrary: 'none'
+        },
+        messages: [],
+        files: []
+      },
+      baseFiles: [],
+      modelClient: {
+        generatePlan: async () => ({
+          value: {
+            summary: 'Build app',
+            steps: [{
+              title: 'Create app',
+              intent: 'Render app',
+              filesLikelyTouched: ['src/App.tsx']
+            }],
+            assumptions: []
+          }
+        }),
+        generateFiles: async () => ({
+          value: {
+            message: 'Created app',
+            operations: [{
+              type: 'create',
+              path: 'src/App.tsx',
+              content: 'export default function App() { return null }'
+            }],
+            dependencies: {},
+            devDependencies: {}
+          }
+        }),
+        repairFiles: async () => {
+          repairs += 1;
+          throw new Error('repair should not run');
+        }
+      },
+      validator: {
+        validate: async () => ({
+          status: 'failed',
+          category: 'INFRA_ERROR',
+          retryable: true,
+          checks: [{
+            name: 'install',
+            phase: 'dependencies',
+            status: 'failed',
+            category: 'INFRA_ERROR',
+            command: 'npm install',
+            exitCode: 124,
+            stdout: '',
+            stderr: 'Command timed out',
+            durationMs: 180_000,
+            cache: 'miss',
+            attempt: 2
+          }]
+        })
+      },
+      runId: 'run-1',
+      maxRepairAttempts: 2,
+      onEvent: () => {}
+    }),
+    (error: Error & { code?: string }) => {
+      assert.equal(error.code, 'VALIDATION_INFRA_ERROR');
+      return true;
+    }
+  );
+
+  assert.equal(repairs, 0);
+});
+
+test('runAgentGenerationWithValidation stops after a no-op repair', async () => {
   let repairs = 0;
   let validations = 0;
   const modelClient: ModelClient = {
@@ -418,9 +498,9 @@ test('runAgentGenerationWithValidation fails after exhausting repairs', async ()
       maxRepairAttempts: 2,
       onEvent: () => {}
     }),
-    (error: Error & { code?: string }) => error.code === 'VALIDATION_FAILED'
+    (error: Error & { code?: string }) => error.code === 'NO_EFFECTIVE_CHANGES'
   );
 
-  assert.equal(repairs, 2);
-  assert.equal(validations, 3);
+  assert.equal(repairs, 1);
+  assert.equal(validations, 1);
 });

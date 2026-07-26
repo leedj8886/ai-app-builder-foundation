@@ -28,6 +28,7 @@ export const agentEventTypes = [
   'agent.plan',
   'file.changed',
   'validation.started',
+  'validation.step',
   'validation.failed',
   'validation.passed',
   'repair.started',
@@ -184,4 +185,7 @@ export interface ModelClient {
   generatePlan(input: PlanInput): Promise<ModelResult<AgentPlan>>;
   generateFiles(input: GenerateInput): Promise<ModelResult<GenerationResult>>;
   repairFiles(input: RepairInput): Promise<ModelResult<GenerationResult>>;
+  repairDependencies?(
+    input: RepairInput
+  ): Promise<ModelResult<GenerationResult>>;
 }
