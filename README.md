@@ -58,13 +58,34 @@ v0-by-kimi/
 ## 快速开始
 
 ```bash
-# 安装依赖
+# 安装依赖并启动基础设施
 npm install
+docker compose up -d mongodb redis
+
+# 准备本地共享 Artifact 目录和环境变量
+mkdir -p /tmp/open-v0-artifacts
+cp apps/server/.env.example apps/server/.env
+cp apps/web/.env.example apps/web/.env
 
 # 启动开发服务器
 npm run dev
 
-# 访问 http://localhost:3000
+# 访问 http://localhost:5173
+```
+
+完整容器启动前需在仓库根目录 `.env` 配置 `DEEPSEEK_API_KEY`，然后执行：
+
+```bash
+docker compose up --build
+```
+
+Web、API 分别监听 `http://localhost:3000` 和 `http://localhost:3001`；可通过
+`WEB_PORT` 覆盖 Web 端口。Server 与 Worker
+共同挂载 `artifact_store` volume。一次性 Artifact Reconciler 不随主服务常驻，
+需要时执行：
+
+```bash
+docker compose --profile maintenance run --rm artifact-reconciler
 ```
 
 ## 环境变量

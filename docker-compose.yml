@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mongodb:
     image: mongo:7
@@ -46,9 +44,14 @@ services:
       - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
       - AGENT_VALIDATION_NPM_CACHE_ROOT=/var/cache/v0-agent/npm
       - AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT=/var/cache/v0-agent/dependencies
+      - ARTIFACT_STORE_DRIVER=shared-filesystem
+      - ARTIFACT_STORE_ROOT=/var/lib/open-v0/artifacts
+      - SANDBOX_PROVIDER=fake
+      - SANDBOX_LOCAL_ENABLED=false
       - NODE_ENV=production
     volumes:
       - agent_validation_cache:/var/cache/v0-agent
+      - artifact_store:/var/lib/open-v0/artifacts
     depends_on:
       - mongodb
       - redis
@@ -73,7 +76,14 @@ services:
       - AGENT_MAX_REPAIR_ATTEMPTS=${AGENT_MAX_REPAIR_ATTEMPTS:-2}
       - AGENT_WORKSPACE_ROOT=${AGENT_WORKSPACE_ROOT:-/tmp/v0-agent-runs}
       - AGENT_CONTEXT_CHAR_LIMIT=${AGENT_CONTEXT_CHAR_LIMIT:-120000}
+      - ARTIFACT_STORE_DRIVER=shared-filesystem
+      - ARTIFACT_STORE_ROOT=/var/lib/open-v0/artifacts
+      - SANDBOX_PROVIDER=fake
+      - SANDBOX_LOCAL_ENABLED=false
       - NODE_ENV=production
+    volumes:
+      - agent_validation_cache:/var/cache/v0-agent
+      - artifact_store:/var/lib/open-v0/artifacts
     depends_on:
       - mongodb
       - redis
@@ -84,19 +94,40 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
     restart: unless-stopped
     ports:
-      - "80:80"
-    environment:
-      - VITE_API_URL=${VITE_API_URL:-http://localhost:3001}
+      - "${WEB_PORT:-3000}:80"
     depends_on:
       - server
+    networks:
+      - v0-network
+
+  artifact-reconciler:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    profiles:
+      - maintenance
+    restart: "no"
+    command: npm run start:reconcile:artifacts --workspace @v0/server
+    environment:
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/v0-by-kimi?authSource=admin
+      - ARTIFACT_STORE_DRIVER=shared-filesystem
+      - ARTIFACT_STORE_ROOT=/var/lib/open-v0/artifacts
+      - NODE_ENV=production
+    volumes:
+      - artifact_store:/var/lib/open-v0/artifacts
+    depends_on:
+      - mongodb
     networks:
       - v0-network
 
 volumes:
   mongodb_data:
   agent_validation_cache:
+  artifact_store:
 
 networks:
   v0-network:
