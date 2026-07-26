@@ -13,6 +13,7 @@ import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { User } from '../models/User';
+import { ValidationCandidate } from '../models/ValidationCandidate';
 import {
   createIntegrationEnvironment,
   type IntegrationEnvironment
@@ -83,6 +84,45 @@ test('authenticated run creation persists its event and BullMQ job', async () =>
     type: 'run.created'
   }), 1);
   assert.ok(await getAgentRunQueue().getJob(response.body.run._id));
+});
+
+test('retry validation creates a queued Run without regenerating a Chat message', async () => {
+  const { ownerToken, owner, project } = await fixtures();
+  const sourceRun = await AgentRun.create({
+    userId: owner._id,
+    projectId: project._id,
+    prompt: 'Build a dashboard',
+    status: 'failed',
+    mode: 'create',
+    baseSnapshotRevision: 0,
+    maxRepairAttempts: 2,
+    model: 'test-model',
+    retryable: true
+  });
+  const candidate = await ValidationCandidate.create({
+    userId: owner._id,
+    projectId: project._id,
+    sourceRunId: sourceRun._id,
+    files: [],
+    packageJson: {
+      dependencies: {},
+      devDependencies: {},
+      scripts: {}
+    },
+    summary: 'Candidate',
+    expiresAt: new Date(Date.now() + 60_000)
+  });
+  sourceRun.validationCandidateId = candidate._id;
+  await sourceRun.save();
+
+  const response = await request(app)
+    .post(`/api/agent/runs/${sourceRun._id}/retry-validation`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(201);
+
+  assert.equal(response.body.run.status, 'queued');
+  assert.equal(response.body.run.retryOfRunId, sourceRun._id.toString());
+  assert.equal(response.body.run.validationCandidateId, candidate._id.toString());
 });
 
 test('Chat creation stores project metadata without an assistant response', async () => {

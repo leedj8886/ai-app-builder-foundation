@@ -6,6 +6,7 @@ import { AgentEvent } from '../models/AgentEvent';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
+import { ValidationCandidate } from '../models/ValidationCandidate';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { getAgentConfig } from '../agent/config';
 import {
@@ -14,7 +15,10 @@ import {
   objectIdParamSchema
 } from '../agent/schemas';
 import { emitAgentEvent } from '../agent/eventBus';
-import { enqueueAgentRun } from '../agent/queue';
+import {
+  enqueueAgentRun,
+  enqueueValidationRetry
+} from '../agent/queue';
 import { createRedisConnection } from '../agent/redis';
 import { isTerminalAgentRunStatus } from '../agent/stateMachine';
 import { streamAgentRunEvents } from '../agent/sseStream';
@@ -139,6 +143,85 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
     next(error);
   }
 });
+
+router.post(
+  '/runs/:runId/retry-validation',
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = requireUserId(req);
+      const { runId } = objectIdParamSchema('runId').parse(req.params);
+      const source = await AgentRun.findOne({
+        _id: runId,
+        userId,
+        status: 'failed',
+        retryable: true
+      });
+
+      if (!source?.validationCandidateId) {
+        res.status(409).json({ error: 'Run is not retryable' });
+        return;
+      }
+      const candidate = await ValidationCandidate.findOne({
+        _id: source.validationCandidateId,
+        userId,
+        projectId: source.projectId,
+        expiresAt: { $gt: new Date() }
+      });
+      if (!candidate) {
+        res.status(409).json({ error: 'Validation candidate has expired' });
+        return;
+      }
+      const existing = await AgentRun.findOne({
+        retryOfRunId: source._id,
+        userId,
+        status: {
+          $in: [
+            'queued',
+            'running',
+            'planning',
+            'generating',
+            'validating',
+            'repairing',
+            'persisting'
+          ]
+        }
+      });
+      if (existing) {
+        res.status(200).json({ run: existing });
+        return;
+      }
+
+      const run = await AgentRun.create({
+        userId,
+        projectId: source.projectId,
+        chatId: source.chatId,
+        prompt: source.prompt,
+        mode: source.mode,
+        baseSnapshotId: source.baseSnapshotId,
+        baseSnapshotRevision: source.baseSnapshotRevision,
+        retryOfRunId: source._id,
+        validationCandidateId: candidate._id,
+        status: 'queued',
+        model: source.model,
+        maxRepairAttempts: source.maxRepairAttempts
+      });
+      await emitAgentEvent({
+        runId: run._id,
+        userId,
+        projectId: run.projectId.toString(),
+        type: 'run.created',
+        message: 'Validation retry queued'
+      });
+      await enqueueValidationRetry(
+        run._id.toString(),
+        candidate._id.toString()
+      );
+      res.status(201).json({ run });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 router.get('/runs/:runId', async (req: AuthRequest, res, next) => {
   try {
