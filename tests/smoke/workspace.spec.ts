@@ -30,6 +30,14 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(
     recentChats.getByRole('link', { name: `打开对话：${prompt}` }),
   ).toHaveAttribute('aria-current', 'page');
+
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(editComposer).toBeVisible();
+  const compactComposerBox = await editComposer.boundingBox();
+  expect(compactComposerBox).not.toBeNull();
+  expect(compactComposerBox!.y + compactComposerBox!.height).toBeLessThanOrEqual(768);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   await editComposer.getByRole('textbox').fill('Draft preserved while collapsed');
 
   await workspaceSidebar.getByRole('button', { name: 'Collapse sidebar' }).click();

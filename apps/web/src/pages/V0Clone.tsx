@@ -989,7 +989,7 @@ function WorkspaceScreen({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[440px_1fr]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden xl:grid-cols-[440px_1fr] xl:grid-rows-1">
           <section className="flex min-h-0 flex-col border-b border-neutral-200 xl:border-b-0 xl:border-r">
             <div
               className="sr-only"
