@@ -12,6 +12,14 @@
 - 代码、依赖和基础设施错误分类
 - 定向修复、基础设施重试和验证缓存
 
+## 长期架构护栏
+
+- **TypeScript Native：** 保持 Web、API、Agent Runtime、工具协议和共享类型的统一 TypeScript 技术栈。
+- **Framework-Agnostic Core：** 核心运行路径不绑定应用层 Agent 框架，Provider、Tool 和 Workflow 扩展基于项目自有接口实现。
+- **Optional Adapters：** 模型厂商、第三方框架和内部平台集成保持独立、可选、可替换。
+
+路线图中的新能力必须保持这些边界；迁移到某个应用层 Agent 框架不属于项目方向。
+
 ## 接下来
 
 1. 开源安装、文档和安全基线

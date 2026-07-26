@@ -46,6 +46,10 @@ test('repository contains the approved open-source governance files', async () =
 
   const roadmap = await readFile(repositoryFile('ROADMAP.md'), 'utf8');
   assert.match(roadmap, /帮助团队搭建自己的 v0/);
+  assert.match(roadmap, /## 长期架构护栏/);
+  assert.match(roadmap, /TypeScript Native/);
+  assert.match(roadmap, /Framework-Agnostic Core/);
+  assert.match(roadmap, /项目自有接口/);
 });
 
 test('environment examples document the real runtime configuration', async () => {
