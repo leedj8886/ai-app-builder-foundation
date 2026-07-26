@@ -25,6 +25,12 @@ const configNames = new Set([
   'tailwind.config.ts'
 ]);
 
+const tailwindUtilityPattern =
+  /^(?:[a-z-]+:)*(?:bg|text|font|border|rounded|shadow|opacity|flex|grid|block|inline|hidden|items|justify|content|self|place|gap|space-[xy]|p[trblxy]?|m[trblxy]?|w|min-w|max-w|h|min-h|max-h|top|right|bottom|left|inset|z|overflow|object|cursor|select|transition|duration|ease|animate|scale|rotate|translate-[xy]|origin)-/;
+
+const escapeCssClass = (name: string): string =>
+  name.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+
 export const tailwindAdapter: StylingAdapter & {
   previewCompatibility(files: ProjectFile[]): {
     files: Record<string, string>;
@@ -68,6 +74,42 @@ export const tailwindAdapter: StylingAdapter & {
       });
     }
     return issues;
+  },
+  validateBuild: ({ files, cssAssets }) => {
+    if (cssAssets.length === 0) {
+      return [{
+        capability: 'tailwind',
+        code: 'MISSING_BUILD_OUTPUT',
+        phase: 'build-evidence',
+        message: 'The production build emitted no CSS assets',
+        previewRecoverable: false
+      }];
+    }
+    const css = cssAssets.map(asset => asset.content).join('\n');
+    if (/@tailwind\s+(?:base|components|utilities)\s*;/.test(css)) {
+      return [{
+        capability: 'tailwind',
+        code: 'UNEXPANDED_DIRECTIVE',
+        phase: 'build-evidence',
+        message: 'The emitted CSS still contains unexpanded Tailwind directives',
+        previewRecoverable: false
+      }];
+    }
+    const usedClasses = files.flatMap(file =>
+      [...file.content.matchAll(/className=["']([^"']+)["']/g)]
+        .flatMap(match => match[1]!.split(/\s+/))
+        .filter(name => tailwindUtilityPattern.test(name))
+    );
+    const missing = usedClasses.find(name =>
+      !css.includes(`.${escapeCssClass(name)}`)
+    );
+    return missing ? [{
+      capability: 'tailwind',
+      code: 'MISSING_BUILD_OUTPUT',
+      phase: 'build-evidence',
+      message: `Tailwind utility ${missing} was not emitted`,
+      previewRecoverable: false
+    }] : [];
   },
   previewCompatibility: files => {
     const paths = new Set(files.map(file => file.path));

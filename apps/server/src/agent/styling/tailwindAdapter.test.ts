@@ -39,3 +39,32 @@ test('accepts a complete Tailwind source contract', () => {
     file('src/main.tsx', "import './index.css';", 'tsx')
   ]), []);
 });
+
+test('rejects unexpanded directives and accepts emitted utility CSS', () => {
+  const source = [
+    file('src/App.tsx', '<main className="bg-blue-100" />', 'tsx')
+  ];
+  assert.equal(tailwindAdapter.validateBuild!({
+    files: source,
+    cssAssets: [{ path: 'dist/app.css', content: '@tailwind utilities;' }]
+  })[0]?.code, 'UNEXPANDED_DIRECTIVE');
+  assert.deepEqual(tailwindAdapter.validateBuild!({
+    files: source,
+    cssAssets: [{
+      path: 'dist/app.css',
+      content: '.bg-blue-100{background-color:rgb(219 234 254)}'
+    }]
+  }), []);
+});
+
+test('does not treat arbitrary custom classes as Tailwind utilities', () => {
+  assert.deepEqual(tailwindAdapter.validateBuild!({
+    files: [
+      file('src/App.tsx', '<main className="marketing-card" />', 'tsx')
+    ],
+    cssAssets: [{
+      path: 'dist/app.css',
+      content: '.bg-blue-100{background-color:rgb(219 234 254)}'
+    }]
+  }), []);
+});

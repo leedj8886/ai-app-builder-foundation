@@ -220,7 +220,16 @@ test('Create generation keeps required template files when the model only update
 
   assert.deepEqual(
     result.files.map(file => file.path),
-    ['index.html', 'package.json', 'src/App.tsx', 'src/index.css', 'src/main.tsx', 'tsconfig.json']
+    [
+      'index.html',
+      'package.json',
+      'postcss.config.cjs',
+      'src/App.tsx',
+      'src/index.css',
+      'src/main.tsx',
+      'tailwind.config.js',
+      'tsconfig.json'
+    ]
   );
   assert.match(
     result.files.find(file => file.path === 'src/App.tsx')?.content ?? '',

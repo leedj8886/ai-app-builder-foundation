@@ -26,6 +26,10 @@ import {
 import { dependencyFingerprint } from './validation/dependencyFingerprint';
 import { runWithInfrastructureRetry } from './validation/retry';
 import { validateProjectStructure } from './validation/structure';
+import { resolveStylingCapabilities } from './styling/resolveCapabilities';
+import { adaptersFor } from './styling/registry';
+import { readCssBuildEvidence } from './styling/buildEvidence';
+import type { StylingIssue } from './styling/types';
 
 export interface ValidationProgressEvent {
   phase: ValidationPhase;
@@ -34,6 +38,7 @@ export interface ValidationProgressEvent {
   attempt: number;
   retryDelayMs?: number;
   cache?: ValidationCheckResult['cache'];
+  stylingIssues?: StylingIssue[];
   message: string;
 }
 
@@ -61,6 +66,7 @@ interface CreateProjectValidatorOptions {
   dependencyCache?: DependencyCache;
   retryDelay?: (durationMs: number) => Promise<void>;
   env?: NodeJS.ProcessEnv;
+  cssEvidenceReader?: typeof readCssBuildEvidence;
 }
 
 interface InstallationError extends Error {
@@ -179,6 +185,44 @@ export const createProjectValidator = (
           status: 'failed',
           checks,
           category: structure.category,
+          retryable: false
+        };
+      }
+
+      const stylingAdapters = adaptersFor(
+        resolveStylingCapabilities(input.files)
+      );
+      const stylingIssues = stylingAdapters.flatMap(adapter =>
+        adapter.validateSource(input.files)
+      );
+      if (stylingIssues.length > 0) {
+        const message = stylingIssues.map(issue => issue.message).join('\n');
+        const stylingCheck: ValidationCheckResult = {
+          name: 'structure',
+          phase: 'structure',
+          status: 'failed',
+          category: 'STYLING_CONFIGURATION_ERROR',
+          stdout: '',
+          stderr: message,
+          durationMs: 0,
+          cache: 'not-applicable',
+          attempt: 0,
+          stylingIssues
+        };
+        checks.push(stylingCheck);
+        await input.onProgress?.({
+          phase: 'structure',
+          status: 'failed',
+          category: 'STYLING_CONFIGURATION_ERROR',
+          attempt: 0,
+          cache: 'not-applicable',
+          stylingIssues,
+          message
+        });
+        return {
+          status: 'failed',
+          checks,
+          category: 'STYLING_CONFIGURATION_ERROR',
           retryable: false
         };
       }
@@ -393,6 +437,48 @@ export const createProjectValidator = (
         }));
         checks.push(...codeChecks);
         const failed = codeChecks.find(check => check.status === 'failed');
+
+        if (!failed && (options.cssEvidenceReader || !options.commandRunner)) {
+          const cssAssets = await (
+            options.cssEvidenceReader ?? readCssBuildEvidence
+          )({
+            workspacePath: workspace.path,
+            maxChars: validation.maxOutputChars * 10
+          });
+          const buildIssues = stylingAdapters.flatMap(adapter =>
+            adapter.validateBuild?.({ files: input.files, cssAssets }) ?? []
+          );
+          if (buildIssues.length > 0) {
+            const message = buildIssues.map(issue => issue.message).join('\n');
+            checks.push({
+              name: 'build',
+              phase: 'build',
+              status: 'failed',
+              category: 'STYLING_CONFIGURATION_ERROR',
+              stdout: '',
+              stderr: message,
+              durationMs: 0,
+              cache: 'not-applicable',
+              attempt: 0,
+              stylingIssues: buildIssues
+            });
+            await input.onProgress?.({
+              phase: 'build',
+              status: 'failed',
+              category: 'STYLING_CONFIGURATION_ERROR',
+              attempt: 0,
+              cache: 'not-applicable',
+              stylingIssues: buildIssues,
+              message
+            });
+            return {
+              status: 'failed',
+              checks,
+              category: 'STYLING_CONFIGURATION_ERROR',
+              retryable: false
+            };
+          }
+        }
 
         return failed
           ? {

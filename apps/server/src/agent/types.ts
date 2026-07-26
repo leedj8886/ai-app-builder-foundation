@@ -88,7 +88,8 @@ export type ValidationPhase = (typeof validationPhases)[number];
 export const validationErrorCategories = [
   'CODE_ERROR',
   'DEPENDENCY_ERROR',
-  'INFRA_ERROR'
+  'INFRA_ERROR',
+  'STYLING_CONFIGURATION_ERROR'
 ] as const;
 
 export type ValidationErrorCategory =
@@ -106,6 +107,7 @@ export interface ValidationCheckResult {
   durationMs: number;
   cache?: 'hit' | 'miss' | 'not-applicable';
   attempt?: number;
+  stylingIssues?: import('./styling/types').StylingIssue[];
 }
 
 export interface ValidationResult {
