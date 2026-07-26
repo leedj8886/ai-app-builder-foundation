@@ -65,18 +65,43 @@ export interface ProjectSnapshotPackageJson {
   scripts: Record<string, string>;
 }
 
+export const validationPhases = [
+  'structure',
+  'dependencies',
+  'type-check',
+  'build'
+] as const;
+
+export type ValidationPhase = (typeof validationPhases)[number];
+
+export const validationErrorCategories = [
+  'CODE_ERROR',
+  'DEPENDENCY_ERROR',
+  'INFRA_ERROR'
+] as const;
+
+export type ValidationErrorCategory =
+  (typeof validationErrorCategories)[number];
+
 export interface ValidationCheckResult {
-  name: 'install' | 'type-check' | 'build';
-  command: string;
-  exitCode: number;
+  name: 'structure' | 'install' | 'type-check' | 'build';
+  phase?: ValidationPhase;
+  status?: 'passed' | 'failed' | 'retrying' | 'skipped';
+  category?: ValidationErrorCategory;
+  command?: string;
+  exitCode?: number;
   stdout: string;
   stderr: string;
   durationMs: number;
+  cache?: 'hit' | 'miss' | 'not-applicable';
+  attempt?: number;
 }
 
 export interface ValidationResult {
   status: 'passed' | 'failed' | 'skipped';
   checks: ValidationCheckResult[];
+  category?: ValidationErrorCategory;
+  retryable?: boolean;
 }
 
 export type FileOperation =
