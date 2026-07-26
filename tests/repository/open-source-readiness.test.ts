@@ -80,6 +80,10 @@ test('README presents the platform-builder positioning and valid core docs', asy
 
   assert.match(readme, /帮助团队搭建自己的 v0/);
   assert.match(readme, /不只是生成代码，而是生成能够通过真实构建的代码/);
+  assert.match(readme, /TypeScript Native/);
+  assert.match(readme, /Framework-Agnostic Core/);
+  assert.match(readme, /LangChain、LangGraph、AI SDK/);
+  assert.match(readme, /独立、可选的 Adapter/);
   assert.match(readme, /规划.*生成.*类型检查.*生产构建.*诊断.*修复.*快照/s);
   assert.doesNotMatch(readme, /类似于 v0\.dev/);
 
