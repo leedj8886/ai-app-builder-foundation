@@ -19,6 +19,7 @@ export interface ICodeBlock {
 export interface IChat extends Document {
   userId: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
+  branchId?: mongoose.Types.ObjectId;
   title: string;
   messages: IMessage[];
   createdAt: Date;
@@ -51,6 +52,10 @@ const ChatSchema = new Schema<IChat>({
     type: Schema.Types.ObjectId,
     ref: 'Project'
   },
+  branchId: {
+    type: Schema.Types.ObjectId,
+    ref: 'ProjectBranch'
+  },
   title: {
     type: String,
     required: true,
@@ -64,5 +69,6 @@ const ChatSchema = new Schema<IChat>({
 // Index for efficient queries
 ChatSchema.index({ userId: 1, updatedAt: -1 });
 ChatSchema.index({ projectId: 1 });
+ChatSchema.index({ projectId: 1, branchId: 1, updatedAt: -1 });
 
 export const Chat = mongoose.model<IChat>('Chat', ChatSchema);

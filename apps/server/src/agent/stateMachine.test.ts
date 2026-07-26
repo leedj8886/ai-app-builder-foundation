@@ -29,3 +29,19 @@ test('assertAgentRunTransition requires validation before completion', () => {
   assert.doesNotThrow(() => assertAgentRunTransition('validating', 'persisting'));
   assert.doesNotThrow(() => assertAgentRunTransition('persisting', 'completed'));
 });
+
+test('waiting Runs can return to queued when their Branch becomes available', () => {
+  assert.doesNotThrow(
+    () => assertAgentRunTransition('waiting_for_capacity', 'queued')
+  );
+});
+
+test('persisting Runs may complete with a Branch conflict', () => {
+  assert.doesNotThrow(
+    () => assertAgentRunTransition('persisting', 'completed_with_conflict')
+  );
+  assert.equal(
+    isTerminalAgentRunStatus('completed_with_conflict'),
+    true
+  );
+});

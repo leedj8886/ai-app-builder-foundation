@@ -4,14 +4,16 @@ import {
 } from './types';
 
 const allowedTransitions: Record<AgentRunStatus, AgentRunStatus[]> = {
-  queued: ['running', 'cancelled'],
+  waiting_for_capacity: ['queued', 'cancelled'],
+  queued: ['waiting_for_capacity', 'running', 'cancelled'],
   running: ['planning', 'validating', 'cancelled', 'failed'],
   planning: ['generating', 'cancelled', 'failed'],
   generating: ['validating', 'cancelled', 'failed'],
   validating: ['repairing', 'persisting', 'failed', 'cancelled'],
   repairing: ['generating', 'failed', 'cancelled'],
-  persisting: ['completed', 'failed'],
+  persisting: ['completed', 'completed_with_conflict', 'failed'],
   completed: [],
+  completed_with_conflict: [],
   failed: [],
   cancelled: []
 };

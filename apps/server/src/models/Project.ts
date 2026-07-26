@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IProject extends Document {
+  workspaceId?: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
   name: string;
   description?: string;
@@ -17,6 +18,10 @@ export interface IProject extends Document {
 }
 
 const ProjectSchema = new Schema<IProject>({
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace'
+  },
   userId: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -66,6 +71,6 @@ const ProjectSchema = new Schema<IProject>({
 });
 
 // Index for efficient queries
-ProjectSchema.index({ userId: 1, updatedAt: -1 });
+ProjectSchema.index({ userId: 1, workspaceId: 1, updatedAt: -1 });
 
 export const Project = mongoose.model<IProject>('Project', ProjectSchema);

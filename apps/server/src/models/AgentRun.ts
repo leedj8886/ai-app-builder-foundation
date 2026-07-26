@@ -9,13 +9,16 @@ import {
 
 export interface IAgentRun {
   userId: Types.ObjectId;
+  workspaceId?: Types.ObjectId;
   projectId: Types.ObjectId;
+  branchId?: Types.ObjectId;
   chatId?: Types.ObjectId;
   prompt: string;
   status: AgentRunStatus;
   mode: AgentRunMode;
   baseSnapshotId?: Types.ObjectId;
   baseSnapshotRevision: number;
+  baseHeadVersion?: number;
   resultSnapshotId?: Types.ObjectId;
   retryOfRunId?: Types.ObjectId;
   validationCandidateId?: Types.ObjectId;
@@ -38,7 +41,9 @@ export interface IAgentRun {
 const AgentRunSchema = new Schema<IAgentRun>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace' },
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+    branchId: { type: Schema.Types.ObjectId, ref: 'ProjectBranch' },
     chatId: { type: Schema.Types.ObjectId, ref: 'Chat' },
     prompt: { type: String, required: true, trim: true },
     status: {
@@ -55,6 +60,7 @@ const AgentRunSchema = new Schema<IAgentRun>(
     },
     baseSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     baseSnapshotRevision: { type: Number, required: true, default: 0 },
+    baseHeadVersion: { type: Number },
     resultSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     retryOfRunId: { type: Schema.Types.ObjectId, ref: 'AgentRun' },
     validationCandidateId: {
@@ -87,6 +93,7 @@ AgentRunSchema.index({ userId: 1, updatedAt: -1 });
 AgentRunSchema.index({ projectId: 1, updatedAt: -1 });
 AgentRunSchema.index({ status: 1, updatedAt: 1 });
 AgentRunSchema.index({ userId: 1, chatId: 1, createdAt: -1 });
+AgentRunSchema.index({ branchId: 1, createdAt: 1 });
 
 export const AgentRun =
   (mongoose.models.AgentRun as mongoose.Model<IAgentRun> | undefined) ||
