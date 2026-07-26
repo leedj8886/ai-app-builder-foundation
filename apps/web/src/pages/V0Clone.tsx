@@ -206,6 +206,7 @@ export function V0Clone() {
   const [timeline, setTimeline] = useState(createTimelineState)
   const [chatHistory, setChatHistory] = useState(createChatHistoryState)
   const [projectId, setProjectId] = useState('')
+  const [retryingValidationRunId, setRetryingValidationRunId] = useState<string>()
   const refreshRequestRef = useRef(0)
   const routeRequestRef = useRef(0)
   const pendingNavigationChatRef = useRef<string | null>(null)
@@ -503,6 +504,38 @@ export function V0Clone() {
     setWorkspace((state) => applyWorkspaceSnapshot(state, response.data.snapshot))
   }
 
+  const handleRetryValidation = async (failedRunId: string) => {
+    if (retryingValidationRunId || !projectId || !chatId) return
+    setRetryingValidationRunId(failedRunId)
+    try {
+      const response = await agentApi.retryValidation(failedRunId)
+      const retryRunId = response.data.run._id
+      setTimeline((state) => insertTimelineRun(state, response.data.run))
+      const token = localStorage.getItem('token')
+      if (!token) throw new Error('Authentication token is unavailable')
+      const controller = new AbortController()
+      await monitorAgentRun({
+        runId: retryRunId,
+        token,
+        signal: controller.signal,
+        onEvent: (event) => {
+          setTimeline((state) => applyTimelineEvent(state, retryRunId, {
+            ...event,
+            createdAt: new Date().toISOString(),
+          }))
+        },
+      })
+      await Promise.all([
+        refreshProjectData(projectId),
+        loadTimeline(chatId),
+      ])
+    } catch {
+      await loadTimeline(chatId)
+    } finally {
+      setRetryingValidationRunId(undefined)
+    }
+  }
+
   const handlePromptSubmit = (event?: FormEvent) => {
     event?.preventDefault()
     void submitPromptToAgent(draftPrompt || selectedTemplate.prompt)
@@ -759,6 +792,8 @@ export function V0Clone() {
           onSelectTimelineSnapshot={(snapshotId) =>
             void handleSelectTimelineSnapshot(snapshotId)
           }
+          retryingValidationRunId={retryingValidationRunId}
+          onRetryValidation={(runId) => void handleRetryValidation(runId)}
           sidebarCollapsed={workspaceSidebarCollapsed}
           onCollapseSidebar={() => setWorkspaceSidebarCollapsed(true)}
           onExpandSidebar={() => setWorkspaceSidebarCollapsed(false)}
@@ -876,6 +911,8 @@ function WorkspaceScreen({
   onLoadOlderTimeline,
   onRetryTimeline,
   onSelectTimelineSnapshot,
+  retryingValidationRunId,
+  onRetryValidation,
   sidebarCollapsed,
   onCollapseSidebar,
   onExpandSidebar,
@@ -908,6 +945,8 @@ function WorkspaceScreen({
   onLoadOlderTimeline: () => void
   onRetryTimeline: () => void
   onSelectTimelineSnapshot: (snapshotId: string) => void
+  retryingValidationRunId?: string
+  onRetryValidation: (runId: string) => void
   sidebarCollapsed: boolean
   onCollapseSidebar: () => void
   onExpandSidebar: () => void
@@ -1010,6 +1049,8 @@ function WorkspaceScreen({
               onRetry={onRetryTimeline}
               onSelectSnapshot={onSelectTimelineSnapshot}
               onCancelRun={onCancelRun}
+              retryingRunId={retryingValidationRunId}
+              onRetryValidation={onRetryValidation}
             />
             <WorkspaceEditComposer
               value={editDraft}

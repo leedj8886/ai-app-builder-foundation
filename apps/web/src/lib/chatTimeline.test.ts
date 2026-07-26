@@ -9,9 +9,11 @@ import {
   appendTimelineEvent,
   applyTimelineEvent,
   canToggleTurn,
+  canRetryValidation,
   createTimelineState,
   formatCollapsedTurnLabel,
   formatPlanningDuration,
+  validationEventLabel,
   mergeOlderTimelinePage,
   insertTimelineRun,
   replaceTimelinePage,
@@ -138,6 +140,32 @@ test('only terminal turns can be manually toggled', () => {
   assert.equal(canToggleTurn(turn('completed', 'completed')), true)
   assert.equal(canToggleTurn(turn('failed', 'failed')), true)
   assert.equal(canToggleTurn(turn('cancelled', 'cancelled')), true)
+})
+
+test('labels infrastructure retries and only exposes retry for retryable failures', () => {
+  assert.equal(validationEventLabel({
+    phase: 'dependencies',
+    status: 'retrying',
+    category: 'INFRA_ERROR',
+    attempt: 1,
+    retryDelayMs: 5_000,
+    cache: 'miss',
+  }), '依赖服务暂时不可用，5 秒后重试（1/2）')
+
+  const retryable = turn('infra', 'failed')
+  retryable.agent.retryable = true
+  retryable.agent.error = {
+    code: 'VALIDATION_INFRA_ERROR',
+    message: 'temporary',
+  }
+  const codeFailure = turn('code', 'failed')
+  codeFailure.agent.error = {
+    code: 'VALIDATION_FAILED',
+    message: 'type error',
+  }
+
+  assert.equal(canRetryValidation(retryable), true)
+  assert.equal(canRetryValidation(codeFailure), false)
 })
 
 test('inserts the returned Run as the expanded active turn', () => {
