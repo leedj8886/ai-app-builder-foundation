@@ -5,6 +5,11 @@ import { Chat } from '../models/Chat';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { objectIdParamSchema } from '../agent/schemas';
+import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
+import {
+  findOwnedWorkspaceProject,
+  workspaceIdsForUser
+} from '../workspaces/projectAccess';
 
 const router = Router();
 
@@ -22,7 +27,11 @@ const requireUserId = (req: AuthRequest): string => {
 // Get all projects for user
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const projects = await Project.find({ userId: req.userId })
+    const workspaceIds = await workspaceIdsForUser(req.userId!);
+    const projects = await Project.find({
+      userId: req.userId,
+      workspaceId: { $in: workspaceIds }
+    })
       .sort({ updatedAt: -1 })
       .populate('chatIds', 'title updatedAt');
 
@@ -35,16 +44,17 @@ router.get('/', async (req: AuthRequest, res, next) => {
 // Get single project
 router.get('/:id', async (req: AuthRequest, res, next) => {
   try {
-    const project = await Project.findOne({
-      _id: req.params.id,
-      userId: req.userId
-    }).populate('chatIds');
+    const project = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
+    });
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
       return;
     }
 
+    await project.populate('chatIds');
     res.json({ project });
   } catch (error) {
     next(error);
@@ -56,7 +66,10 @@ router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
   try {
     const userId = requireUserId(req);
     const { id } = objectIdParamSchema('id').parse(req.params);
-    const project = await Project.findOne({ _id: id, userId });
+    const project = await findOwnedWorkspaceProject({
+      projectId: id,
+      userId
+    });
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
@@ -93,6 +106,14 @@ router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res,
       id: objectIdParamSchema('id').shape.id,
       snapshotId: objectIdParamSchema('snapshotId').shape.snapshotId
     }).parse(req.params);
+    const ownedProject = await findOwnedWorkspaceProject({
+      projectId: id,
+      userId
+    });
+    if (!ownedProject) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
     const snapshot = await ProjectSnapshot.findOne({
       _id: snapshotId,
       projectId: id,
@@ -105,8 +126,8 @@ router.post('/:id/snapshots/:snapshotId/rollback', async (req: AuthRequest, res,
       return;
     }
 
-    const project = await Project.findOneAndUpdate(
-      { _id: id, userId },
+    const project = await Project.findByIdAndUpdate(
+      ownedProject._id,
       {
         $set: { activeSnapshotId: snapshot._id },
         $inc: { activeSnapshotRevision: 1 }
@@ -133,7 +154,10 @@ router.get('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => 
       id: objectIdParamSchema('id').shape.id,
       snapshotId: objectIdParamSchema('snapshotId').shape.snapshotId
     }).parse(req.params);
-    const project = await Project.findOne({ _id: id, userId });
+    const project = await findOwnedWorkspaceProject({
+      projectId: id,
+      userId
+    });
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
@@ -170,7 +194,9 @@ router.post('/', async (req: AuthRequest, res, next) => {
       }).optional()
     }).parse(req.body);
 
+    const { workspace } = await ensureDefaultWorkspaceForUser(req.user!._id);
     const project = new Project({
+      workspaceId: workspace._id,
       userId: req.userId,
       name,
       description,
@@ -203,8 +229,16 @@ router.patch('/:id', async (req: AuthRequest, res, next) => {
       }).optional()
     }).parse(req.body);
 
-    const project = await Project.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
+    const ownedProject = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
+    });
+    if (!ownedProject) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const project = await Project.findByIdAndUpdate(
+      ownedProject._id,
       {
         ...(name && { name }),
         ...(description !== undefined && { description }),
@@ -231,9 +265,9 @@ router.post('/:id/chats', async (req: AuthRequest, res, next) => {
       chatId: z.string()
     }).parse(req.body);
 
-    const project = await Project.findOne({
-      _id: req.params.id,
-      userId: req.userId
+    const project = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
     });
 
     if (!project) {
@@ -268,9 +302,9 @@ router.post('/:id/chats', async (req: AuthRequest, res, next) => {
 // Remove chat from project
 router.delete('/:id/chats/:chatId', async (req: AuthRequest, res, next) => {
   try {
-    const project = await Project.findOne({
-      _id: req.params.id,
-      userId: req.userId
+    const project = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
     });
 
     if (!project) {
@@ -297,15 +331,16 @@ router.delete('/:id/chats/:chatId', async (req: AuthRequest, res, next) => {
 // Delete project
 router.delete('/:id', async (req: AuthRequest, res, next) => {
   try {
-    const project = await Project.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.userId
+    const ownedProject = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
     });
 
-    if (!project) {
+    if (!ownedProject) {
       res.status(404).json({ error: 'Project not found' });
       return;
     }
+    const project = await Project.findByIdAndDelete(ownedProject._id);
 
     // Remove project reference from all chats
     await Chat.updateMany(
