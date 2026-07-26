@@ -124,6 +124,22 @@ describe('snapshot preview conversion', () => {
     assert.equal(result.files['/postcss.config.cjs'], postcssConfig)
   })
 
+  it('adds in-memory Tailwind compatibility to an old snapshot', () => {
+    const source = createSnapshot({
+      files: validFiles().map(file => file.path === 'src/index.css'
+        ? { ...file, content: '@tailwind base;\n@tailwind utilities;' }
+        : file),
+      devDependencies: { tailwindcss: '^3.4.17' },
+    })
+    const original = structuredClone(source)
+    const result = createSnapshotPreviewModel(source)
+
+    assert.match(result.files['/tailwind.config.js']!, /src\/\*\*/)
+    assert.match(result.files['/postcss.config.cjs']!, /tailwindcss/)
+    assert.equal(result.dependencies.tailwindcss, '^3.4.17')
+    assert.deepEqual(source, original)
+  })
+
   it('rejects unsafe unsupported duplicate and missing-entry snapshots', () => {
     const assertConversionError = (
       files: SnapshotFile[],

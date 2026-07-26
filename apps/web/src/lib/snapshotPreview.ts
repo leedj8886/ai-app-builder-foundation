@@ -2,6 +2,7 @@ import type {
   GenerationStatus,
   WorkspaceSnapshot,
 } from './v0Workspace'
+import { augmentPreviewStyling } from './stylingCapabilities'
 
 export interface SnapshotPreviewModel {
   files: Record<string, string>
@@ -71,12 +72,17 @@ export const createSnapshotPreviewModel = (
     throw new Error('Preview entry file is missing')
   }
 
+  const styling = augmentPreviewStyling(
+    sortedRecord(fileEntries),
+    snapshot.packageJson,
+  )
+
   return {
-    files: sortedRecord(fileEntries),
+    files: sortedRecord(Object.entries(styling.files)),
     dependencies: sortedRecord(Object.entries({
       react: '^18.2.0',
       'react-dom': '^18.2.0',
-      ...snapshot.packageJson.dependencies,
+      ...styling.dependencies,
     })),
     entry,
   }
