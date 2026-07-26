@@ -5,7 +5,7 @@ import {
 
 const allowedTransitions: Record<AgentRunStatus, AgentRunStatus[]> = {
   queued: ['running', 'cancelled'],
-  running: ['planning', 'cancelled', 'failed'],
+  running: ['planning', 'validating', 'cancelled', 'failed'],
   planning: ['generating', 'cancelled', 'failed'],
   generating: ['validating', 'cancelled', 'failed'],
   validating: ['repairing', 'persisting', 'failed', 'cancelled'],

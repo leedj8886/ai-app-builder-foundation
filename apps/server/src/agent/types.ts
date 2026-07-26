@@ -41,6 +41,8 @@ export type AgentEventType = (typeof agentEventTypes)[number];
 
 export interface AgentRunJobData {
   runId: string;
+  kind?: 'generate' | 'retry-validation';
+  candidateId?: string;
 }
 
 export interface AgentErrorPayload {

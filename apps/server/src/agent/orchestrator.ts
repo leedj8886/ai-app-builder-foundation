@@ -5,6 +5,7 @@ import { AgentEvent } from '../models/AgentEvent';
 import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
+import { ValidationCandidate } from '../models/ValidationCandidate';
 import { getAgentConfig } from './config';
 import { loadAgentContext } from './contextBuilder';
 import { mergeProjectPackageJson } from './dependencies';
@@ -215,7 +216,8 @@ export const runAgentGenerationWithValidation = async (
         new Error('Validation environment is temporarily unavailable'),
         {
           code: 'VALIDATION_INFRA_ERROR',
-          details: validation
+          details: validation,
+          candidate: { files, packageJson, summary }
         }
       );
     }
@@ -632,6 +634,28 @@ export const processAgentRun = async (
     }
 
     const publicError = publicAgentError(error);
+    const failedCandidate = (
+      error as {
+        code?: string;
+        candidate?: {
+          files: ProjectFile[];
+          packageJson: ProjectSnapshotPackageJson;
+          summary: string;
+        };
+      }
+    ).candidate;
+    const candidate = (
+      publicError.code === 'VALIDATION_INFRA_ERROR' &&
+      failedCandidate
+    ) ? await ValidationCandidate.create({
+      userId: run.userId,
+      projectId: run.projectId,
+      sourceRunId: run._id,
+      files: failedCandidate.files,
+      packageJson: failedCandidate.packageJson,
+      summary: failedCandidate.summary,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1_000)
+    }) : null;
     const result = await AgentRun.updateOne(
       {
         _id: run._id,
@@ -641,15 +665,139 @@ export const processAgentRun = async (
         $set: {
           status: 'failed',
           error: publicError,
+          ...(candidate && {
+            validationCandidateId: candidate._id,
+            retryable: true
+          }),
           completedAt: new Date()
         }
       }
     );
 
     if (result.modifiedCount !== 1) {
+      if (candidate) {
+        await ValidationCandidate.deleteOne({ _id: candidate._id });
+      }
       return;
     }
 
+    await emitAgentEvent({
+      runId: run._id,
+      userId: run.userId,
+      projectId: run.projectId,
+      type: 'run.failed',
+      message: publicError.message,
+      payload: { code: publicError.code }
+    });
+  }
+};
+
+export const processValidationCandidate = async (
+  jobData: AgentRunJobData,
+  validator: ProjectValidator
+): Promise<void> => {
+  if (!jobData.candidateId) {
+    throw new Error('Retry-validation job requires a candidate id');
+  }
+  const run = await AgentRun.findById(jobData.runId);
+  if (!run || run.status !== 'queued') return;
+  const candidate = await ValidationCandidate.findOne({
+    _id: jobData.candidateId,
+    userId: run.userId,
+    projectId: run.projectId,
+    expiresAt: { $gt: new Date() }
+  });
+  if (!candidate) {
+    throw new Error('Validation candidate not found');
+  }
+
+  try {
+    await transitionRun(run, 'queued', 'running', { startedAt: new Date() });
+    await emitAgentEvent({
+      runId: run._id,
+      userId: run.userId,
+      projectId: run.projectId,
+      type: 'run.started',
+      message: 'Validation retry started'
+    });
+    await transitionRun(run, 'running', 'validating');
+    const validation = await validator.validate({
+      runId: `${run._id.toString()}-retry`,
+      files: candidate.files,
+      onProgress: async progress => {
+        await emitAgentEvent({
+          runId: run._id,
+          userId: run.userId,
+          projectId: run.projectId,
+          type: 'validation.step',
+          message: progress.message,
+          payload: progress
+        });
+      }
+    });
+
+    if (validation.status !== 'passed') {
+      const code = validation.category === 'INFRA_ERROR'
+        ? 'VALIDATION_INFRA_ERROR'
+        : 'VALIDATION_FAILED';
+      throw Object.assign(new Error(
+        validation.category === 'INFRA_ERROR'
+          ? 'Validation environment is temporarily unavailable'
+          : 'Stored candidate failed validation'
+      ), { code, details: validation });
+    }
+
+    await emitAgentEvent({
+      runId: run._id,
+      userId: run.userId,
+      projectId: run.projectId,
+      type: 'validation.passed',
+      message: 'Project validation passed',
+      payload: validation
+    });
+    await transitionRun(run, 'validating', 'persisting');
+    const snapshot = await ProjectSnapshot.create({
+      userId: run.userId,
+      projectId: run.projectId,
+      sourceRunId: run._id,
+      parentSnapshotId: run.baseSnapshotId,
+      files: candidate.files,
+      packageJson: candidate.packageJson,
+      validation,
+      summary: candidate.summary
+    });
+    await transitionRun(run, 'persisting', 'completed', {
+      resultSnapshotId: snapshot._id,
+      completedAt: new Date(),
+      retryable: false
+    });
+    await activateSnapshotIfBaseIsCurrent(run, snapshot._id);
+    await ValidationCandidate.deleteOne({ _id: candidate._id });
+    await emitAgentEvent({
+      runId: run._id,
+      userId: run.userId,
+      projectId: run.projectId,
+      type: 'run.completed',
+      message: 'Agent run completed with a project snapshot',
+      payload: {
+        snapshotId: snapshot._id.toString(),
+        fileCount: candidate.files.length
+      }
+    });
+  } catch (error) {
+    const publicError = publicAgentError(error);
+    const retryable = publicError.code === 'VALIDATION_INFRA_ERROR';
+    await AgentRun.updateOne(
+      { _id: run._id, status: { $nin: ['completed', 'failed', 'cancelled'] } },
+      {
+        $set: {
+          status: 'failed',
+          error: publicError,
+          retryable,
+          completedAt: new Date()
+        }
+      }
+    );
     await emitAgentEvent({
       runId: run._id,
       userId: run.userId,

@@ -17,6 +17,9 @@ export interface IAgentRun {
   baseSnapshotId?: Types.ObjectId;
   baseSnapshotRevision: number;
   resultSnapshotId?: Types.ObjectId;
+  retryOfRunId?: Types.ObjectId;
+  validationCandidateId?: Types.ObjectId;
+  retryable?: boolean;
   attempt: number;
   maxRepairAttempts: number;
   model: string;
@@ -53,6 +56,12 @@ const AgentRunSchema = new Schema<IAgentRun>(
     baseSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     baseSnapshotRevision: { type: Number, required: true, default: 0 },
     resultSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
+    retryOfRunId: { type: Schema.Types.ObjectId, ref: 'AgentRun' },
+    validationCandidateId: {
+      type: Schema.Types.ObjectId,
+      ref: 'ValidationCandidate'
+    },
+    retryable: { type: Boolean, default: false },
     attempt: { type: Number, required: true, default: 0 },
     maxRepairAttempts: { type: Number, required: true, default: 2 },
     model: { type: String, required: true },
