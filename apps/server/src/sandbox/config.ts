@@ -1,6 +1,7 @@
 export interface SandboxConfig {
   provider: string;
   localEnabled: boolean;
+  localRoot: string;
   allowedBuildImages: string[];
   quotaLockTtlMs: number;
   quotaLockWaitMs: number;
@@ -76,6 +77,7 @@ export const getSandboxConfig = (
   return {
     provider,
     localEnabled,
+    localRoot: env.SANDBOX_LOCAL_ROOT || '/tmp/open-v0-sandboxes',
     allowedBuildImages: images(env.SANDBOX_ALLOWED_BUILD_IMAGES),
     quotaLockTtlMs: positive(
       env.SANDBOX_QUOTA_LOCK_TTL_MS,

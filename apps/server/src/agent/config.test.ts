@@ -8,11 +8,24 @@ test('getAgentConfig uses stable defaults', () => {
   assert.equal(config.redisUrl, 'redis://localhost:6379');
   assert.equal(config.queueName, 'v0-agent-runs');
   assert.equal(config.model, 'deepseek-v4-flash');
+  assert.equal(config.validationExecutor, 'legacy');
   assert.equal(config.maxRepairAttempts, 2);
   assert.equal(config.workspaceRoot, '/tmp/v0-agent-runs');
   assert.equal(config.contextCharLimit, 120000);
   assert.equal(config.commandTimeoutMs, 120000);
   assert.equal(config.maxValidationOutputChars, 12000);
+});
+
+test('getAgentConfig parses only supported validation executors', () => {
+  assert.equal(
+    getAgentConfig({ AGENT_VALIDATION_EXECUTOR: 'sandbox' })
+      .validationExecutor,
+    'sandbox'
+  );
+  assert.throws(
+    () => getAgentConfig({ AGENT_VALIDATION_EXECUTOR: 'fake' }),
+    /AGENT_VALIDATION_EXECUTOR must be "legacy" or "sandbox"/
+  );
 });
 
 test('getAgentConfig exposes phase validation cache and retry defaults', () => {

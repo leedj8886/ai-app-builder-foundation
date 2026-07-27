@@ -17,6 +17,7 @@ export interface AgentConfig {
   redisUrl: string;
   queueName: string;
   model: string;
+  validationExecutor: 'legacy' | 'sandbox';
   maxRepairAttempts: number;
   workspaceRoot: string;
   contextCharLimit: number;
@@ -47,6 +48,18 @@ const numberListFromEnv = (
     : fallback;
 };
 
+const validationExecutorFromEnv = (
+  value: string | undefined
+): AgentConfig['validationExecutor'] => {
+  if (value === undefined || value === '') return 'legacy';
+  if (value !== 'legacy' && value !== 'sandbox') {
+    throw new Error(
+      'AGENT_VALIDATION_EXECUTOR must be "legacy" or "sandbox"'
+    );
+  }
+  return value;
+};
+
 export const getAgentConfig = (env: EnvLike = process.env): AgentConfig => {
   const legacyCommandTimeoutMs = numberFromEnv(
     env.AGENT_COMMAND_TIMEOUT_MS,
@@ -64,6 +77,9 @@ export const getAgentConfig = (env: EnvLike = process.env): AgentConfig => {
       env.AGENT_MODEL ||
       env.DEEPSEEK_MODEL ||
       'deepseek-v4-flash',
+    validationExecutor: validationExecutorFromEnv(
+      env.AGENT_VALIDATION_EXECUTOR
+    ),
     maxRepairAttempts: numberFromEnv(env.AGENT_MAX_REPAIR_ATTEMPTS, 2),
     workspaceRoot: env.AGENT_WORKSPACE_ROOT || '/tmp/v0-agent-runs',
     contextCharLimit: numberFromEnv(env.AGENT_CONTEXT_CHAR_LIMIT, 120000),

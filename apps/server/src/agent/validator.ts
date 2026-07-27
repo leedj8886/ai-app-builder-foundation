@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
+import type { Types } from 'mongoose';
 import { ValidationConfig } from './config';
 import {
   ProjectFile,
@@ -45,6 +46,14 @@ export interface ValidationProgressEvent {
 export interface ValidateProjectInput {
   runId: string;
   files: ProjectFile[];
+  sandboxScope?: {
+    workspaceId: Types.ObjectId;
+    projectId: Types.ObjectId;
+    branchId: Types.ObjectId;
+    requestedByUserId: Types.ObjectId;
+    runId: Types.ObjectId;
+    attempt: number;
+  };
   onProgress?: (
     event: ValidationProgressEvent
   ) => void | Promise<void>;
@@ -183,6 +192,7 @@ export const createProjectValidator = (
       if (structure.status === 'failed') {
         return {
           status: 'failed',
+          verification: 'verified',
           checks,
           category: structure.category,
           retryable: false
@@ -221,6 +231,7 @@ export const createProjectValidator = (
         });
         return {
           status: 'failed',
+          verification: 'verified',
           checks,
           category: 'STYLING_CONFIGURATION_ERROR',
           retryable: false
@@ -366,6 +377,7 @@ export const createProjectValidator = (
           });
           return {
             status: 'failed',
+            verification: 'verified',
             checks,
             category,
             retryable: category === 'INFRA_ERROR'
@@ -473,6 +485,7 @@ export const createProjectValidator = (
             });
             return {
               status: 'failed',
+              verification: 'verified',
               checks,
               category: 'STYLING_CONFIGURATION_ERROR',
               retryable: false
@@ -483,11 +496,12 @@ export const createProjectValidator = (
         return failed
           ? {
             status: 'failed',
+            verification: 'verified',
             checks,
             category: failed.category ?? 'CODE_ERROR',
             retryable: false
           }
-          : { status: 'passed', checks };
+          : { status: 'passed', verification: 'verified', checks };
       } finally {
         await workspace.cleanup();
       }

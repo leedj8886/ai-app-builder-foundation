@@ -141,7 +141,9 @@ Smoke Worker 使用确定性的 FakeModelClient，不调用真实模型，不产
 | MongoDB | 用户、项目、Run、Event 和 Snapshot |
 | Redis/BullMQ | Agent 队列和实时事件通道 |
 | Agent Worker | 规划、生成、验证、修复和持久化 |
-| Validation Workspace | 真实安装、类型检查和生产构建 |
+| Validation Executor | 可切换的 Worker 本地或 Sandbox 构建校验 |
+| ArtifactStore | Snapshot、Validation Candidate 和 Sandbox hydration 来源 |
+| SandboxService | Build Lease、Provider、配额和受控命令编排 |
 
 完整数据流和扩展点见[系统架构](docs/architecture.md)。
 
@@ -188,7 +190,7 @@ docker compose --profile maintenance run --rm artifact-reconciler
 
 非 `terminated` SandboxLease 会保护其源 Artifact 不被回收。
 
-## Sandbox Core（Phase 2）
+## Sandbox 校验执行器
 
 当前包含 provider-neutral Sandbox Core、Fake Provider、仅限开发测试的
 LocalProcessProvider、持久化 Lease、Redis 配额调度、Artifact hydration 和
@@ -198,12 +200,30 @@ Sandbox Reconciler。Redis 不可用时，新预留 fail closed。
 `ready`、`running`、`terminating`。每个 Branch 最多一个占用配额的 Build
 Sandbox。
 
-Phase 2 尚未把 Agent Worker 校验切换到 Sandbox。Daytona Provider、
-PreviewDeployment、Preview Gateway 和 Preview 回收属于后续阶段。
+Agent Worker 通过 `AGENT_VALIDATION_EXECUTOR` 选择校验路径：
+
+```dotenv
+# 默认值：保留 Worker 进程内的现有真实校验
+AGENT_VALIDATION_EXECUTOR=legacy
+
+# 通过 SandboxService 创建 Build Lease 并依次执行
+# install、type-check、build
+AGENT_VALIDATION_EXECUTOR=sandbox
+```
+
+`SANDBOX_PROVIDER=fake` 只验证编排，结果明确标记为 `simulated`，不能生成
+“构建已验证”的 Snapshot。手动开发可以同时设置
+`SANDBOX_PROVIDER=local` 和 `SANDBOX_LOCAL_ENABLED=true`，使用
+LocalProcessProvider 完成标记为 `verified` 的本机真实构建。生产环境禁止
+local，配置错误会使 Worker 启动失败。
+
+Compose 默认继续使用 `legacy`；因此升级不会改变当前 Worker 的生产校验行为。
+Daytona Provider、PreviewDeployment、Preview Gateway 和 Preview 回收仍属于
+后续阶段。
 
 Preview 会为缺少配置的旧 Tailwind Snapshot 只读编译 CSS，并在内存中补齐
 Tailwind/PostCSS 配置和依赖，不会改写持久化文件。新项目会持久化完整配置；
-生产验证还会检查构建后的 CSS，避免只通过 Vite 退出码却没有实际生成样式。
+legacy 校验还会检查构建后的 CSS，避免只通过 Vite 退出码却没有实际生成样式。
 
 ## 文档
 

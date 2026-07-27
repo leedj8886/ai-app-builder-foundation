@@ -7,6 +7,7 @@ test('getSandboxConfig uses safe defaults', () => {
 
   assert.equal(config.provider, 'fake');
   assert.equal(config.localEnabled, false);
+  assert.equal(config.localRoot, '/tmp/open-v0-sandboxes');
   assert.deepEqual(config.allowedBuildImages, ['node:22']);
   assert.equal(config.quotaLockTtlMs, 5_000);
   assert.equal(config.quotaLockWaitMs, 2_000);

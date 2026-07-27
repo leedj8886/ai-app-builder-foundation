@@ -119,6 +119,7 @@ export interface ValidationCheckResult {
 
 export interface ValidationResult {
   status: 'passed' | 'failed' | 'skipped';
+  verification?: 'verified' | 'simulated';
   checks: ValidationCheckResult[];
   category?: ValidationErrorCategory;
   retryable?: boolean;

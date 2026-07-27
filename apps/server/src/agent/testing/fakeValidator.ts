@@ -3,11 +3,13 @@ import type { ProjectValidator } from '../validator';
 
 const passed = (): ValidationResult => ({
   status: 'passed',
+  verification: 'verified',
   checks: []
 });
 
 const failed = (): ValidationResult => ({
   status: 'failed',
+  verification: 'verified',
   checks: [{
     name: 'type-check',
     command: 'npm run type-check',

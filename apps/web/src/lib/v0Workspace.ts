@@ -62,6 +62,7 @@ export interface SnapshotValidationCheck {
 
 export interface SnapshotValidation {
   status: 'passed' | 'failed' | 'skipped'
+  verification?: 'verified' | 'simulated'
   checks: SnapshotValidationCheck[]
 }
 

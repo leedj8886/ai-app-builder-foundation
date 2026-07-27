@@ -46,20 +46,23 @@ export class FakeSandboxState {
   private readonly entries = new Map<string, MutableFakeSandboxResource>();
   private sequence = 0;
   private nextCreateFailure?: NextCreateFailure;
-  private nextCommandResult?: SandboxCommandResult;
+  private readonly commandResults: SandboxCommandResult[] = [];
 
   failNextCreate(input: NextCreateFailure): void {
     this.nextCreateFailure = input;
   }
 
   setNextCommandResult(result: SandboxCommandResult): void {
-    this.nextCommandResult = structuredClone(result);
+    this.commandResults.length = 0;
+    this.commandResults.push(structuredClone(result));
+  }
+
+  enqueueCommandResult(result: SandboxCommandResult): void {
+    this.commandResults.push(structuredClone(result));
   }
 
   takeCommandResult(): SandboxCommandResult | undefined {
-    const result = this.nextCommandResult;
-    this.nextCommandResult = undefined;
-    return result;
+    return this.commandResults.shift();
   }
 
   setReadiness(ref: SandboxRef, value: 'ready' | 'timeout'): void {

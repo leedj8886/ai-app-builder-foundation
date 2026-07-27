@@ -70,6 +70,7 @@ test('environment examples document the real runtime configuration', async () =>
     'DEEPSEEK_MODEL',
     'AGENT_MODEL',
     'AGENT_MAX_REPAIR_ATTEMPTS',
+    'AGENT_VALIDATION_EXECUTOR',
     'AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT'
   ]) {
     assert.match(rootEnv, new RegExp(`^${key}=`, 'm'));
@@ -77,6 +78,9 @@ test('environment examples document the real runtime configuration', async () =>
 
   assert.match(serverEnv, /^REDIS_URL=/m);
   assert.match(serverEnv, /^DEEPSEEK_API_KEY=/m);
+  assert.match(serverEnv, /^AGENT_VALIDATION_EXECUTOR=legacy$/m);
+  assert.match(serverEnv, /^SANDBOX_PROVIDER=fake$/m);
+  assert.match(serverEnv, /^SANDBOX_LOCAL_ENABLED=false$/m);
   assert.doesNotMatch(serverEnv, /^OPENAI_API_KEY=/m);
   assert.match(webEnv, /^VITE_API_URL=/m);
 
@@ -95,6 +99,9 @@ test('README presents the platform-builder positioning and valid core docs', asy
   assert.match(readme, /LangChain、LangGraph、AI SDK/);
   assert.match(readme, /独立、可选的 Adapter/);
   assert.match(readme, /规划.*生成.*类型检查.*生产构建.*诊断.*修复.*快照/s);
+  assert.match(readme, /AGENT_VALIDATION_EXECUTOR/);
+  assert.match(readme, /simulated.*不能生成.*Snapshot/s);
+  assert.doesNotMatch(readme, /尚未把 Agent Worker 校验切换到 Sandbox/);
   assert.doesNotMatch(readme, /类似于 v0\.dev/);
 
   for (const relativePath of [

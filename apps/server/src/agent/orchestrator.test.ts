@@ -424,6 +424,63 @@ test('runAgentGenerationWithValidation does not repair a passing candidate', asy
   assert.equal(repairs, 0);
 });
 
+test('runAgentGenerationWithValidation never accepts simulated success as verified', async () => {
+  let repairs = 0;
+  await assert.rejects(
+    runAgentGenerationWithValidation({
+      context: {
+        prompt: 'Build app',
+        mode: 'create',
+        project: {
+          name: 'App',
+          framework: 'react',
+          styling: 'tailwind',
+          uiLibrary: 'none'
+        },
+        messages: [],
+        files: []
+      },
+      baseFiles: [],
+      modelClient: {
+        generatePlan: async () => ({
+          value: {
+            summary: 'Build app',
+            steps: [],
+            assumptions: []
+          }
+        }),
+        generateFiles: async () => ({
+          value: {
+            message: 'Created app',
+            operations: [],
+            dependencies: {},
+            devDependencies: {}
+          }
+        }),
+        repairFiles: async () => {
+          repairs += 1;
+          throw new Error('repair should not run');
+        }
+      },
+      validator: {
+        validate: async () => ({
+          status: 'passed',
+          verification: 'simulated',
+          checks: []
+        })
+      },
+      runId: 'run-1',
+      maxRepairAttempts: 2,
+      onEvent: () => undefined
+    }),
+    (error: Error & { code?: string }) => {
+      assert.equal(error.code, 'VALIDATION_NOT_VERIFIED');
+      return true;
+    }
+  );
+  assert.equal(repairs, 0);
+});
+
 test('infrastructure validation failure never invokes model repair', async () => {
   let repairs = 0;
 

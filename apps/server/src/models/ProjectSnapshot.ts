@@ -55,6 +55,10 @@ const ValidationSchema = new Schema<ValidationResult>(
       enum: ['passed', 'failed', 'skipped'],
       required: true
     },
+    verification: {
+      type: String,
+      enum: ['verified', 'simulated']
+    },
     checks: {
       type: [
         {

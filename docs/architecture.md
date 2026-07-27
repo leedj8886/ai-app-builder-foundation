@@ -14,7 +14,9 @@
 | Durable State | MongoDB | 保存用户、项目、Run、Event、Snapshot 和验证候选 |
 | Queue/Event Transport | Redis、BullMQ | 异步任务和实时事件分发 |
 | Agent Worker | Node.js | 规划、生成、验证、修复和持久化 |
-| Validation Workspace | npm、TypeScript、Vite | 在隔离目录中验证生成项目 |
+| Validation Executor | legacy / sandbox | 选择 Worker 本地或 Sandbox 校验路径 |
+| ArtifactStore | Shared filesystem | 保存不可变源码 Bundle，作为 Snapshot 和 Sandbox hydration 来源 |
+| Sandbox Core | SandboxService、Lease、Provider | 配额调度、工作区 hydration、固定命令和生命周期管理 |
 
 ## 核心边界
 
@@ -39,7 +41,8 @@ sequenceDiagram
     participant M as MongoDB
     participant Q as Redis/BullMQ
     participant R as Agent Worker
-    participant V as Validation Workspace
+    participant V as Validation Executor
+    participant S as ArtifactStore / SandboxService
 
     U->>W: 提交需求
     W->>A: 创建 Agent Run
@@ -50,8 +53,16 @@ sequenceDiagram
     Q->>R: 分发任务
     R->>M: 读取项目上下文和基础快照
     R->>R: 规划并生成文件操作
-    R->>V: 写入候选项目
-    V->>V: 结构检查、依赖、类型检查、生产构建
+    R->>V: 校验候选项目
+    opt sandbox executor
+        V->>S: 发布 Candidate Artifact
+        V->>S: 创建 Build Lease 并 hydrate
+        S->>S: install → type-check → build
+        V->>S: 终止 Build Lease
+    end
+    opt legacy executor
+        V->>V: 本地工作区安装、类型检查和生产构建
+    end
     alt 验证通过
         R->>M: 保存 Snapshot 并更新活动版本
     else 可修复错误
@@ -67,6 +78,11 @@ sequenceDiagram
 
 ## 验证流程
 
+`AGENT_VALIDATION_EXECUTOR` 默认是 `legacy`，保持现有 Worker 本地真实校验。
+选择 `sandbox` 时，每轮生成或修复候选先写入 ArtifactStore，再由
+SandboxService 创建 Build Lease、hydrate 文件，并严格依次执行固定的
+`install`、`type-check` 和 `build` 命令。
+
 1. **结构检查：** 在安装依赖前验证必需文件、入口和脚本。
 2. **依赖准备：** 按依赖、锁文件和运行时生成指纹，复用持久缓存。
 3. **类型检查：** 运行生成项目的 `type-check`。
@@ -75,7 +91,12 @@ sequenceDiagram
    - `CODE_ERROR`：允许模型定向修复源码。
    - `DEPENDENCY_ERROR`：只允许处理依赖声明。
    - `INFRA_ERROR`：退避重试，不消耗模型修复轮次。
-6. **快照：** 只有通过验证的候选才成为可预览活动快照。
+6. **验证证据：** 真实执行结果标记为 `verified`；Fake Provider 只产生
+   `simulated` 结果，不能提升为 Snapshot。
+7. **快照：** 只有通过且标记为 `verified` 的候选才成为可预览活动快照。
+
+LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 local Provider
+或启用开关时会 fail closed。首个生产 Sandbox Provider 尚未实现。
 
 ## 一致性和恢复
 
@@ -91,6 +112,8 @@ sequenceDiagram
 - `apps/server/src/agent/contextBuilder.ts`：项目上下文裁剪。
 - `apps/server/src/agent/orchestrator.ts`：生成、验证和修复策略。
 - `apps/server/src/agent/validator.ts`：验证流水线。
+- `apps/server/src/agent/sandboxValidator.ts`：Sandbox Build Lease 校验编排。
+- `apps/server/src/sandbox/provider/SandboxProvider.ts`：可替换的 Sandbox Provider 协议。
 - `apps/server/src/agent/projectTemplate.ts`：默认生成技术栈。
 - `apps/web/src/components/ConversationTimeline.tsx`：执行轨迹呈现。
 

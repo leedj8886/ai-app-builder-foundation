@@ -111,6 +111,7 @@ export interface ProjectSnapshot {
   };
   validation: {
     status: 'passed' | 'failed' | 'skipped';
+    verification?: 'verified' | 'simulated';
     checks: Array<{
       name: 'structure' | 'install' | 'type-check' | 'build';
       phase?: 'structure' | 'dependencies' | 'type-check' | 'build';

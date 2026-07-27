@@ -61,6 +61,28 @@ docker volume ls | grep agent_validation_cache
 docker compose down --volumes
 ```
 
+## Sandbox 校验没有生成 Snapshot
+
+先确认 Worker 使用的执行器和 Provider：
+
+```bash
+docker compose exec worker printenv AGENT_VALIDATION_EXECUTOR SANDBOX_PROVIDER SANDBOX_LOCAL_ENABLED
+docker compose logs --tail=200 worker
+```
+
+- `AGENT_VALIDATION_EXECUTOR=legacy`：继续使用 Worker 容器内的真实校验。
+- `AGENT_VALIDATION_EXECUTOR=sandbox` 且 `SANDBOX_PROVIDER=fake`：命令结果是
+  `simulated`，Worker 会以 `VALIDATION_NOT_VERIFIED` 结束，不会提交 Snapshot。
+- LocalProcessProvider 只能在手动开发的非生产 Worker 中使用。设置
+  `SANDBOX_PROVIDER=local`、`SANDBOX_LOCAL_ENABLED=true` 和可信的
+  `SANDBOX_LOCAL_ROOT` 后重启 Worker。
+- Compose 将 Worker 以 `NODE_ENV=production` 运行，故意禁止 local。不要通过
+  放宽该保护来模拟生产 Sandbox。
+
+出现 `SANDBOX_BRANCH_BUSY`、`SANDBOX_QUOTA_EXCEEDED` 或
+`SANDBOX_SCHEDULER_UNAVAILABLE` 时，同时检查 MongoDB 中的 Lease 状态、Redis
+可用性和 Sandbox Reconciler；`terminating` Lease 在确认资源消失前仍占用配额。
+
 ## Smoke 测试失败
 
 ```bash

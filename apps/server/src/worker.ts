@@ -7,6 +7,10 @@ import { createProjectValidator } from './agent/validator';
 import { createAgentWorker } from './agent/createWorker';
 import { getDeepSeekConfig } from './services/modelProvider';
 import { cleanupDependencyCache } from './agent/validation/cacheCleanup';
+import { createSandboxRuntime } from './sandbox/runtime';
+import { createSandboxProjectValidator } from './agent/sandboxValidator';
+import { getArtifactService } from './artifacts/runtime';
+import { getSandboxConfig } from './sandbox/config';
 
 dotenv.config();
 
@@ -14,16 +18,30 @@ const startWorker = async () => {
   await connectDB();
 
   const config = getAgentConfig();
+  // Validate the production local-provider guard even while legacy validation
+  // is selected, so an unsafe deployment configuration always fails closed.
+  getSandboxConfig();
   const connection = createRedisConnection();
   const providerConfig = getDeepSeekConfig();
   const modelClient = createProductionModelClient({
     ...providerConfig,
     model: config.model
   });
-  const validator = createProjectValidator({
-    workspaceRoot: config.workspaceRoot,
-    validation: config.validation
-  });
+  const validator = config.validationExecutor === 'legacy'
+    ? createProjectValidator({
+      workspaceRoot: config.workspaceRoot,
+      validation: config.validation
+    })
+    : await createSandboxRuntime({ redis: connection }).then((runtime) =>
+      createSandboxProjectValidator({
+        service: runtime.service,
+        artifactService: getArtifactService(),
+        provider: runtime.provider,
+        image: runtime.image,
+        resources: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
+        verification: runtime.verification
+      })
+    );
   const worker = createAgentWorker({
     queueName: config.queueName,
     connection,
@@ -75,7 +93,10 @@ const startWorker = async () => {
   process.on('SIGINT', () => void shutdown());
   process.on('SIGTERM', () => void shutdown());
 
-  console.log(`Agent worker listening on queue ${config.queueName}`);
+  console.log(
+    `Agent worker listening on queue ${config.queueName} ` +
+    `(validation executor: ${config.validationExecutor})`
+  );
 };
 
 startWorker().catch(error => {

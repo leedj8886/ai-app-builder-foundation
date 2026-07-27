@@ -26,6 +26,7 @@ import { Chat } from '../models/Chat';
 import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import { ProjectBranch } from '../models/ProjectBranch';
+import { SandboxLease } from '../models/SandboxLease';
 import { ValidationCandidate } from '../models/ValidationCandidate';
 import { User } from '../models/User';
 import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
@@ -44,6 +45,9 @@ import {
 } from '../artifacts/runtime';
 import type { ArtifactService } from '../artifacts/artifactService';
 import { ArtifactError, type ArtifactErrorCode } from '../artifacts/types';
+import type { ProjectValidator } from '../agent/validator';
+import { createSandboxProjectValidator } from '../agent/sandboxValidator';
+import { createSandboxRuntime } from '../sandbox/runtime';
 
 let environment: IntegrationEnvironment;
 
@@ -135,7 +139,7 @@ const waitForTerminalRun = async (runId: string) => {
 
 const withWorker = async (
   modelClient: ModelClient,
-  validator: ReturnType<typeof createPassingValidator> | ReturnType<typeof createFailOnceValidator>,
+  validator: ProjectValidator,
   action: (worker: Worker) => Promise<void>
 ) => {
   const worker = createAgentWorker({
@@ -152,6 +156,48 @@ const withWorker = async (
     await worker.close();
   }
 };
+
+test('Worker sandbox executor does not commit a Fake simulated build', async () => {
+  const { run } = await createQueuedRun();
+  const runtime = await createSandboxRuntime({
+    redis: environment.redis,
+    env: {
+      NODE_ENV: 'test',
+      SANDBOX_PROVIDER: 'fake'
+    },
+    artifactService: getArtifactService()
+  });
+  const validator = createSandboxProjectValidator({
+    service: runtime.service,
+    artifactService: getArtifactService(),
+    provider: runtime.provider,
+    image: runtime.image,
+    resources: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
+    verification: runtime.verification
+  });
+
+  await enqueueAgentRun(run._id.toString());
+  await withWorker(createFakeModelClient(), validator, async () => {
+    await waitForTerminalRun(run._id.toString());
+  });
+
+  const [failed, snapshots, events, lease] = await Promise.all([
+    AgentRun.findById(run._id).orFail(),
+    ProjectSnapshot.countDocuments({ sourceRunId: run._id }),
+    AgentEvent.find({ runId: run._id }).sort({ sequence: 1 }).lean(),
+    SandboxLease.findOne({ runId: run._id }).orFail()
+  ]);
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.error?.code, 'VALIDATION_NOT_VERIFIED');
+  assert.equal(snapshots, 0);
+  assert.equal(lease.state, 'terminated');
+  assert.ok(events.some((event) => event.type === 'validation.failed'));
+  assert.ok(events.some((event) => event.type === 'run.failed'));
+  assert.equal(
+    events.some((event) => event.type === 'validation.passed'),
+    false
+  );
+});
 
 test('two Runs on one Branch never execute their models concurrently', async () => {
   const first = await createQueuedRun();

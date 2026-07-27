@@ -24,7 +24,7 @@ import {
   ProjectFile,
   ProjectSnapshotPackageJson
 } from './types';
-import { ProjectValidator } from './validator';
+import { ProjectValidator, ValidateProjectInput } from './validator';
 import { commitBranchHead } from '../branches/branchService';
 import { ProjectBranch } from '../models/ProjectBranch';
 import { getArtifactService } from '../artifacts/runtime';
@@ -57,6 +57,7 @@ interface RunAgentGenerationResult {
 interface RunAgentGenerationWithValidationInput extends RunAgentGenerationInput {
   validator: ProjectValidator;
   runId: string;
+  sandboxScope?: ValidateProjectInput['sandboxScope'];
   maxRepairAttempts: number;
 }
 
@@ -390,6 +391,12 @@ export const runAgentGenerationWithValidation = async (
     const validation = await input.validator.validate({
       runId: `${input.runId}-${repairAttempts}`,
       files,
+      ...(input.sandboxScope && {
+        sandboxScope: {
+          ...input.sandboxScope,
+          attempt: repairAttempts
+        }
+      }),
       onProgress: async progress => {
         await input.onEvent({
           type: 'validation.step',
@@ -398,6 +405,24 @@ export const runAgentGenerationWithValidation = async (
         });
       }
     });
+
+    if (
+      validation.status === 'passed' &&
+      validation.verification === 'simulated'
+    ) {
+      await input.onEvent({
+        type: 'validation.failed',
+        message: 'Project validation was simulated and is not verified',
+        payload: validation
+      });
+      throw Object.assign(
+        new Error('Simulated Sandbox validation cannot verify a project build'),
+        {
+          code: 'VALIDATION_NOT_VERIFIED',
+          details: validation
+        }
+      );
+    }
 
     if (validation.status === 'passed') {
       await input.onEvent({
@@ -540,6 +565,7 @@ const publicAgentError = (
     'NO_EFFECTIVE_CHANGES',
     'REPEATED_VALIDATION_FAILURE',
     'VALIDATION_INFRA_ERROR',
+    'VALIDATION_NOT_VERIFIED',
     'VALIDATION_FAILED',
     'VALIDATION_CANDIDATE_NOT_FOUND',
     'VALIDATION_CANDIDATE_EXPIRED',
@@ -788,6 +814,14 @@ export const processAgentRun = async (
       modelClient,
       validator,
       runId: run._id.toString(),
+      sandboxScope: {
+        workspaceId: run.workspaceId!,
+        projectId: run.projectId,
+        branchId: run.branchId!,
+        requestedByUserId: run.userId,
+        runId: run._id,
+        attempt: 0
+      },
       maxRepairAttempts: run.maxRepairAttempts,
       onEvent: async event => {
         const phase = (event.payload as { phase?: string } | undefined)?.phase;
@@ -1001,6 +1035,14 @@ export const processValidationCandidate = async (
     const validation = await validator.validate({
       runId: `${run._id.toString()}-retry`,
       files: candidateFiles,
+      sandboxScope: {
+        workspaceId: run.workspaceId!,
+        projectId: run.projectId,
+        branchId: run.branchId!,
+        requestedByUserId: run.userId,
+        runId: run._id,
+        attempt: 0
+      },
       onProgress: async progress => {
         await emitAgentEvent({
           runId: run._id,
@@ -1012,6 +1054,19 @@ export const processValidationCandidate = async (
         });
       }
     });
+
+    if (
+      validation.status === 'passed' &&
+      validation.verification === 'simulated'
+    ) {
+      throw Object.assign(
+        new Error('Simulated Sandbox validation cannot verify a project build'),
+        {
+          code: 'VALIDATION_NOT_VERIFIED',
+          details: validation
+        }
+      );
+    }
 
     if (validation.status !== 'passed') {
       const code = validation.category === 'INFRA_ERROR'
