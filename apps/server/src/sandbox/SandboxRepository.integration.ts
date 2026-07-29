@@ -164,6 +164,72 @@ test('SandboxRepository clears only the expected provisioning reference', async 
   );
 });
 
+test('SandboxRepository heartbeats and claims a stale running Lease with CAS', async () => {
+  const lease = await repository.createReserved(reservation());
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['reserved'],
+    to: 'provisioning'
+  });
+  await repository.bindExternalId({
+    leaseId: lease._id,
+    provider: 'fake',
+    externalId: 'resource-1'
+  });
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['provisioning'],
+    to: 'ready'
+  });
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['ready'],
+    to: 'running'
+  });
+  const heartbeatAt = new Date();
+
+  assert.equal(
+    await repository.heartbeatRunning({
+      leaseId: lease._id,
+      provider: 'fake',
+      externalId: 'other-resource',
+      heartbeatAt
+    }),
+    null
+  );
+  assert.equal(
+    (
+      await repository.heartbeatRunning({
+        leaseId: lease._id,
+        provider: 'fake',
+        externalId: 'resource-1',
+        heartbeatAt
+      })
+    )?.lastHeartbeatAt?.getTime(),
+    heartbeatAt.getTime()
+  );
+  assert.equal(
+    await repository.claimStaleRunning({
+      leaseId: lease._id,
+      provider: 'fake',
+      externalId: 'resource-1',
+      heartbeatCutoff: new Date(heartbeatAt.getTime() - 1)
+    }),
+    null
+  );
+  assert.equal(
+    (
+      await repository.claimStaleRunning({
+        leaseId: lease._id,
+        provider: 'fake',
+        externalId: 'resource-1',
+        heartbeatCutoff: heartbeatAt
+      })
+    )?.state,
+    'terminating'
+  );
+});
+
 test('SandboxRepository reuses an exact provisioning request', async () => {
   const input = reservation();
   const first = await repository.createReserved(input);

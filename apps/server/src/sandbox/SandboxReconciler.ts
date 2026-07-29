@@ -19,6 +19,7 @@ export interface SandboxReconcileResult {
   terminated: number;
   destroyedDuplicates: number;
   destroyedOrphans: number;
+  staleHeartbeats: number;
   errors: number;
 }
 
@@ -27,6 +28,7 @@ interface SandboxReconcilerOptions {
   service: SandboxService;
   providers: Map<string, SandboxProvider>;
   orphanGraceMs: number;
+  heartbeatTimeoutMs: number;
   now?: () => Date;
 }
 
@@ -45,6 +47,7 @@ export class SandboxReconciler {
       terminated: 0,
       destroyedDuplicates: 0,
       destroyedOrphans: 0,
+      staleHeartbeats: 0,
       errors: 0
     };
     const leases = await SandboxLease.find({
@@ -76,6 +79,13 @@ export class SandboxReconciler {
   ): Promise<void> {
     const now = this.now();
     const expired = lease.expiresAt.getTime() <= now.getTime();
+    const heartbeatCutoff = new Date(
+      now.getTime() - this.options.heartbeatTimeoutMs
+    );
+    const staleHeartbeat =
+      lease.state === 'running' &&
+      lease.lastHeartbeatAt !== undefined &&
+      lease.lastHeartbeatAt.getTime() <= heartbeatCutoff.getTime();
     if (lease.state === 'reserved' && expired) {
       const changed = await this.options.repository.transition({
         leaseId: lease._id,
@@ -99,6 +109,23 @@ export class SandboxReconciler {
         lease.state
       )
     ) {
+      const terminated = await this.options.service.terminate({
+        leaseId: lease._id,
+        expectedOwnership: this.ownership(lease)
+      });
+      if (terminated.state === 'terminated') result.terminated += 1;
+      return;
+    }
+    if (staleHeartbeat) {
+      if (!lease.externalId) return;
+      const claimed = await this.options.repository.claimStaleRunning({
+        leaseId: lease._id,
+        provider: lease.provider,
+        externalId: lease.externalId,
+        heartbeatCutoff
+      });
+      if (!claimed) return;
+      result.staleHeartbeats += 1;
       const terminated = await this.options.service.terminate({
         leaseId: lease._id,
         expectedOwnership: this.ownership(lease)

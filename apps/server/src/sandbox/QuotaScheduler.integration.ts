@@ -11,13 +11,13 @@ import { QuotaScheduler, type SandboxReservationRequest } from './QuotaScheduler
 import { SandboxRepository } from './SandboxRepository';
 import { WorkspaceQuotaLock } from './WorkspaceQuotaLock';
 
-let environment: IntegrationEnvironment;
+let environment: IntegrationEnvironment | undefined;
 before(async () => {
   environment = await createIntegrationEnvironment();
   await SandboxLease.syncIndexes();
 });
-beforeEach(async () => environment.reset());
-after(async () => environment.close());
+beforeEach(async () => environment!.reset());
+after(async () => environment?.close());
 
 const setup = async (limits: { maxCpu?: number } = {}) => {
   const userId = new Types.ObjectId();
@@ -44,7 +44,7 @@ const setup = async (limits: { maxCpu?: number } = {}) => {
   });
   const scheduler = new QuotaScheduler(
     new WorkspaceQuotaLock({
-      redis: environment.redis,
+      redis: environment!.redis,
       ttlMs: 1_000,
       waitMs: 200
     }),

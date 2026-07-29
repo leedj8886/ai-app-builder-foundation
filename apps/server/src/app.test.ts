@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from './app';
 
-test('GET /health returns ok', async () => {
-  const response = await request(createApp()).get('/health').expect(200);
+test('GET /health remains available beyond the API rate limit', async () => {
+  const app = createApp();
+  const responses = await Promise.all(
+    Array.from({ length: 101 }, () => request(app).get('/health'))
+  );
 
-  assert.equal(response.body.status, 'ok');
-  assert.ok(response.body.timestamp);
+  assert.ok(responses.every((response) => response.status === 200));
+  assert.ok(responses.every((response) => response.body.status === 'ok'));
+  assert.ok(responses.every((response) => response.body.timestamp));
 });
 
 test('POST /api/agent/runs requires authentication', async () => {

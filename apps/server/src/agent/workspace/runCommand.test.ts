@@ -4,6 +4,7 @@ import { mkdtemp, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runCommand } from './runCommand';
+import { runCancelledError } from '../runCancellation';
 
 test('runCommand captures output and non-zero exit codes without a shell', async () => {
   const result = await runCommand({
@@ -46,6 +47,24 @@ test('runCommand bounds stdout and stderr independently', async () => {
   assert.equal(result.exitCode, 0);
   assert.equal(result.stdout.length, 80);
   assert.equal(result.stderr.length, 80);
+});
+
+test('runCommand rejects with the AbortSignal reason and stops the process', async () => {
+  const controller = new AbortController();
+  const command = runCommand({
+    executable: process.execPath,
+    args: ['-e', 'setInterval(() => {}, 1000)'],
+    cwd: process.cwd(),
+    timeoutMs: 10_000,
+    maxOutputChars: 1_000,
+    signal: controller.signal
+  });
+  setTimeout(() => controller.abort(runCancelledError()), 20);
+
+  await assert.rejects(
+    command,
+    (error) => (error as { code?: string }).code === 'RUN_CANCELLED'
+  );
 });
 
 test('runCommand timeout terminates descendant processes', {

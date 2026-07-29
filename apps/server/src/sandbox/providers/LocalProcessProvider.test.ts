@@ -155,6 +155,29 @@ test('LocalProcessProvider times out a process group', async () => {
   assert.throws(() => process.kill(childPid, 0));
 });
 
+test('LocalProcessProvider aborts an active process group', async () => {
+  const provider = new LocalProcessProvider({
+    root: providerRoot,
+    production: false
+  });
+  const handle = await provider.connect(await provider.create(buildSpec()));
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const command = handle.processes.run({
+    executable: process.execPath,
+    args: ['-e', 'setInterval(()=>{},1000)'],
+    cwd: '/workspace',
+    env: { CI: 'true' },
+    timeoutMs: 10_000,
+    maxOutputBytes: 1_024
+  }, controller.signal);
+  setTimeout(() => controller.abort(), 20);
+
+  const result = await command;
+  assert.equal(result.timedOut, false);
+  assert.ok(Date.now() - startedAt < 1_000);
+});
+
 test('LocalProcessProvider destroy stops processes and removes its directory', async () => {
   const provider = new LocalProcessProvider({
     root: providerRoot,

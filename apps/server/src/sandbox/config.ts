@@ -10,6 +10,8 @@ export interface SandboxConfig {
   autoDeleteSeconds: number;
   orphanGraceMs: number;
   reconcileIntervalMs: number;
+  heartbeatIntervalMs: number;
+  heartbeatTimeoutMs: number;
   commandTimeouts: {
     install: number;
     typeCheck: number;
@@ -74,6 +76,22 @@ export const getSandboxConfig = (
       'LocalProcessProvider cannot be enabled in production'
     );
   }
+  const heartbeatIntervalMs = positive(
+    env.SANDBOX_HEARTBEAT_INTERVAL_MS,
+    10_000,
+    'SANDBOX_HEARTBEAT_INTERVAL_MS'
+  );
+  const heartbeatTimeoutMs = positive(
+    env.SANDBOX_HEARTBEAT_TIMEOUT_MS,
+    45_000,
+    'SANDBOX_HEARTBEAT_TIMEOUT_MS'
+  );
+  if (heartbeatTimeoutMs <= heartbeatIntervalMs) {
+    throw new Error(
+      'SANDBOX_HEARTBEAT_TIMEOUT_MS must be greater than ' +
+      'SANDBOX_HEARTBEAT_INTERVAL_MS'
+    );
+  }
 
   return {
     provider,
@@ -115,6 +133,8 @@ export const getSandboxConfig = (
       30_000,
       'SANDBOX_RECONCILE_INTERVAL_MS'
     ),
+    heartbeatIntervalMs,
+    heartbeatTimeoutMs,
     commandTimeouts: {
       install: positive(
         env.SANDBOX_INSTALL_TIMEOUT_MS,

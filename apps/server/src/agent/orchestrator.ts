@@ -57,6 +57,7 @@ interface RunAgentGenerationResult {
 interface RunAgentGenerationWithValidationInput extends RunAgentGenerationInput {
   validator: ProjectValidator;
   runId: string;
+  signal?: AbortSignal;
   sandboxScope?: ValidateProjectInput['sandboxScope'];
   maxRepairAttempts: number;
 }
@@ -411,6 +412,7 @@ export const runAgentGenerationWithValidation = async (
     const validation = await input.validator.validate({
       runId: `${input.runId}-${repairAttempts}`,
       files,
+      signal: input.signal,
       ...(input.sandboxScope && {
         sandboxScope: {
           ...input.sandboxScope,
@@ -687,6 +689,7 @@ const completeRunWithSnapshot = async (
 };
 
 interface BranchExecutionContext {
+  signal?: AbortSignal;
   assertHeld(): Promise<void>;
 }
 
@@ -834,6 +837,7 @@ export const processAgentRun = async (
       modelClient,
       validator,
       runId: run._id.toString(),
+      signal: execution?.signal,
       sandboxScope: {
         workspaceId: run.workspaceId!,
         projectId: run.projectId,
@@ -1055,6 +1059,7 @@ export const processValidationCandidate = async (
     const validation = await validator.validate({
       runId: `${run._id.toString()}-retry`,
       files: candidateFiles,
+      signal: execution?.signal,
       sandboxScope: {
         workspaceId: run.workspaceId!,
         projectId: run.projectId,
@@ -1135,6 +1140,9 @@ export const processValidationCandidate = async (
       }
     });
   } catch (error) {
+    if ((error as { code?: string }).code === 'RUN_CANCELLED') {
+      return;
+    }
     const publicError = publicAgentError(error);
     const retryable =
       publicError.code === 'VALIDATION_INFRA_ERROR' ||

@@ -13,6 +13,11 @@ import {
 import type { SandboxPolicy } from './policy';
 import type { SandboxProvider } from './provider/SandboxProvider';
 import type { SandboxConfig } from './config';
+import { startSandboxHeartbeatLoop } from './heartbeatLoop';
+import {
+  abortReason,
+  throwIfAborted
+} from '../agent/runCancellation';
 import type {
   ResourceProfile,
   SandboxCommandResult,
@@ -220,7 +225,9 @@ export class SandboxService {
     leaseId: Types.ObjectId;
     expectedOwnership: SandboxOwnership;
     command: 'install' | 'type-check' | 'build';
+    signal?: AbortSignal;
   }): Promise<SandboxCommandResult> {
+    throwIfAborted(input.signal);
     let lease = await this.requireLease(input.leaseId);
     this.assertOwnership(lease, input.expectedOwnership);
     if (
@@ -286,15 +293,86 @@ export class SandboxService {
         );
       }
     }
-    const result = await handle.processes.run(command);
-    if (result.timedOut) {
-      throw new SandboxError(
-        'SANDBOX_COMMAND_TIMEOUT',
-        'Sandbox command timed out',
-        true
+    const ref = {
+      provider: lease.provider,
+      externalId: lease.externalId!
+    };
+    const commandController = new AbortController();
+    const forwardCancellation = () => {
+      if (!commandController.signal.aborted) {
+        commandController.abort(abortReason(input.signal!));
+      }
+    };
+    input.signal?.addEventListener('abort', forwardCancellation, {
+      once: true
+    });
+    if (input.signal?.aborted) forwardCancellation();
+    const heartbeat = startSandboxHeartbeatLoop({
+      intervalMs: this.options.config.heartbeatIntervalMs,
+      heartbeat: async () => {
+        await handle.lifecycle.heartbeat();
+        const stored = await this.options.repository.heartbeatRunning({
+          leaseId: lease._id,
+          provider: ref.provider,
+          externalId: ref.externalId,
+          heartbeatAt: this.now()
+        });
+        if (!stored) {
+          throw new SandboxError(
+            'SANDBOX_LOST',
+            'Sandbox Lease heartbeat ownership was lost',
+            false
+          );
+        }
+      },
+      onError: (error) => {
+        if (commandController.signal.aborted) return;
+        commandController.abort(
+          isSandboxError(error)
+            ? error
+            : new SandboxError(
+                'SANDBOX_PROVIDER_UNAVAILABLE',
+                'Sandbox heartbeat failed',
+                true,
+                error
+              )
+        );
+      }
+    });
+    try {
+      try {
+        await heartbeat.heartbeatNow();
+      } catch (error) {
+        throw isSandboxError(error)
+          ? error
+          : new SandboxError(
+              'SANDBOX_PROVIDER_UNAVAILABLE',
+              'Sandbox heartbeat failed',
+              true,
+              error
+            );
+      }
+      throwIfAborted(commandController.signal);
+      const result = await handle.processes.run(
+        command,
+        commandController.signal
       );
+      throwIfAborted(commandController.signal);
+      if (result.timedOut) {
+        throw new SandboxError(
+          'SANDBOX_COMMAND_TIMEOUT',
+          'Sandbox command timed out',
+          true
+        );
+      }
+      return result;
+    } finally {
+      input.signal?.removeEventListener(
+        'abort',
+        forwardCancellation
+      );
+      await heartbeat.close();
     }
-    return result;
   }
 
   async exportBuildOutput(input: {

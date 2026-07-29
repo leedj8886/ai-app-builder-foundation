@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { abortReason, throwIfAborted } from '../runCancellation';
 
 export interface RunCommandInput {
   executable: string;
@@ -7,6 +8,7 @@ export interface RunCommandInput {
   timeoutMs: number;
   maxOutputChars: number;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
 }
 
 export interface CommandResult {
@@ -47,11 +49,13 @@ const appendBounded = (
 
 export const runCommand = (
   input: RunCommandInput
-): Promise<CommandResult> => new Promise(resolve => {
+): Promise<CommandResult> => new Promise((resolve, reject) => {
+  throwIfAborted(input.signal);
   const startedAt = Date.now();
   let stdout = '';
   let stderr = '';
   let timedOut = false;
+  let aborted = false;
   let settled = false;
   const child = spawn(input.executable, input.args, {
     cwd: input.cwd,
@@ -68,13 +72,18 @@ export const runCommand = (
     stderr = appendBounded(stderr, chunk, input.maxOutputChars);
   });
 
+  let timer: ReturnType<typeof setTimeout>;
+  const cleanup = () => {
+    clearTimeout(timer);
+    input.signal?.removeEventListener('abort', onAbort);
+  };
   const finish = (exitCode: number) => {
     if (settled) {
       return;
     }
 
     settled = true;
-    clearTimeout(timer);
+    cleanup();
     resolve({
       exitCode,
       stdout,
@@ -82,8 +91,33 @@ export const runCommand = (
       durationMs: Date.now() - startedAt
     });
   };
+  const fail = (error: unknown) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    reject(error);
+  };
+  const terminate = () => {
+    if (process.platform !== 'win32' && child.pid) {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    } else {
+      child.kill('SIGKILL');
+    }
+  };
+  const onAbort = () => {
+    aborted = true;
+    terminate();
+  };
 
   child.on('error', error => {
+    if (aborted) {
+      fail(abortReason(input.signal!));
+      return;
+    }
     stderr = appendBounded(
       stderr,
       `Command failed to start: ${error.message}`,
@@ -92,6 +126,10 @@ export const runCommand = (
     finish(1);
   });
   child.on('close', (code, signal) => {
+    if (aborted) {
+      fail(abortReason(input.signal!));
+      return;
+    }
     if (timedOut) {
       const message = `Command timed out after ${input.timeoutMs}ms`;
       stderr = `${stderr.slice(0, Math.max(0, input.maxOutputChars - message.length))}${message}`;
@@ -102,16 +140,10 @@ export const runCommand = (
     finish(code ?? (signal ? 1 : 0));
   });
 
-  const timer = setTimeout(() => {
+  timer = setTimeout(() => {
     timedOut = true;
-    if (process.platform !== 'win32' && child.pid) {
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
-      }
-    } else {
-      child.kill('SIGKILL');
-    }
+    terminate();
   }, input.timeoutMs);
+  input.signal?.addEventListener('abort', onAbort, { once: true });
+  if (input.signal?.aborted) onAbort();
 });

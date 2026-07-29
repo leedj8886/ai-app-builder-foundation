@@ -18,11 +18,13 @@ test('createAgentJobProcessor rejects unsupported job names', async () => {
 
 test('createAgentJobProcessor delegates agent-run jobs with injected dependencies', async () => {
   const calls: unknown[][] = [];
+  const controller = new AbortController();
   const processor = createAgentJobProcessor({
     modelClient,
     validator,
     loadRunStatus: async () => 'queued',
     acquireBranchExecution: async () => ({
+      signal: controller.signal,
       assertHeld: async () => undefined,
       release: async () => undefined
     }),
@@ -36,6 +38,10 @@ test('createAgentJobProcessor delegates agent-run jobs with injected dependencie
 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0]?.slice(0, 3), [data, modelClient, validator]);
+  assert.equal(
+    (calls[0]?.[3] as { signal?: AbortSignal }).signal,
+    controller.signal
+  );
 });
 
 test('createAgentJobProcessor routes retry-validation jobs separately', async () => {
@@ -50,6 +56,7 @@ test('createAgentJobProcessor routes retry-validation jobs separately', async ()
     validator,
     loadRunStatus: async () => 'queued',
     acquireBranchExecution: async () => ({
+      signal: new AbortController().signal,
       assertHeld: async () => undefined,
       release: async () => undefined
     }),
@@ -106,6 +113,7 @@ test('processor releases an acquired Branch lease after processing', async () =>
       await execution?.assertHeld();
     },
     acquireBranchExecution: async () => ({
+      signal: new AbortController().signal,
       assertHeld: async () => undefined,
       release: async () => { released += 1; }
     })

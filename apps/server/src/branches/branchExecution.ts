@@ -1,10 +1,15 @@
 import { BranchExecutionLease } from '../models/BranchExecutionLease';
 import { AgentRun } from '../models/AgentRun';
+import {
+  startRunCancellationMonitor,
+  throwIfAborted
+} from '../agent/runCancellation';
 
 const DEFAULT_TTL_MS = 60_000;
 const HEARTBEAT_MS = 15_000;
 
 export interface BranchExecutionGuard {
+  signal: AbortSignal;
   assertHeld(): Promise<void>;
   release(): Promise<void>;
 }
@@ -50,6 +55,11 @@ export const acquireBranchExecution = async (
 
   if (!lease.runId.equals(run._id)) return null;
 
+  const cancellation = startRunCancellationMonitor({
+    loadStatus: async () => (
+      await AgentRun.findById(run._id).select('status').lean()
+    )?.status
+  });
   let lost = false;
   let renewing = false;
   const heartbeat = setInterval(() => {
@@ -75,7 +85,9 @@ export const acquireBranchExecution = async (
   heartbeat.unref();
 
   return {
+    signal: cancellation.signal,
     assertHeld: async () => {
+      throwIfAborted(cancellation.signal);
       if (!lost) {
         const held = await BranchExecutionLease.exists({
           _id: lease._id,
@@ -89,9 +101,11 @@ export const acquireBranchExecution = async (
           code: 'BRANCH_EXECUTION_LOST'
         });
       }
+      throwIfAborted(cancellation.signal);
     },
     release: async () => {
       clearInterval(heartbeat);
+      await cancellation.close();
       await BranchExecutionLease.deleteOne({
         _id: lease._id,
         runId: run._id

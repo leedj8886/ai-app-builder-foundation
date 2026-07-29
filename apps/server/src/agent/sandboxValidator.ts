@@ -10,6 +10,10 @@ import type {
 import { classifyValidationFailure } from './validation/classify';
 import { validateProjectStructure } from './validation/structure';
 import { adaptersFor } from './styling/registry';
+import {
+  abortReason,
+  throwIfAborted
+} from './runCancellation';
 import { resolveStylingCapabilities } from './styling/resolveCapabilities';
 import type {
   ProjectFile,
@@ -125,6 +129,7 @@ export const createSandboxProjectValidator = (
   options: CreateSandboxProjectValidatorOptions
 ): ProjectValidator => ({
   validate: async (input): Promise<ValidationResult> => {
+    throwIfAborted(input.signal);
     const checks: ValidationCheckResult[] = [];
     const structureStartedAt = Date.now();
     const structure = validateProjectStructure(input.files);
@@ -207,9 +212,11 @@ export const createSandboxProjectValidator = (
     let lease: SandboxLeaseDocument | undefined;
     let currentPhase: ValidationPhase = 'dependencies';
     let result: ValidationResult | undefined;
+    let cancellationError: unknown;
     const ownership = ownershipFor(scope);
 
     try {
+      throwIfAborted(input.signal);
       const artifact = await options.artifactService.writeBundle({
         workspaceId: scope.workspaceId,
         projectId: scope.projectId,
@@ -244,12 +251,14 @@ export const createSandboxProjectValidator = (
         'type-check',
         'build'
       ] as const) {
+        throwIfAborted(input.signal);
         const metadata = commandMetadata[commandName];
         currentPhase = metadata.phase;
         const commandResult = await options.service.runBuildCommand({
           leaseId: lease._id,
           expectedOwnership: ownership,
-          command: commandName
+          command: commandName,
+          signal: input.signal
         });
         const category: ValidationErrorCategory | undefined =
           commandResult.exitCode === 0
@@ -298,6 +307,7 @@ export const createSandboxProjectValidator = (
       }
       let previewArtifactId: string | undefined;
       if (!result && options.verification === 'verified') {
+        throwIfAborted(input.signal);
         currentPhase = 'build';
         const previewBundle = await options.service.exportBuildOutput({
           leaseId: lease._id,
@@ -321,29 +331,9 @@ export const createSandboxProjectValidator = (
         checks
       };
     } catch (error) {
-      result = infrastructureResult(
-        checks,
-        options.verification,
-        currentPhase,
-        error
-      );
-      await input.onProgress?.({
-        phase: currentPhase,
-        status: 'failed',
-        category: 'INFRA_ERROR',
-        attempt: 0,
-        cache: currentPhase === 'dependencies' ? 'miss' : 'not-applicable',
-        message: errorMessage(error)
-      });
-    }
-
-    if (lease) {
-      try {
-        await options.service.terminate({
-          leaseId: lease._id,
-          expectedOwnership: ownership
-        });
-      } catch (error) {
+      if (input.signal?.aborted) {
+        cancellationError = abortReason(input.signal);
+      } else {
         result = infrastructureResult(
           checks,
           options.verification,
@@ -356,11 +346,38 @@ export const createSandboxProjectValidator = (
           category: 'INFRA_ERROR',
           attempt: 0,
           cache: currentPhase === 'dependencies' ? 'miss' : 'not-applicable',
-          message: `Sandbox cleanup failed: ${errorMessage(error)}`
+          message: errorMessage(error)
         });
       }
     }
 
+    if (lease) {
+      try {
+        await options.service.terminate({
+          leaseId: lease._id,
+          expectedOwnership: ownership
+        });
+      } catch (error) {
+        if (!cancellationError) {
+          result = infrastructureResult(
+            checks,
+            options.verification,
+            currentPhase,
+            error
+          );
+          await input.onProgress?.({
+            phase: currentPhase,
+            status: 'failed',
+            category: 'INFRA_ERROR',
+            attempt: 0,
+            cache: currentPhase === 'dependencies' ? 'miss' : 'not-applicable',
+            message: `Sandbox cleanup failed: ${errorMessage(error)}`
+          });
+        }
+      }
+    }
+
+    if (cancellationError) throw cancellationError;
     return result!;
   }
 });

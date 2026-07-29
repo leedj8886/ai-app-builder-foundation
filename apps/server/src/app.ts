@@ -24,6 +24,10 @@ export const createApp = (): express.Express => {
     credentials: true
   }));
 
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
@@ -34,10 +38,6 @@ export const createApp = (): express.Express => {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
   app.use(morgan('dev'));
-
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
 
   app.use('/api/auth', authRouter);
   app.use('/api/previews', previewRouter);

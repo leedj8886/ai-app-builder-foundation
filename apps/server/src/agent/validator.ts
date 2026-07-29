@@ -33,6 +33,7 @@ import { readCssBuildEvidence } from './styling/buildEvidence';
 import type { StylingIssue } from './styling/types';
 import type { ArtifactService } from '../artifacts/artifactService';
 import { readPreviewDirectory } from '../artifacts/readPreviewDirectory';
+import { throwIfAborted } from './runCancellation';
 
 export interface ValidationProgressEvent {
   phase: ValidationPhase;
@@ -48,6 +49,7 @@ export interface ValidationProgressEvent {
 export interface ValidateProjectInput {
   runId: string;
   files: ProjectFile[];
+  signal?: AbortSignal;
   sandboxScope?: {
     workspaceId: Types.ObjectId;
     projectId: Types.ObjectId;
@@ -167,6 +169,7 @@ export const createProjectValidator = (
 
   return {
     validate: async input => {
+      throwIfAborted(input.signal);
       const checks: ValidationCheckResult[] = [];
       const structureStartedAt = Date.now();
       const structure = validateProjectStructure(input.files);
@@ -201,6 +204,7 @@ export const createProjectValidator = (
           retryable: false
         };
       }
+      throwIfAborted(input.signal);
 
       const stylingAdapters = adaptersFor(
         resolveStylingCapabilities(input.files)
@@ -256,7 +260,8 @@ export const createProjectValidator = (
         cwd,
         timeoutMs,
         maxOutputChars: validation.maxOutputChars,
-        env: commandEnvironment
+        env: commandEnvironment,
+        signal: input.signal
       });
 
       try {
@@ -278,6 +283,7 @@ export const createProjectValidator = (
             retryDelaysMs: validation.infrastructureRetryDelaysMs,
             delay: options.retryDelay,
             onRetry: async (error, attempt, retryDelayMs) => {
+              throwIfAborted(input.signal);
               const candidate = error as InstallationError;
               checks.push(toCheck({
                 name: 'install',
@@ -300,6 +306,7 @@ export const createProjectValidator = (
               });
             },
             operation: async attempt => {
+              throwIfAborted(input.signal);
               installAttempt = attempt;
               return dependencyCache.prepare({
                 fingerprint,
@@ -353,6 +360,7 @@ export const createProjectValidator = (
             }
           });
         } catch (error) {
+          throwIfAborted(input.signal);
           const candidate = error as InstallationError;
           const category = candidate.category ?? 'INFRA_ERROR';
           checks.push(toCheck({
@@ -408,6 +416,7 @@ export const createProjectValidator = (
             ? 'Dependency cache hit'
             : 'Dependencies installed'
         });
+        throwIfAborted(input.signal);
 
         const codeChecks = await Promise.all([
           {
@@ -508,6 +517,7 @@ export const createProjectValidator = (
 
         let previewArtifactId: string | undefined;
         if (options.artifactService && input.sandboxScope) {
+          throwIfAborted(input.signal);
           try {
             const bundle = await readPreviewDirectory(workspace.path);
             const previewArtifact = await options.artifactService.writePreviewBundle({

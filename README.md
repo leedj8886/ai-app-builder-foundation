@@ -223,6 +223,13 @@ Readiness、Lease、自动删除、孤儿保护窗口、Reconcile 周期和三�
 均通过 `SANDBOX_*` 环境变量配置。周期任务不会并发执行；Worker 退出时会等待
 当前 Reconcile 安全结束。
 
+Worker 会轮询当前 Run 状态。用户取消 Run 后，正在执行的 legacy 或 sandbox
+命令会收到 `AbortSignal`；LocalProcessProvider 会终止整个进程组，Sandbox
+Validator 会先回收 Build Lease，再结束本轮且不提交 Snapshot。运行中的
+Sandbox 命令还会按 `SANDBOX_HEARTBEAT_INTERVAL_MS` 同时刷新 Provider 和持久
+Lease 心跳；Reconciler 使用 `SANDBOX_HEARTBEAT_TIMEOUT_MS` 以 CAS 抢占并回收
+失去 Worker 的陈旧 Lease，避免误杀刚刚续约的活跃构建。
+
 Compose 默认继续使用 `legacy`；因此升级不会改变当前 Worker 的生产校验行为。
 Daytona Provider 和长驻 PreviewDeployment 仍属于后续阶段。
 

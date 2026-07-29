@@ -100,6 +100,8 @@ SandboxService 创建 Build Lease、hydrate 文件，并严格依次执行固定
    simulated 结果不允许发布 verified preview。
 8. **快照：** 只有通过且标记为 `verified` 的候选才成为活动快照，并引用对应
    Preview Artifact。
+9. **取消传播：** Worker 轮询 Run 状态并把同一个 `AbortSignal` 传入 validator
+   和命令执行器；取消时终止活动进程、回收 Lease，不进入修复或 Snapshot 提交。
 
 Preview URL 使用短期、只读、限定单个 Snapshot/Artifact 的签名 Token。
 `PREVIEW_PUBLIC_ORIGIN` 必须与 `CLIENT_URL` 不同源，避免生成代码读取主站凭据。
@@ -118,9 +120,11 @@ LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 
 - 基础设施重试复用已保存候选，不重新生成用户对话。
 - Sandbox Worker 启动时先恢复未完成 Lease，之后以非重叠周期执行
   Reconcile；它会处理超时预留、未知创建结果、丢失资源、延迟销毁、重复资源
-  和带有效所有权标签的孤儿资源。
-- Readiness、Lease、自动删除、孤儿保护窗口与 Reconcile 周期均来自运行时
-  配置，不在 SandboxService 中硬编码。
+  和带有效所有权标签的孤儿资源。运行命令期间会同时刷新 Provider 与 MongoDB
+  Lease 心跳；超过心跳超时的 running Lease 通过条件更新抢占为 terminating，
+  从而恢复 Worker 异常退出，又不会基于过期读误杀刚续约的构建。
+- Readiness、Lease、自动删除、孤儿保护窗口、命令心跳/超时与 Reconcile 周期
+  均来自运行时配置，不在 SandboxService 中硬编码。
 
 ## 扩展点
 

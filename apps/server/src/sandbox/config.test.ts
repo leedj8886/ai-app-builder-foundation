@@ -16,6 +16,8 @@ test('getSandboxConfig uses safe defaults', () => {
   assert.equal(config.autoDeleteSeconds, 1_800);
   assert.equal(config.orphanGraceMs, 300_000);
   assert.equal(config.reconcileIntervalMs, 30_000);
+  assert.equal(config.heartbeatIntervalMs, 10_000);
+  assert.equal(config.heartbeatTimeoutMs, 45_000);
   assert.deepEqual(config.commandTimeouts, {
     install: 180_000,
     typeCheck: 60_000,
@@ -33,7 +35,9 @@ test('getSandboxConfig parses strict overrides', () => {
     SANDBOX_LEASE_SECONDS: '9000',
     SANDBOX_AUTO_DELETE_SECONDS: '10000',
     SANDBOX_ORPHAN_GRACE_MS: '11000',
-    SANDBOX_RECONCILE_INTERVAL_MS: '12000'
+    SANDBOX_RECONCILE_INTERVAL_MS: '12000',
+    SANDBOX_HEARTBEAT_INTERVAL_MS: '13000',
+    SANDBOX_HEARTBEAT_TIMEOUT_MS: '14000'
   });
 
   assert.equal(config.provider, 'daytona');
@@ -45,6 +49,8 @@ test('getSandboxConfig parses strict overrides', () => {
   assert.equal(config.autoDeleteSeconds, 10_000);
   assert.equal(config.orphanGraceMs, 11_000);
   assert.equal(config.reconcileIntervalMs, 12_000);
+  assert.equal(config.heartbeatIntervalMs, 13_000);
+  assert.equal(config.heartbeatTimeoutMs, 14_000);
 });
 
 test('getSandboxConfig rejects unsafe production local mode', () => {
@@ -83,5 +89,12 @@ test('getSandboxConfig rejects malformed values', () => {
   assert.throws(
     () => getSandboxConfig({ SANDBOX_RECONCILE_INTERVAL_MS: '0' }),
     /positive safe integer/
+  );
+  assert.throws(
+    () => getSandboxConfig({
+      SANDBOX_HEARTBEAT_INTERVAL_MS: '1000',
+      SANDBOX_HEARTBEAT_TIMEOUT_MS: '1000'
+    }),
+    /must be greater/
   );
 });

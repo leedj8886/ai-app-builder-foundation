@@ -132,6 +132,7 @@ const harness = () => {
       service,
       providers: new Map([['fake', provider]]),
       orphanGraceMs: 1_000,
+      heartbeatTimeoutMs: 45_000,
       now: () => new Date()
     })
   };
@@ -220,6 +221,39 @@ test('SandboxReconciler marks missing running resources lost', async () => {
 
   assert.equal((await reconciler.reconcile()).lost, 1);
   assert.equal((await repository.findById(lease._id))?.state, 'lost');
+});
+
+test('SandboxReconciler terminates a running Lease with a stale heartbeat', async () => {
+  const { repository, provider, reconciler } = harness();
+  const input = record();
+  const lease = await repository.createReserved(input);
+  const ref = await provider.create(specFor(input));
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['reserved'],
+    to: 'provisioning'
+  });
+  await repository.bindExternalId({
+    leaseId: lease._id,
+    provider: ref.provider,
+    externalId: ref.externalId
+  });
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['provisioning'],
+    to: 'ready'
+  });
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['ready'],
+    to: 'running',
+    set: { lastHeartbeatAt: new Date(Date.now() - 60_000) }
+  });
+
+  const result = await reconciler.reconcile();
+  assert.equal(result.staleHeartbeats, 1);
+  assert.equal(result.terminated, 1);
+  assert.equal((await repository.findById(lease._id))?.state, 'terminated');
 });
 
 test('SandboxReconciler destroys old managed orphans with valid labels', async () => {

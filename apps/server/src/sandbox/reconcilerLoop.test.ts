@@ -12,6 +12,7 @@ const emptyResult = (): SandboxReconcileResult => ({
   terminated: 0,
   destroyedDuplicates: 0,
   destroyedOrphans: 0,
+  staleHeartbeats: 0,
   errors: 0
 });
 

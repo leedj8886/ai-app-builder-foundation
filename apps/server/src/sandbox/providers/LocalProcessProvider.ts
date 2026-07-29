@@ -529,6 +529,7 @@ export class LocalProcessProvider implements SandboxProvider {
     }, command.timeoutMs);
     const onAbort = () => terminate();
     signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
 
     const exitCode = await new Promise<number | null>((resolve, reject) => {
       child.once('error', reject);

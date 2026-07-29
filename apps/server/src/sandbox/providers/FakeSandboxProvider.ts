@@ -49,6 +49,8 @@ export class FakeSandboxState {
   private readonly commandResults: SandboxCommandResult[] = [];
   private buildOutput = new Map<string, Uint8Array>();
   private readonly readinessTimeoutValues: number[] = [];
+  private heartbeatCalls = 0;
+  private blockNextCommand = false;
 
   failNextCreate(input: NextCreateFailure): void {
     this.nextCreateFailure = input;
@@ -90,6 +92,24 @@ export class FakeSandboxState {
 
   readinessTimeouts(): readonly number[] {
     return [...this.readinessTimeoutValues];
+  }
+
+  recordHeartbeat(): void {
+    this.heartbeatCalls += 1;
+  }
+
+  heartbeatCount(): number {
+    return this.heartbeatCalls;
+  }
+
+  blockNextCommandUntilAbort(): void {
+    this.blockNextCommand = true;
+  }
+
+  takeBlockedCommand(): boolean {
+    const blocked = this.blockNextCommand;
+    this.blockNextCommand = false;
+    return blocked;
   }
 
   setReadiness(ref: SandboxRef, value: 'ready' | 'timeout'): void {
@@ -284,9 +304,17 @@ export class FakeSandboxProvider implements SandboxProvider {
           ensurePresent().files.has(normalizeSandboxRelativePath(path))
       },
       processes: {
-        run: async (command): Promise<SandboxCommandResult> => {
+        run: async (command, signal): Promise<SandboxCommandResult> => {
           const current = ensurePresent();
           current.commands.push(structuredClone(command));
+          if (this.state.takeBlockedCommand()) {
+            await new Promise<void>((resolve) => {
+              if (signal?.aborted) return resolve();
+              signal?.addEventListener('abort', () => resolve(), {
+                once: true
+              });
+            });
+          }
           const result = this.state.takeCommandResult();
           if (
             command.args.includes('build') &&
@@ -308,6 +336,7 @@ export class FakeSandboxProvider implements SandboxProvider {
       lifecycle: {
         heartbeat: async () => {
           ensurePresent();
+          this.state.recordHeartbeat();
         },
         stop: async () => {
           ensurePresent().status = 'stopped';

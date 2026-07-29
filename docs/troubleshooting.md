@@ -94,6 +94,19 @@ Sandbox executor 的 Worker 启动时会立即 Reconcile，之后默认每 30 �
 只有计数非零或运行失败时才写日志；可通过
 `SANDBOX_RECONCILE_INTERVAL_MS` 调整周期。
 
+运行中的命令默认每 10 秒写一次 Provider 和 Lease 心跳，45 秒没有心跳时由
+Reconciler 回收。排查长时间占用的 `running` Lease 时同时检查：
+
+```bash
+docker compose exec worker printenv SANDBOX_HEARTBEAT_INTERVAL_MS SANDBOX_HEARTBEAT_TIMEOUT_MS
+docker compose logs --tail=200 worker
+```
+
+`SANDBOX_HEARTBEAT_TIMEOUT_MS` 必须大于心跳间隔。用户取消 Run 后，Worker
+通常在 500ms 轮询周期内中止活动命令；LocalProcessProvider 会杀掉整个进程组，
+随后 Sandbox Validator 将 Lease 终止。短时间看到 `terminating` 属于正常清理，
+若持续不变则检查 Provider 销毁与 Reconciler 日志。
+
 ## 验证通过但没有显示 Verified build
 
 先确认 Snapshot 是否由新版本 Worker 生成。历史 Snapshot 没有

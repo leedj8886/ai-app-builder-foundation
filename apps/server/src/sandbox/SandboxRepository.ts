@@ -122,6 +122,43 @@ export class SandboxRepository {
     ).exec();
   }
 
+  heartbeatRunning(input: {
+    leaseId: Types.ObjectId;
+    provider: string;
+    externalId: string;
+    heartbeatAt: Date;
+  }): Promise<SandboxLeaseDocument | null> {
+    return SandboxLease.findOneAndUpdate(
+      {
+        _id: input.leaseId,
+        state: 'running',
+        provider: input.provider,
+        externalId: input.externalId
+      },
+      { $set: { lastHeartbeatAt: input.heartbeatAt } },
+      { new: true, runValidators: true }
+    ).exec();
+  }
+
+  claimStaleRunning(input: {
+    leaseId: Types.ObjectId;
+    provider: string;
+    externalId: string;
+    heartbeatCutoff: Date;
+  }): Promise<SandboxLeaseDocument | null> {
+    return SandboxLease.findOneAndUpdate(
+      {
+        _id: input.leaseId,
+        state: 'running',
+        provider: input.provider,
+        externalId: input.externalId,
+        lastHeartbeatAt: { $lte: input.heartbeatCutoff }
+      },
+      { $set: { state: 'terminating' } },
+      { new: true, runValidators: true }
+    ).exec();
+  }
+
   async transition(input: {
     leaseId: Types.ObjectId;
     from: SandboxLeaseState[];

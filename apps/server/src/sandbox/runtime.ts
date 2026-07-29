@@ -72,7 +72,8 @@ export const createSandboxRuntime = async (
     repository,
     service,
     providers,
-    orphanGraceMs: config.orphanGraceMs
+    orphanGraceMs: config.orphanGraceMs,
+    heartbeatTimeoutMs: config.heartbeatTimeoutMs
   });
 
   return {

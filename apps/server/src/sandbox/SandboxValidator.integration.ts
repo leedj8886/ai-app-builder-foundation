@@ -17,6 +17,7 @@ import {
 import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
 import { createSandboxRuntime } from './runtime';
 import type { SandboxCommandResult } from './types';
+import { runCancelledError } from '../agent/runCancellation';
 
 let environment: IntegrationEnvironment;
 
@@ -149,6 +150,7 @@ test('Sandbox validator hydrates an Artifact and runs the complete command seque
     resources[0].commands.map((command) => command.args),
     [['install'], ['run', 'type-check'], ['run', 'build', '--', '--base=./']]
   );
+  assert.equal(runtime.fakeState!.heartbeatCount(), 3);
   assert.equal(
     (await SandboxLease.findOne({
       runId: scope.runId,
@@ -165,6 +167,47 @@ test('Sandbox validator hydrates an Artifact and runs the complete command seque
     createdByRunId: scope.runId,
     kind: 'preview_build'
   }), null);
+});
+
+test('Sandbox validator aborts an active command and terminates its Lease', async () => {
+  const { files, runtime, scope, validator } = await fixture();
+  const controller = new AbortController();
+  runtime.fakeState!.blockNextCommandUntilAbort();
+  const validation = validator.validate({
+    runId: `${scope.runId.toString()}-0`,
+    files,
+    sandboxScope: scope,
+    signal: controller.signal
+  });
+
+  const commandDeadline = Date.now() + 5_000;
+  while (Date.now() < commandDeadline) {
+    if (
+      runtime.fakeState!.resources()
+        .some((resource) => resource.commands.length > 0)
+    ) {
+      break;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(
+    runtime.fakeState!.resources()[0]?.commands.length,
+    1
+  );
+  controller.abort(runCancelledError());
+
+  await assert.rejects(
+    validation,
+    (error) => (error as { code?: string }).code === 'RUN_CANCELLED'
+  );
+  assert.equal(
+    (await SandboxLease.findOne({
+      runId: scope.runId,
+      provisioningKey: `build:${scope.runId.toString()}:0`
+    }).orFail()).state,
+    'terminated'
+  );
+  assert.equal(runtime.fakeState!.resources()[0].status, 'missing');
 });
 
 test('Sandbox validator terminates a failed Lease and recovers with a new attempt', async () => {
