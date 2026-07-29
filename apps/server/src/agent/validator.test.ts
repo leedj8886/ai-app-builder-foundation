@@ -81,7 +81,7 @@ test('project validator runs structure install type-check and build phases', asy
   assert.deepEqual(commands.map(command => [command.executable, ...command.args]), [
     ['npm', 'install', '--ignore-scripts', '--no-audit', '--no-fund'],
     ['npm', 'run', 'type-check'],
-    ['npm', 'run', 'build']
+    ['npm', 'run', 'build', '--', '--base=./']
   ]);
   assert.equal(result.status, 'passed');
   assert.deepEqual(
@@ -263,7 +263,7 @@ test('project validator uses cache hit without running install', async () => {
 
   assert.deepEqual(commands.map(command => command.args), [
     ['run', 'type-check'],
-    ['run', 'build']
+    ['run', 'build', '--', '--base=./']
   ]);
   assert.equal(result.checks[1]?.cache, 'hit');
 });

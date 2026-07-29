@@ -172,10 +172,16 @@ describe('v0 workspace state', () => {
       ],
       packageJson: { dependencies: {}, devDependencies: {}, scripts: {} },
       validation: { status: 'passed', checks: [] },
+      preview: {
+        kind: 'verified-build',
+        verification: 'verified',
+        url: 'http://localhost:3001/api/previews/token/',
+      },
     })
 
     assert.equal(state.snapshot?.id, 'snapshot_old')
     assert.equal(state.snapshot?.selectedFilePath, 'src/App.tsx')
+    assert.equal(state.snapshot?.preview?.kind, 'verified-build')
   })
 
   it('resets stale project state when a new Chat route loads', () => {

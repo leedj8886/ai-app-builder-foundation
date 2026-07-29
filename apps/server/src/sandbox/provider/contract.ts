@@ -47,6 +47,7 @@ export const runSandboxProviderContract = (
     await handle.files.writeFiles([{ path: 'src/message.txt', content }]);
     assert.equal(await handle.files.exists('src/message.txt'), true);
     assert.deepEqual(await handle.files.readFile('src/message.txt'), content);
+    assert.deepEqual(await handle.files.listFiles('src'), ['src/message.txt']);
 
     const result = await handle.processes.run({
       executable: 'node',

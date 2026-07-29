@@ -47,6 +47,7 @@ export class FakeSandboxState {
   private sequence = 0;
   private nextCreateFailure?: NextCreateFailure;
   private readonly commandResults: SandboxCommandResult[] = [];
+  private buildOutput = new Map<string, Uint8Array>();
 
   failNextCreate(input: NextCreateFailure): void {
     this.nextCreateFailure = input;
@@ -59,6 +60,23 @@ export class FakeSandboxState {
 
   enqueueCommandResult(result: SandboxCommandResult): void {
     this.commandResults.push(structuredClone(result));
+  }
+
+  setBuildOutput(
+    files: Array<{ path: string; content: string | Uint8Array }>
+  ): void {
+    this.buildOutput = new Map(files.map(file => [
+      normalizeSandboxRelativePath(`dist/${file.path}`),
+      typeof file.content === 'string'
+        ? new TextEncoder().encode(file.content)
+        : new Uint8Array(file.content)
+    ]));
+  }
+
+  applyBuildOutput(resource: MutableFakeSandboxResource): void {
+    for (const [path, content] of this.buildOutput) {
+      resource.files.set(path, new Uint8Array(content));
+    }
   }
 
   takeCommandResult(): SandboxCommandResult | undefined {
@@ -246,13 +264,27 @@ export class FakeSandboxProvider implements SandboxProvider {
           }
           return new Uint8Array(content);
         },
+        listFiles: async (directory) => {
+          const prefix = `${normalizeSandboxRelativePath(directory)}/`;
+          return [...ensurePresent().files.keys()]
+            .filter(path => path.startsWith(prefix))
+            .sort();
+        },
         exists: async (path) =>
           ensurePresent().files.has(normalizeSandboxRelativePath(path))
       },
       processes: {
         run: async (command): Promise<SandboxCommandResult> => {
-          ensurePresent().commands.push(structuredClone(command));
-          return this.state.takeCommandResult() ?? {
+          const current = ensurePresent();
+          current.commands.push(structuredClone(command));
+          const result = this.state.takeCommandResult();
+          if (
+            command.args.includes('build') &&
+            (result?.exitCode ?? 0) === 0
+          ) {
+            this.state.applyBuildOutput(current);
+          }
+          return result ?? {
             exitCode: 0,
             stdout: '',
             stderr: '',

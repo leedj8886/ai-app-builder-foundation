@@ -37,6 +37,11 @@ export interface WorkspaceSnapshot {
   packageJson: SnapshotPackageJson
   validation: SnapshotValidation
   previewCss?: string
+  preview?: {
+    kind: 'verified-build'
+    verification: 'verified'
+    url: string
+  }
 }
 
 export interface SnapshotPackageJson {
@@ -127,6 +132,11 @@ export interface AgentRunDetail {
     packageJson: SnapshotPackageJson
     validation: SnapshotValidation
     previewCss?: string
+    preview?: {
+      kind: 'verified-build'
+      verification: 'verified'
+      url: string
+    }
   } | null
 }
 
@@ -222,6 +232,7 @@ const toWorkspaceSnapshot = (
   packageJson: snapshot.packageJson,
   validation: snapshot.validation,
   previewCss: snapshot.previewCss,
+  preview: snapshot.preview,
 })
 
 export const applySnapshotList = (

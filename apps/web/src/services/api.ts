@@ -104,6 +104,11 @@ export interface ProjectSnapshot {
   summary: string;
   files: ProjectSnapshotFile[];
   previewCss?: string;
+  preview?: {
+    kind: 'verified-build';
+    verification: 'verified';
+    url: string;
+  };
   packageJson: {
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;

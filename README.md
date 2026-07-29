@@ -142,7 +142,7 @@ Smoke Worker 使用确定性的 FakeModelClient，不调用真实模型，不产
 | Redis/BullMQ | Agent 队列和实时事件通道 |
 | Agent Worker | 规划、生成、验证、修复和持久化 |
 | Validation Executor | 可切换的 Worker 本地或 Sandbox 构建校验 |
-| ArtifactStore | Snapshot、Validation Candidate 和 Sandbox hydration 来源 |
+| ArtifactStore | Snapshot、Validation Candidate、Verified Preview Build 和 Sandbox hydration 来源 |
 | SandboxService | Build Lease、Provider、配额和受控命令编排 |
 
 完整数据流和扩展点见[系统架构](docs/architecture.md)。
@@ -180,7 +180,7 @@ npm run build --workspace @v0/server
 npm run start:migrate:workspace-branches --workspace @v0/server
 ```
 
-ProjectSnapshot 和 ValidationCandidate 的源码 Bundle 不保存在 MongoDB 中。
+ProjectSnapshot、ValidationCandidate 和经过验证的 Preview Build 不保存在 MongoDB 中。
 MongoDB 只保存 Manifest 和 `artifactId`，Blob 保存在 API、Worker 和运维任务共同
 挂载的 ArtifactStore。Compose 已配置共享 `artifact_store` volume。一次性清理：
 
@@ -218,12 +218,36 @@ LocalProcessProvider 完成标记为 `verified` 的本机真实构建。生产�
 local，配置错误会使 Worker 启动失败。
 
 Compose 默认继续使用 `legacy`；因此升级不会改变当前 Worker 的生产校验行为。
-Daytona Provider、PreviewDeployment、Preview Gateway 和 Preview 回收仍属于
-后续阶段。
+Daytona Provider 和长驻 PreviewDeployment 仍属于后续阶段。
 
-Preview 会为缺少配置的旧 Tailwind Snapshot 只读编译 CSS，并在内存中补齐
-Tailwind/PostCSS 配置和依赖，不会改写持久化文件。新项目会持久化完整配置；
-legacy 校验还会检查构建后的 CSS，避免只通过 Vite 退出码却没有实际生成样式。
+本地页面端到端验证 LocalProcessProvider 时，使用专用 Compose Override：
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.local-sandbox.yml \
+  up -d --build worker
+```
+
+该 Override 只把 Worker 切换为开发模式下的 `sandbox + local`，MongoDB、Redis、
+API、Web 和共享 ArtifactStore 仍使用主 Compose 配置。验证结束后恢复默认：
+
+```bash
+docker compose up -d --force-recreate worker
+```
+
+真实校验通过后，Worker 会把同一次构建产生的 `dist` 保存为不可变
+`preview_build` Artifact。页面通过短期签名、只读、与主站隔离的 Preview Origin
+加载它，并显示 `Verified build`。Fake/simulated 不会发布该 Artifact。
+
+```dotenv
+# 必须与 CLIENT_URL 不同源；生产环境应指向隔离的 Preview 域名
+PREVIEW_PUBLIC_ORIGIN=http://localhost:3001
+```
+
+历史 Snapshot 没有 Preview Build 时仍回退到 Sandpack，并明确显示为 Source
+Preview，而不是构建验证结果。缺少配置的旧 Tailwind Snapshot 会继续使用原有
+只读兼容逻辑。
 
 ## 文档
 

@@ -172,6 +172,9 @@ export const createRunSnapshot = async (
           sourceRunId: run._id,
           parentSnapshotId: input.parentSnapshotId,
           artifactId: artifact.artifactId,
+          ...(input.validation.previewArtifactId && {
+            previewArtifactId: input.validation.previewArtifactId
+          }),
           validation: input.validation,
           summary: input.summary
         }
@@ -182,12 +185,29 @@ export const createRunSnapshot = async (
     if (!isDuplicateKey(error)) throw error;
     snapshot = await ProjectSnapshot.findOne({ sourceRunId: run._id });
   }
-  return assertArtifactMatch(snapshot, artifact.artifactId, {
+  const owned = await assertArtifactMatch(snapshot, artifact.artifactId, {
     workspaceId: run.workspaceId,
     projectId: run.projectId,
     branchId: run.branchId,
     userId: run.userId
   }, 'project_snapshot');
+  if (input.validation.previewArtifactId) {
+    const previewManifest = await ArtifactManifest.exists({
+      artifactId: input.validation.previewArtifactId,
+      workspaceId: run.workspaceId,
+      projectId: run.projectId,
+      createdByRunId: run._id,
+      kind: 'preview_build',
+      state: 'ready'
+    });
+    if (!previewManifest || owned.previewArtifactId !== input.validation.previewArtifactId) {
+      throw new ArtifactError(
+        'ARTIFACT_IDEMPOTENCY_CONFLICT',
+        'Snapshot does not reference its verified Preview Artifact'
+      );
+    }
+  }
+  return owned;
 };
 
 export const createRunCandidate = async (

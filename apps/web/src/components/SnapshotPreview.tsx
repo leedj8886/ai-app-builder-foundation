@@ -11,12 +11,14 @@ interface SnapshotPreviewProps {
   snapshotId: string
   model: SnapshotPreviewModel
   isGenerating: boolean
+  verification?: 'verified' | 'simulated'
 }
 
 export function SnapshotPreview({
   snapshotId,
   model,
   isGenerating,
+  verification,
 }: SnapshotPreviewProps) {
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -32,6 +34,11 @@ export function SnapshotPreview({
               Generating a new version
             </span>
           ) : null}
+          <span className="ml-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+            {verification === 'simulated'
+              ? 'Simulated source preview'
+              : 'Source preview · not build output'}
+          </span>
         </div>
         <button
           type="button"

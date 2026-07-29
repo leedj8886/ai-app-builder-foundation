@@ -75,13 +75,40 @@ docker compose logs --tail=200 worker
   `simulated`，Worker 会以 `VALIDATION_NOT_VERIFIED` 结束，不会提交 Snapshot。
 - LocalProcessProvider 只能在手动开发的非生产 Worker 中使用。设置
   `SANDBOX_PROVIDER=local`、`SANDBOX_LOCAL_ENABLED=true` 和可信的
-  `SANDBOX_LOCAL_ROOT` 后重启 Worker。
+  `SANDBOX_LOCAL_ROOT` 后重启 Worker。Compose 本地验证应使用：
+
+  ```bash
+  docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.local-sandbox.yml \
+    up -d --build worker
+  ```
+
 - Compose 将 Worker 以 `NODE_ENV=production` 运行，故意禁止 local。不要通过
-  放宽该保护来模拟生产 Sandbox。
+  修改主 Compose 放宽该保护；本地 Override 只对 Worker 显式启用开发模式。
 
 出现 `SANDBOX_BRANCH_BUSY`、`SANDBOX_QUOTA_EXCEEDED` 或
 `SANDBOX_SCHEDULER_UNAVAILABLE` 时，同时检查 MongoDB 中的 Lease 状态、Redis
 可用性和 Sandbox Reconciler；`terminating` Lease 在确认资源消失前仍占用配额。
+
+## 验证通过但没有显示 Verified build
+
+先确认 Snapshot 是否由新版本 Worker 生成。历史 Snapshot 没有
+`previewArtifactId`，会明确回退为 `Source preview`。
+
+```bash
+docker compose exec server printenv CLIENT_URL PREVIEW_PUBLIC_ORIGIN
+docker compose logs --tail=200 server worker
+```
+
+- `PREVIEW_PUBLIC_ORIGIN` 必须是浏览器可访问的绝对 Origin，并且不能与
+  `CLIENT_URL` 同源。本地 Compose 默认使用 `http://localhost:3001`。
+- 如果 iframe 返回 401，重新加载对话以获取新的短期签名 URL。
+- 如果时间线在 build 后报告 `INFRA_ERROR`，检查 ArtifactStore 容量、`dist`
+  是否存在，以及构建是否生成了不受支持的文件类型。
+- 生产反向代理不能给 Preview 路径追加 `X-Frame-Options: SAMEORIGIN`；应保留
+  API 返回的 `frame-ancestors` CSP，并把 Preview 路由放在隔离域名。
+- `simulated` 结果不会生成 Preview Build，也不能显示 `Verified build`。
 
 ## Smoke 测试失败
 

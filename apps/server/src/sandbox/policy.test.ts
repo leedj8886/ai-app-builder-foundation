@@ -108,5 +108,6 @@ test('SandboxPolicy derives purpose capabilities and bounds output', () => {
     hasPackageLock: true,
     maxOutputBytes: Number.MAX_SAFE_INTEGER
   });
+  assert.deepEqual(command.args, ['run', 'build', '--', '--base=./']);
   assert.ok(command.maxOutputBytes < Number.MAX_SAFE_INTEGER);
 });

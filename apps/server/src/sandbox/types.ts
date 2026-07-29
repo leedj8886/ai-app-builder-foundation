@@ -104,6 +104,7 @@ export interface SandboxDestroyReceipt {
 export interface SandboxFileSystem {
   writeFiles(files: Array<{ path: string; content: Uint8Array }>): Promise<void>;
   readFile(path: string): Promise<Uint8Array>;
+  listFiles(directory: string): Promise<string[]>;
   exists(path: string): Promise<boolean>;
 }
 

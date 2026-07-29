@@ -296,9 +296,28 @@ export const createSandboxProjectValidator = (
           break;
         }
       }
+      let previewArtifactId: string | undefined;
+      if (!result && options.verification === 'verified') {
+        currentPhase = 'build';
+        const previewBundle = await options.service.exportBuildOutput({
+          leaseId: lease._id,
+          expectedOwnership: ownership
+        });
+        const previewArtifact = await options.artifactService.writePreviewBundle({
+          workspaceId: scope.workspaceId,
+          projectId: scope.projectId,
+          createdByRunId: scope.runId,
+          kind: 'preview_build',
+          idempotencyKey:
+            `sandbox-preview:${scope.runId.toString()}:${scope.attempt}`,
+          bundle: previewBundle
+        });
+        previewArtifactId = previewArtifact.artifactId;
+      }
       result ??= {
         status: 'passed',
         verification: options.verification,
+        ...(previewArtifactId && { previewArtifactId }),
         checks
       };
     } catch (error) {

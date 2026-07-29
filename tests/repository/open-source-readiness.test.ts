@@ -65,6 +65,7 @@ test('environment examples document the real runtime configuration', async () =>
 
   for (const key of [
     'JWT_SECRET',
+    'PREVIEW_PUBLIC_ORIGIN',
     'DEEPSEEK_API_KEY',
     'DEEPSEEK_BASE_URL',
     'DEEPSEEK_MODEL',
@@ -77,6 +78,7 @@ test('environment examples document the real runtime configuration', async () =>
   }
 
   assert.match(serverEnv, /^REDIS_URL=/m);
+  assert.match(serverEnv, /^PREVIEW_PUBLIC_ORIGIN=/m);
   assert.match(serverEnv, /^DEEPSEEK_API_KEY=/m);
   assert.match(serverEnv, /^AGENT_VALIDATION_EXECUTOR=legacy$/m);
   assert.match(serverEnv, /^SANDBOX_PROVIDER=fake$/m);
@@ -124,6 +126,7 @@ test('repository includes contribution templates and a reproducible example', as
     '.github/ISSUE_TEMPLATE/feature_request.yml',
     '.github/ISSUE_TEMPLATE/config.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
+    'docker-compose.local-sandbox.yml',
     'docs/examples/verified-dashboard.md',
     'docs/release-checklist.md'
   ];
@@ -145,6 +148,14 @@ test('repository includes contribution templates and a reproducible example', as
   );
   assert.match(checklist, /npm run test:smoke/);
   assert.match(checklist, /四名测试者/);
+
+  const localSandboxCompose = await readFile(
+    repositoryFile('docker-compose.local-sandbox.yml'),
+    'utf8'
+  );
+  assert.match(localSandboxCompose, /AGENT_VALIDATION_EXECUTOR:\s*sandbox/);
+  assert.match(localSandboxCompose, /SANDBOX_PROVIDER:\s*local/);
+  assert.match(localSandboxCompose, /NODE_ENV:\s*development/);
 });
 
 test('architecture keeps the core independent from application agent frameworks', async () => {

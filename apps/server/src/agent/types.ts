@@ -120,6 +120,7 @@ export interface ValidationCheckResult {
 export interface ValidationResult {
   status: 'passed' | 'failed' | 'skipped';
   verification?: 'verified' | 'simulated';
+  previewArtifactId?: string;
   checks: ValidationCheckResult[];
   category?: ValidationErrorCategory;
   retryable?: boolean;

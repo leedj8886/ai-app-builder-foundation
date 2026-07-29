@@ -228,6 +228,7 @@ test('ProjectSnapshot stores artifact references without source content', () => 
   assert.ok(ProjectSnapshot.schema.path('sourceRunId'));
   assert.ok(ProjectSnapshot.schema.path('parentSnapshotId'));
   assert.ok(ProjectSnapshot.schema.path('artifactId'));
+  assert.ok(ProjectSnapshot.schema.path('previewArtifactId'));
   assert.equal(ProjectSnapshot.schema.path('files'), undefined);
   assert.equal(ProjectSnapshot.schema.path('packageJson'), undefined);
   assert.ok(ProjectSnapshot.schema.path('validation'));
@@ -238,7 +239,8 @@ test('ProjectSnapshot stores artifact references without source content', () => 
     { projectId: 1, createdAt: -1 },
     { userId: 1, createdAt: -1 },
     { sourceRunId: 1 },
-    { artifactId: 1 }
+    { artifactId: 1 },
+    { previewArtifactId: 1 }
   ]);
   assert.equal(ProjectSnapshot.schema.indexes()[2]?.[1].unique, true);
 });

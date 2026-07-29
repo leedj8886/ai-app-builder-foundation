@@ -1,0 +1,8 @@
+services:
+  worker:
+    environment:
+      AGENT_VALIDATION_EXECUTOR: sandbox
+      SANDBOX_PROVIDER: local
+      SANDBOX_LOCAL_ENABLED: "true"
+      SANDBOX_LOCAL_ROOT: /tmp/open-v0-sandboxes
+      NODE_ENV: development

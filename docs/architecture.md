@@ -8,15 +8,16 @@
 
 | 组件 | 实现 | 职责 |
 |---|---|---|
-| Web | React、Vite、Sandpack | 提交需求、展示执行时间线、代码和快照预览 |
+| Web | React、Vite、iframe / Sandpack fallback | 提交需求、展示执行时间线、代码和快照预览 |
 | Edge/Web Server | Nginx | 静态文件和同源 `/api` 反向代理 |
 | API | Express、TypeScript | 认证、项目、对话、Run、Snapshot 和 SSE |
 | Durable State | MongoDB | 保存用户、项目、Run、Event、Snapshot 和验证候选 |
 | Queue/Event Transport | Redis、BullMQ | 异步任务和实时事件分发 |
 | Agent Worker | Node.js | 规划、生成、验证、修复和持久化 |
 | Validation Executor | legacy / sandbox | 选择 Worker 本地或 Sandbox 校验路径 |
-| ArtifactStore | Shared filesystem | 保存不可变源码 Bundle，作为 Snapshot 和 Sandbox hydration 来源 |
+| ArtifactStore | Shared filesystem | 保存不可变源码 Bundle 和 verified build output |
 | Sandbox Core | SandboxService、Lease、Provider | 配额调度、工作区 hydration、固定命令和生命周期管理 |
+| Preview Gateway | Express、签名 Token、隔离 Origin | 只读提供 verified Preview Artifact |
 
 ## 核心边界
 
@@ -58,13 +59,15 @@ sequenceDiagram
         V->>S: 发布 Candidate Artifact
         V->>S: 创建 Build Lease 并 hydrate
         S->>S: install → type-check → build
+        V->>S: 保存 dist 为 Preview Build Artifact
         V->>S: 终止 Build Lease
     end
     opt legacy executor
         V->>V: 本地工作区安装、类型检查和生产构建
+        V->>S: 保存 dist 为 Preview Build Artifact
     end
     alt 验证通过
-        R->>M: 保存 Snapshot 并更新活动版本
+        R->>M: 保存 Snapshot、Preview Artifact 引用并更新活动版本
     else 可修复错误
         R->>R: 发送定向诊断并修复
         R->>V: 重新验证
@@ -93,7 +96,15 @@ SandboxService 创建 Build Lease、hydrate 文件，并严格依次执行固定
    - `INFRA_ERROR`：退避重试，不消耗模型修复轮次。
 6. **验证证据：** 真实执行结果标记为 `verified`；Fake Provider 只产生
    `simulated` 结果，不能提升为 Snapshot。
-7. **快照：** 只有通过且标记为 `verified` 的候选才成为可预览活动快照。
+7. **预览产物：** 同一次 verified build 的 `dist` 以二进制安全 Bundle 保存；
+   simulated 结果不允许发布 verified preview。
+8. **快照：** 只有通过且标记为 `verified` 的候选才成为活动快照，并引用对应
+   Preview Artifact。
+
+Preview URL 使用短期、只读、限定单个 Snapshot/Artifact 的签名 Token。
+`PREVIEW_PUBLIC_ORIGIN` 必须与 `CLIENT_URL` 不同源，避免生成代码读取主站凭据。
+历史 Snapshot 没有 Preview Artifact 时才回退到 Sandpack，并在界面明确标记为
+Source Preview。
 
 LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 local Provider
 或启用开关时会 fail closed。首个生产 Sandbox Provider 尚未实现。

@@ -13,6 +13,7 @@ export interface IProjectSnapshot {
   sourceRunId: Types.ObjectId;
   parentSnapshotId?: Types.ObjectId;
   artifactId: string;
+  previewArtifactId?: string;
   validation: ValidationResult;
   summary: string;
   createdAt: Date;
@@ -117,6 +118,7 @@ const ProjectSnapshotSchema = new Schema<IProjectSnapshot>(
     sourceRunId: { type: Schema.Types.ObjectId, ref: 'AgentRun', required: true },
     parentSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     artifactId: { type: String, required: true, trim: true },
+    previewArtifactId: { type: String, trim: true },
     validation: { type: ValidationSchema, required: true },
     summary: { type: String, required: true, trim: true }
   },
@@ -129,6 +131,7 @@ ProjectSnapshotSchema.index({ projectId: 1, createdAt: -1 });
 ProjectSnapshotSchema.index({ userId: 1, createdAt: -1 });
 ProjectSnapshotSchema.index({ sourceRunId: 1 }, { unique: true });
 ProjectSnapshotSchema.index({ artifactId: 1 });
+ProjectSnapshotSchema.index({ previewArtifactId: 1 });
 
 export const ProjectSnapshot =
   (mongoose.models.ProjectSnapshot as mongoose.Model<IProjectSnapshot> | undefined) ||

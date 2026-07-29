@@ -9,10 +9,13 @@ import { chatRouter } from './routes/chat';
 import { projectRouter } from './routes/project';
 import { agentRouter } from './routes/agent';
 import { errorHandler } from './middleware/errorHandler';
+import { previewRouter } from './routes/preview';
+import { getPreviewConfig } from './preview/config';
 
 dotenv.config();
 
 export const createApp = (): express.Express => {
+  getPreviewConfig();
   const app = express();
 
   app.use(helmet());
@@ -37,6 +40,7 @@ export const createApp = (): express.Express => {
   });
 
   app.use('/api/auth', authRouter);
+  app.use('/api/previews', previewRouter);
   app.use('/api/chat', chatRouter);
   app.use('/api/projects', projectRouter);
   app.use('/api/agent', agentRouter);

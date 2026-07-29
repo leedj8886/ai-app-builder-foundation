@@ -10,6 +10,7 @@ import {
   mkdir,
   mkdtemp,
   open,
+  readdir,
   rename,
   rm
 } from 'node:fs/promises';
@@ -174,6 +175,7 @@ export class LocalProcessProvider implements SandboxProvider {
           }
         },
         readFile: async (path) => this.readFile(resource, path),
+        listFiles: async (directory) => this.listFiles(resource, directory),
         exists: async (path) => {
           try {
             await this.assertSafeExistingPath(
@@ -410,6 +412,44 @@ export class LocalProcessProvider implements SandboxProvider {
     } finally {
       await handle.close();
     }
+  }
+
+  private async listFiles(
+    resource: LocalResource,
+    candidate: string
+  ): Promise<string[]> {
+    const relative = normalizeSandboxRelativePath(candidate);
+    const directory = await this.assertSafeExistingPath(
+      resource,
+      relative,
+      true
+    );
+    const directoryInfo = await lstat(directory);
+    if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) {
+      policyDenied('Sandbox list target is not a safe directory');
+    }
+
+    const files: string[] = [];
+    const visit = async (absoluteDirectory: string, relativeDirectory: string) => {
+      const entries = await readdir(absoluteDirectory, { withFileTypes: true });
+      for (const entry of entries) {
+        const relativePath = `${relativeDirectory}/${entry.name}`;
+        const absolutePath = nodePath.join(absoluteDirectory, entry.name);
+        const info = await lstat(absolutePath);
+        if (info.isSymbolicLink()) {
+          policyDenied('Sandbox output contains a symbolic link');
+        }
+        if (info.isDirectory()) {
+          await visit(absolutePath, relativePath);
+        } else if (info.isFile()) {
+          files.push(relativePath);
+        } else {
+          policyDenied('Sandbox output contains an unsupported file type');
+        }
+      }
+    };
+    await visit(directory, relative);
+    return files.sort();
   }
 
   private resolveCommandCwd(resource: LocalResource, cwd: string): string {

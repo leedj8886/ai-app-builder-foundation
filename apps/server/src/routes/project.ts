@@ -24,6 +24,7 @@ import { ProjectBranch } from '../models/ProjectBranch';
 import { ArtifactManifest } from '../models/ArtifactManifest';
 import { getArtifactService } from '../artifacts/runtime';
 import type { ProjectArtifactBundleV1 } from '../artifacts/types';
+import { verifiedPreviewDescriptor } from '../preview/descriptor';
 
 const router = Router();
 
@@ -55,7 +56,8 @@ const snapshotDetail = async (
   return {
     ...snapshot.toObject(),
     files: bundle.files,
-    packageJson: bundle.packageJson
+    packageJson: bundle.packageJson,
+    preview: verifiedPreviewDescriptor(snapshot)
   };
 };
 

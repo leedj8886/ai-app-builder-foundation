@@ -114,6 +114,9 @@ const fixture = async () => {
 test('Sandbox validator hydrates an Artifact and runs the complete command sequence', async () => {
   const { files, runtime, scope, validator } = await fixture();
   const progress: string[] = [];
+  runtime.fakeState!.setBuildOutput([
+    { path: 'index.html', content: '<main>simulated</main>' }
+  ]);
 
   const result = await validator.validate({
     runId: `${scope.runId.toString()}-0`,
@@ -126,6 +129,7 @@ test('Sandbox validator hydrates an Artifact and runs the complete command seque
 
   assert.equal(result.status, 'passed', JSON.stringify(result));
   assert.equal(result.verification, 'simulated');
+  assert.equal(result.previewArtifactId, undefined);
   assert.deepEqual(
     result.checks.map((check) => check.name),
     ['structure', 'install', 'type-check', 'build']
@@ -143,7 +147,7 @@ test('Sandbox validator hydrates an Artifact and runs the complete command seque
   assert.ok(resources[0].files.has('src/App.tsx'));
   assert.deepEqual(
     resources[0].commands.map((command) => command.args),
-    [['install'], ['run', 'type-check'], ['run', 'build']]
+    [['install'], ['run', 'type-check'], ['run', 'build', '--', '--base=./']]
   );
   assert.equal(
     (await SandboxLease.findOne({
@@ -157,6 +161,10 @@ test('Sandbox validator hydrates an Artifact and runs the complete command seque
       `sandbox-validation:${scope.runId.toString()}:0`,
     state: 'ready'
   }));
+  assert.equal(await ArtifactManifest.exists({
+    createdByRunId: scope.runId,
+    kind: 'preview_build'
+  }), null);
 });
 
 test('Sandbox validator terminates a failed Lease and recovers with a new attempt', async () => {
@@ -203,4 +211,65 @@ test('Sandbox validator terminates a failed Lease and recovers with a new attemp
       .distinct('state'),
     ['terminated']
   );
+});
+
+test('verified Sandbox validation publishes build output and recovers capture failure', async () => {
+  const { files, runtime, scope } = await fixture();
+  const validator = createSandboxProjectValidator({
+    service: runtime.service,
+    artifactService: getArtifactService(),
+    provider: runtime.provider,
+    image: runtime.image,
+    resources: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
+    verification: 'verified'
+  });
+
+  const missingOutput = await validator.validate({
+    runId: `${scope.runId.toString()}-0`,
+    files,
+    sandboxScope: scope
+  });
+  assert.equal(missingOutput.status, 'failed');
+  assert.equal(missingOutput.category, 'INFRA_ERROR');
+  assert.equal(
+    (await SandboxLease.findOne({
+      runId: scope.runId,
+      provisioningKey: `build:${scope.runId.toString()}:0`
+    }).orFail()).state,
+    'terminated'
+  );
+
+  runtime.fakeState!.setBuildOutput([
+    {
+      path: 'index.html',
+      content: '<script type="module" src="./assets/app.js"></script>'
+    },
+    {
+      path: 'assets/app.js',
+      content: 'document.body.dataset.preview = "verified";'
+    }
+  ]);
+  const recovered = await validator.validate({
+    runId: `${scope.runId.toString()}-1`,
+    files,
+    sandboxScope: { ...scope, attempt: 1 }
+  });
+
+  assert.equal(recovered.status, 'passed', JSON.stringify(recovered));
+  assert.equal(recovered.verification, 'verified');
+  assert.match(recovered.previewArtifactId ?? '', /^[0-9a-f]{32}$/);
+  const preview = await getArtifactService().readOwnedPreviewBundle({
+    artifactId: recovered.previewArtifactId!,
+    workspaceId: scope.workspaceId,
+    projectId: scope.projectId
+  });
+  assert.deepEqual(
+    preview.files.map(file => file.path),
+    ['assets/app.js', 'index.html']
+  );
+  assert.ok(await ArtifactManifest.exists({
+    artifactId: recovered.previewArtifactId,
+    kind: 'preview_build',
+    state: 'ready'
+  }));
 });

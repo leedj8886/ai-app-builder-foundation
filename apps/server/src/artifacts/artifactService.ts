@@ -7,25 +7,43 @@ import {
 } from '../models/ArtifactManifest';
 import type { ArtifactStore } from './ArtifactStore';
 import { decodeProjectArtifact, encodeProjectArtifact } from './bundle';
+import {
+  decodePreviewArtifact,
+  encodePreviewArtifact
+} from './previewBundle';
 import type { ArtifactConfig } from './config';
 import {
   ArtifactError,
   type ArtifactIntegrity,
-  type EncodedProjectArtifact,
+  type EncodedArtifact,
+  type PreviewArtifactBundleV1,
   type ProjectArtifactBundleV1
 } from './types';
 
-export interface WriteArtifactBundleInput {
+type ProjectArtifactKind = Exclude<ArtifactKind, 'preview_build'>;
+
+interface ArtifactWriteMetadata {
   workspaceId: Types.ObjectId;
   projectId: Types.ObjectId;
   createdByRunId: Types.ObjectId;
   kind: ArtifactKind;
   idempotencyKey: string;
+}
+
+export interface WriteArtifactBundleInput
+  extends Omit<ArtifactWriteMetadata, 'kind'> {
+  kind: ProjectArtifactKind;
   bundle: ProjectArtifactBundleV1;
 }
 
 export interface WrittenArtifact {
   artifactId: string;
+}
+
+export interface WritePreviewArtifactBundleInput
+  extends Omit<ArtifactWriteMetadata, 'kind'> {
+  kind: 'preview_build';
+  bundle: PreviewArtifactBundleV1;
 }
 
 const storageKeyFor = (artifactId: string) =>
@@ -76,6 +94,20 @@ export class ArtifactService {
 
   async writeBundle(input: WriteArtifactBundleInput): Promise<WrittenArtifact> {
     const encoded = await encodeProjectArtifact(input.bundle, this.config.limits);
+    return this.writeEncoded(input, encoded);
+  }
+
+  async writePreviewBundle(
+    input: WritePreviewArtifactBundleInput
+  ): Promise<WrittenArtifact> {
+    const encoded = await encodePreviewArtifact(input.bundle, this.config.limits);
+    return this.writeEncoded(input, encoded);
+  }
+
+  private async writeEncoded(
+    input: ArtifactWriteMetadata,
+    encoded: EncodedArtifact
+  ): Promise<WrittenArtifact> {
     const manifest = await this.createOrLoadManifest(input, encoded);
 
     if (manifest.sha256 !== encoded.sha256) {
@@ -94,7 +126,7 @@ export class ArtifactService {
       );
     }
     if (manifest.state === 'ready') {
-      await this.readBundle(manifest.artifactId);
+      await this.verifyStoredByKind(manifest);
       return { artifactId: manifest.artifactId };
     }
 
@@ -108,7 +140,7 @@ export class ArtifactService {
       // A no-clobber put can report EEXIST after another writer (or a
       // previous crashed writer) has already published the complete Blob.
       try {
-        await this.verifyStored(manifest);
+        await this.verifyStoredByKind(manifest);
       } catch (verificationError) {
         if (isContentVerificationError(verificationError)) {
           await this.markCorrupt(manifest.artifactId, verificationError);
@@ -118,7 +150,7 @@ export class ArtifactService {
     }
 
     try {
-      await this.verifyStored(manifest);
+      await this.verifyStoredByKind(manifest);
     } catch (error) {
       if (isContentVerificationError(error)) {
         await this.markCorrupt(manifest.artifactId, error);
@@ -145,7 +177,10 @@ export class ArtifactService {
   }
 
   async readBundle(artifactId: string): Promise<ProjectArtifactBundleV1> {
-    const manifest = await ArtifactManifest.findOne({ artifactId }).lean();
+    const manifest = await ArtifactManifest.findOne({
+      artifactId,
+      kind: { $in: ['project_snapshot', 'validation_candidate'] }
+    }).lean();
     return this.readManifest(manifest);
   }
 
@@ -153,7 +188,7 @@ export class ArtifactService {
     artifactId: string;
     workspaceId: Types.ObjectId;
     projectId: Types.ObjectId;
-    kind: ArtifactKind;
+    kind: ProjectArtifactKind;
   }): Promise<ProjectArtifactBundleV1> {
     const manifest = await ArtifactManifest.findOne({
       artifactId: input.artifactId,
@@ -164,10 +199,43 @@ export class ArtifactService {
     return this.readManifest(manifest);
   }
 
+  async readOwnedPreviewBundle(input: {
+    artifactId: string;
+    workspaceId: Types.ObjectId;
+    projectId: Types.ObjectId;
+  }): Promise<PreviewArtifactBundleV1> {
+    const manifest = await ArtifactManifest.findOne({
+      artifactId: input.artifactId,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      kind: 'preview_build'
+    }).lean();
+    if (!manifest) {
+      throw artifactError('ARTIFACT_NOT_FOUND', 'Preview artifact manifest not found');
+    }
+    if (manifest.state === 'corrupt') {
+      throw artifactError('ARTIFACT_CORRUPT', 'The preview artifact is corrupt');
+    }
+    if (manifest.state !== 'ready') {
+      throw artifactError('ARTIFACT_NOT_FOUND', 'Preview artifact is not ready');
+    }
+    try {
+      return await this.verifyStoredPreview(manifest);
+    } catch (error) {
+      if (!isContentVerificationError(error)) throw error;
+      await this.markCorrupt(manifest.artifactId, error, 'ready');
+      throw artifactError(
+        'ARTIFACT_CORRUPT',
+        'Preview artifact content failed verification',
+        error
+      );
+    }
+  }
+
   async verifyManifestBundle(
     manifest: IArtifactManifest
-  ): Promise<ProjectArtifactBundleV1> {
-    return this.verifyStored(manifest);
+  ): Promise<ProjectArtifactBundleV1 | PreviewArtifactBundleV1> {
+    return this.verifyStoredByKind(manifest);
   }
 
   private async readManifest(
@@ -198,8 +266,8 @@ export class ArtifactService {
   }
 
   private async createOrLoadManifest(
-    input: WriteArtifactBundleInput,
-    encoded: EncodedProjectArtifact
+    input: ArtifactWriteMetadata,
+    encoded: EncodedArtifact
   ): Promise<IArtifactManifest> {
     const artifactId = randomUUID().replaceAll('-', '').toLowerCase();
     try {
@@ -233,6 +301,25 @@ export class ArtifactService {
       integrityFor(manifest),
       this.config.limits
     );
+  }
+
+  private async verifyStoredPreview(
+    manifest: IArtifactManifest
+  ): Promise<PreviewArtifactBundleV1> {
+    const bytes = await this.store.get(manifest.storageKey);
+    return decodePreviewArtifact(
+      bytes,
+      integrityFor(manifest),
+      this.config.limits
+    );
+  }
+
+  private verifyStoredByKind(
+    manifest: IArtifactManifest
+  ): Promise<ProjectArtifactBundleV1 | PreviewArtifactBundleV1> {
+    return manifest.kind === 'preview_build'
+      ? this.verifyStoredPreview(manifest)
+      : this.verifyStored(manifest);
   }
 
   private async markCorrupt(

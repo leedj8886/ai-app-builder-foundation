@@ -89,7 +89,9 @@ const reconcileWriting = async (
 
 const hasReference = async (artifactId: string): Promise<boolean> => {
   const [snapshot, candidate, lease] = await Promise.all([
-    ProjectSnapshot.exists({ artifactId }),
+    ProjectSnapshot.exists({
+      $or: [{ artifactId }, { previewArtifactId: artifactId }]
+    }),
     ValidationCandidate.exists({ artifactId }),
     SandboxLease.exists({
       'sourceArtifact.artifactId': artifactId,

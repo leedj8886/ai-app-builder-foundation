@@ -1,6 +1,8 @@
 import { Types } from 'mongoose';
 import type { ArtifactService } from '../artifacts/artifactService';
 import type { ProjectArtifactBundleV1 } from '../artifacts/types';
+import { createPreviewArtifactBundle } from '../artifacts/previewBundle';
+import type { PreviewArtifactBundleV1 } from '../artifacts/types';
 import type { SandboxLeaseDocument } from '../models/SandboxLease';
 import { Workspace } from '../models/Workspace';
 import {
@@ -291,6 +293,65 @@ export class SandboxService {
       );
     }
     return result;
+  }
+
+  async exportBuildOutput(input: {
+    leaseId: Types.ObjectId;
+    expectedOwnership: SandboxOwnership;
+  }): Promise<PreviewArtifactBundleV1> {
+    const lease = await this.requireLease(input.leaseId);
+    this.assertOwnership(lease, input.expectedOwnership);
+    if (
+      (lease.state !== 'ready' && lease.state !== 'running') ||
+      !lease.externalId
+    ) {
+      throw new SandboxError(
+        'SANDBOX_INVALID_STATE',
+        'Sandbox Lease cannot export build output'
+      );
+    }
+    const provider = this.provider(lease.provider);
+    const handle = await provider.connect({
+      provider: lease.provider,
+      externalId: lease.externalId
+    });
+    const paths = await handle.files.listFiles('dist');
+    if (paths.length === 0 || paths.length > 5_000) {
+      throw new SandboxError(
+        'SANDBOX_SOURCE_UNAVAILABLE',
+        'Sandbox build output is empty or exceeds the file limit'
+      );
+    }
+
+    const files: Array<{ path: string; content: Uint8Array }> = [];
+    let totalBytes = 0;
+    for (const path of paths) {
+      if (!path.startsWith('dist/')) {
+        throw new SandboxError(
+          'SANDBOX_OWNERSHIP_MISMATCH',
+          'Sandbox build output escaped the dist directory'
+        );
+      }
+      const content = await handle.files.readFile(path);
+      totalBytes += content.byteLength;
+      if (totalBytes > 40 * 1024 * 1024) {
+        throw new SandboxError(
+          'SANDBOX_SOURCE_UNAVAILABLE',
+          'Sandbox build output exceeds the preview size limit'
+        );
+      }
+      files.push({ path: path.slice('dist/'.length), content });
+    }
+    try {
+      return createPreviewArtifactBundle(files);
+    } catch (error) {
+      throw new SandboxError(
+        'SANDBOX_SOURCE_UNAVAILABLE',
+        'Sandbox build output cannot be published as a preview',
+        false,
+        error
+      );
+    }
   }
 
   async terminate(input: {

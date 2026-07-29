@@ -84,7 +84,9 @@ export const createSandboxPolicy = (
     const args =
       name === 'install'
         ? [input.hasPackageLock ? 'ci' : 'install']
-        : ['run', name];
+        : name === 'build'
+          ? ['run', 'build', '--', '--base=./']
+          : ['run', name];
     const timeoutMs =
       name === 'install'
         ? config.commandTimeouts.install

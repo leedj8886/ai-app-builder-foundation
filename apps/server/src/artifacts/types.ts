@@ -16,6 +16,18 @@ export interface ProjectArtifactBundleV1 {
   packageJson: ProjectSnapshotPackageJson;
 }
 
+export interface PreviewArtifactFile {
+  path: string;
+  contentBase64: string;
+  contentType: string;
+}
+
+export interface PreviewArtifactBundleV1 {
+  version: 1;
+  entryPath: 'index.html';
+  files: PreviewArtifactFile[];
+}
+
 export interface ArtifactLimits {
   maxCompressedBytes: number;
   maxUncompressedBytes: number;
@@ -67,3 +79,5 @@ export interface EncodedProjectArtifact {
   manifest: ArtifactIntegrity;
   sha256: string;
 }
+
+export type EncodedArtifact = EncodedProjectArtifact;

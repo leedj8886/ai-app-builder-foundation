@@ -46,6 +46,7 @@ import iosLight from '@/assets/v0/ios-light.png'
 import { ConversationTimeline } from '@/components/ConversationTimeline'
 import { RecentChats } from '@/components/RecentChats'
 import { WorkspaceEditComposer } from '@/components/WorkspaceEditComposer'
+import { VerifiedBuildPreview } from '@/components/VerifiedBuildPreview'
 import { agentApi, authApi, chatApi, projectApi } from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
 import {
@@ -1143,6 +1144,18 @@ function PreviewPanel({
   snapshot: WorkspaceState['snapshot']
   generationStatus: WorkspaceState['generation']['status']
 }) {
+  if (snapshot?.preview?.kind === 'verified-build') {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <VerifiedBuildPreview
+          snapshotId={snapshot.id}
+          url={snapshot.preview.url}
+          isGenerating={generationStatus === 'running'}
+        />
+      </div>
+    )
+  }
+
   const previewState = getSnapshotPreviewState(snapshot, generationStatus)
 
   if (previewState.kind === 'empty') {
@@ -1181,6 +1194,7 @@ function PreviewPanel({
           snapshotId={snapshot!.id}
           model={previewState.model}
           isGenerating={previewState.kind === 'running'}
+          verification={snapshot!.validation.verification}
         />
       </Suspense>
     </div>

@@ -12,6 +12,7 @@ import { ArtifactManifest } from '../models/ArtifactManifest';
 import type { ArtifactStore } from './ArtifactStore';
 import { ArtifactService } from './artifactService';
 import { getArtifactConfig } from './config';
+import { createPreviewArtifactBundle } from './previewBundle';
 import {
   getArtifactService,
   resetArtifactRuntimeForTests
@@ -149,6 +150,32 @@ test('owned reads require the complete Workspace Project and kind scope', async 
       })
     );
   }
+});
+
+test('source bundle reads never decode or corrupt preview build artifacts', async () => {
+  const service = serviceFor();
+  const references = ids();
+  const result = await service.writePreviewBundle({
+    ...references,
+    kind: 'preview_build',
+    idempotencyKey: `preview:${references.createdByRunId}`,
+    bundle: createPreviewArtifactBundle([
+      {
+        path: 'index.html',
+        content: new TextEncoder().encode('<main>verified</main>')
+      }
+    ])
+  });
+
+  await expectCode('ARTIFACT_NOT_FOUND', () =>
+    service.readBundle(result.artifactId)
+  );
+  assert.equal(
+    (await ArtifactManifest.findOne({
+      artifactId: result.artifactId
+    }).orFail()).state,
+    'ready'
+  );
 });
 
 test('concurrent writers with the same key converge on one artifact', async () => {

@@ -30,7 +30,8 @@ const startWorker = async () => {
   const validator = config.validationExecutor === 'legacy'
     ? createProjectValidator({
       workspaceRoot: config.workspaceRoot,
-      validation: config.validation
+      validation: config.validation,
+      artifactService: getArtifactService()
     })
     : await createSandboxRuntime({ redis: connection }).then((runtime) =>
       createSandboxProjectValidator({

@@ -1,6 +1,9 @@
 import mongoose, { Schema, Types } from 'mongoose';
 
-export type ArtifactKind = 'project_snapshot' | 'validation_candidate';
+export type ArtifactKind =
+  | 'project_snapshot'
+  | 'validation_candidate'
+  | 'preview_build';
 export type ArtifactManifestState =
   | 'writing'
   | 'ready'
@@ -50,7 +53,7 @@ const ArtifactManifestSchema = new Schema<IArtifactManifest>(
     },
     kind: {
       type: String,
-      enum: ['project_snapshot', 'validation_candidate'],
+      enum: ['project_snapshot', 'validation_candidate', 'preview_build'],
       required: true
     },
     idempotencyKey: { type: String, required: true },

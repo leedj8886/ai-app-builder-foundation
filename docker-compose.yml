@@ -51,6 +51,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-local-development-only-change-before-deploying}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+      PREVIEW_PUBLIC_ORIGIN: ${PREVIEW_PUBLIC_ORIGIN:-http://localhost:3001}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       AGENT_QUEUE_NAME: ${AGENT_QUEUE_NAME:-v0-agent-runs}
       AGENT_MODEL: ${AGENT_MODEL:-}

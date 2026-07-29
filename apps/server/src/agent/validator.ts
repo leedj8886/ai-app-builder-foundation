@@ -31,6 +31,8 @@ import { resolveStylingCapabilities } from './styling/resolveCapabilities';
 import { adaptersFor } from './styling/registry';
 import { readCssBuildEvidence } from './styling/buildEvidence';
 import type { StylingIssue } from './styling/types';
+import type { ArtifactService } from '../artifacts/artifactService';
+import { readPreviewDirectory } from '../artifacts/readPreviewDirectory';
 
 export interface ValidationProgressEvent {
   phase: ValidationPhase;
@@ -76,6 +78,7 @@ interface CreateProjectValidatorOptions {
   retryDelay?: (durationMs: number) => Promise<void>;
   env?: NodeJS.ProcessEnv;
   cssEvidenceReader?: typeof readCssBuildEvidence;
+  artifactService?: ArtifactService;
 }
 
 interface InstallationError extends Error {
@@ -416,7 +419,7 @@ export const createProjectValidator = (
           {
             name: 'build' as const,
             phase: 'build' as const,
-            args: ['run', 'build'],
+            args: ['run', 'build', '--', '--base=./'],
             timeoutMs: validation.buildTimeoutMs
           }
         ].map(async check => {
@@ -493,15 +496,67 @@ export const createProjectValidator = (
           }
         }
 
-        return failed
-          ? {
+        if (failed) {
+          return {
             status: 'failed',
             verification: 'verified',
             checks,
             category: failed.category ?? 'CODE_ERROR',
             retryable: false
+          };
+        }
+
+        let previewArtifactId: string | undefined;
+        if (options.artifactService && input.sandboxScope) {
+          try {
+            const bundle = await readPreviewDirectory(workspace.path);
+            const previewArtifact = await options.artifactService.writePreviewBundle({
+              workspaceId: input.sandboxScope.workspaceId,
+              projectId: input.sandboxScope.projectId,
+              createdByRunId: input.sandboxScope.runId,
+              kind: 'preview_build',
+              idempotencyKey:
+                `legacy-preview:${input.sandboxScope.runId.toString()}:${input.sandboxScope.attempt}`,
+              bundle
+            });
+            previewArtifactId = previewArtifact.artifactId;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            checks.push({
+              name: 'build',
+              phase: 'build',
+              status: 'failed',
+              category: 'INFRA_ERROR',
+              stdout: '',
+              stderr: message,
+              durationMs: 0,
+              cache: 'not-applicable',
+              attempt: 0
+            });
+            await input.onProgress?.({
+              phase: 'build',
+              status: 'failed',
+              category: 'INFRA_ERROR',
+              attempt: 0,
+              cache: 'not-applicable',
+              message
+            });
+            return {
+              status: 'failed',
+              verification: 'verified',
+              checks,
+              category: 'INFRA_ERROR',
+              retryable: true
+            };
           }
-          : { status: 'passed', verification: 'verified', checks };
+        }
+
+        return {
+          status: 'passed',
+          verification: 'verified',
+          ...(previewArtifactId && { previewArtifactId }),
+          checks
+        };
       } finally {
         await workspace.cleanup();
       }
