@@ -263,11 +263,24 @@ test('authenticated run creation persists its event and BullMQ job', async () =>
 test('retry validation creates a queued Run without regenerating a Chat message', async () => {
   const { ownerToken, owner, project } = await fixtures();
   const branch = await ensureMainBranch(project);
+  const chat = await Chat.create({
+    userId: owner._id,
+    projectId: project._id,
+    branchId: branch._id,
+    title: 'Retry validation chat',
+    messages: [{
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: 'Build a dashboard',
+      createdAt: new Date()
+    }]
+  });
   const sourceRun = await AgentRun.create({
     userId: owner._id,
     workspaceId: project.workspaceId,
     projectId: project._id,
     branchId: branch._id,
+    chatId: chat._id,
     prompt: 'Build a dashboard',
     status: 'failed',
     mode: 'create',
@@ -303,6 +316,17 @@ test('retry validation creates a queued Run without regenerating a Chat message'
   assert.equal(response.body.run.status, 'queued');
   assert.equal(response.body.run.retryOfRunId, sourceRun._id.toString());
   assert.equal(response.body.run.validationCandidateId, candidate._id.toString());
+  assert.equal((await Chat.findById(chat._id).orFail()).messages.length, 1);
+
+  const timeline = await request(app)
+    .get(`/api/chat/${chat._id}/timeline`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+  assert.equal(timeline.body.turns.length, 2);
+  assert.equal(
+    timeline.body.turns[1].retryOfRunId,
+    sourceRun._id.toString()
+  );
 });
 
 test('concurrent validation retry requests converge on one non-terminal Run', async () => {

@@ -69,6 +69,9 @@ export const getTimelineEventState = (
 export const canToggleTurn = (turn: ChatTimelineTurn): boolean =>
   terminalStatuses.has(turn.agent.status)
 
+export const showsUserMessage = (turn: ChatTimelineTurn): boolean =>
+  turn.retryOfRunId === undefined
+
 export interface ValidationEventPayload {
   phase: 'structure' | 'dependencies' | 'type-check' | 'build'
   status: 'passed' | 'failed' | 'retrying' | 'skipped'
@@ -280,6 +283,7 @@ export const insertTimelineRun = (
   const createdAt = run.createdAt ?? new Date().toISOString()
   const turn: ChatTimelineTurn = {
     runId: run._id,
+    ...(run.retryOfRunId ? { retryOfRunId: run.retryOfRunId } : {}),
     userMessage: {
       content: run.prompt,
       createdAt,

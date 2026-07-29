@@ -9,6 +9,7 @@ type Identifier = string | { toString(): string };
 
 export interface TimelineRunSource {
   _id: Identifier;
+  retryOfRunId?: Identifier;
   prompt: string;
   status: AgentRunStatus;
   model: string;
@@ -42,6 +43,7 @@ export interface ChatTimelineEvent {
 
 export interface ChatTimelineTurn {
   runId: string;
+  retryOfRunId?: string;
   userMessage: {
     content: string;
     createdAt: string;
@@ -173,6 +175,9 @@ export const buildChatTimelineTurn = (
 
   return {
     runId: input.run._id.toString(),
+    ...(input.run.retryOfRunId
+      ? { retryOfRunId: input.run.retryOfRunId.toString() }
+      : {}),
     userMessage: {
       content: input.run.prompt,
       createdAt: input.run.createdAt.toISOString()

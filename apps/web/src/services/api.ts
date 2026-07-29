@@ -199,6 +199,7 @@ export interface ChatTimelinePlan {
 
 export interface ChatTimelineTurn {
   runId: string;
+  retryOfRunId?: string;
   userMessage: {
     content: string;
     createdAt: string;

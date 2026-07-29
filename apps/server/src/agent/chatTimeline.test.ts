@@ -112,3 +112,21 @@ test('preserves failed and incomplete Runs without requiring a Snapshot', () => 
   assert.equal(turn.agent.error?.message, 'Type-check failed');
   assert.equal(turn.snapshot, undefined);
 });
+
+test('marks validation retries as attempts of the source conversation turn', () => {
+  const sourceRunId = '66a3f4402f24b17418d55abe';
+  const turn = buildChatTimelineTurn({
+    run: {
+      _id: '66a3f4402f24b17418d55abf',
+      retryOfRunId: sourceRunId,
+      prompt: 'Build a dashboard',
+      status: 'validating',
+      model: 'deepseek-chat',
+      createdAt: new Date('2026-07-25T10:02:00.000Z')
+    },
+    events: [],
+    snapshot: null
+  });
+
+  assert.equal(turn.retryOfRunId, sourceRunId);
+});

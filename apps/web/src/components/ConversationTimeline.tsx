@@ -6,6 +6,7 @@ import {
   ChevronUp,
   FileCode2,
   Loader2,
+  RotateCcw,
   Sparkles,
   Square,
 } from 'lucide-react'
@@ -20,6 +21,7 @@ import {
   formatCollapsedTurnLabel,
   formatPlanningDuration,
   getTimelineEventState,
+  showsUserMessage,
   validationEventLabel,
   type ChatTimelineState,
 } from '@/lib/chatTimeline'
@@ -505,7 +507,17 @@ export function ConversationTimeline({
                 key={turn.runId}
                 data-testid={`conversation-turn-${turn.runId}`}
               >
-                <UserMessage turn={turn} />
+                {showsUserMessage(turn) ? (
+                  <UserMessage turn={turn} />
+                ) : (
+                  <div
+                    className="flex items-center gap-2 text-xs font-medium text-neutral-500"
+                    data-testid={`validation-retry-${turn.runId}`}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>重新验证上一次生成结果</span>
+                  </div>
+                )}
                 <AgentTurn
                   turn={turn}
                   expanded={state.expandedRunIds.has(turn.runId)}

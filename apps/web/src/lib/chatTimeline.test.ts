@@ -20,6 +20,7 @@ import {
   replaceTimelinePage,
   resetTimeline,
   resolveDefaultExpandedRunIds,
+  showsUserMessage,
 } from './chatTimeline'
 
 const turn = (
@@ -243,6 +244,28 @@ test('inserts the returned Run as the expanded active turn', () => {
 
   assert.deepEqual(inserted.turns.map((item) => item.runId), ['previous', 'active'])
   assert.equal(inserted.expandedRunIds.has('active'), true)
+})
+
+test('inserts validation retries without presenting the prompt as a new message', () => {
+  const state = replaceTimelinePage(
+    createTimelineState(),
+    page([turn('source', 'failed')]),
+  )
+  const inserted = insertTimelineRun(state, {
+    _id: 'retry',
+    projectId: 'project-1',
+    prompt: 'Build a dashboard',
+    status: 'queued',
+    mode: 'create',
+    model: 'deepseek-chat',
+    retryOfRunId: 'source',
+    createdAt: '2026-07-25T10:02:00.000Z',
+  })
+  const retry = inserted.turns[1]!
+
+  assert.equal(retry.retryOfRunId, 'source')
+  assert.equal(showsUserMessage(retry), false)
+  assert.equal(showsUserMessage(inserted.turns[0]!), true)
 })
 
 test('terminal event completes the active turn and collapses the previous turn', () => {
