@@ -12,6 +12,7 @@ import {
 } from './errors';
 import type { SandboxPolicy } from './policy';
 import type { SandboxProvider } from './provider/SandboxProvider';
+import type { SandboxConfig } from './config';
 import type {
   ResourceProfile,
   SandboxCommandResult,
@@ -24,6 +25,7 @@ import { SandboxRepository } from './SandboxRepository';
 
 interface SandboxServiceOptions {
   artifactService: ArtifactService;
+  config: SandboxConfig;
   scheduler: QuotaScheduler;
   repository: SandboxRepository;
   policy: SandboxPolicy;
@@ -192,7 +194,7 @@ export class SandboxService {
         });
       const handle = await provider.connect(ref);
       await handle.waitUntilReady({
-        timeoutMs: 60_000
+        timeoutMs: this.options.config.readinessTimeoutMs
       });
       await handle.files.writeFiles(this.uploadFiles(bundle));
       const ready = await this.options.repository.transition({
@@ -421,8 +423,8 @@ export class SandboxService {
         allowedCidrs: []
       },
       lifecycle: {
-        leaseSeconds: 900,
-        autoDeleteSeconds: 1_800
+        leaseSeconds: this.options.config.leaseSeconds,
+        autoDeleteSeconds: this.options.config.autoDeleteSeconds
       },
       labels: {
         'managed-by': 'open-v0',

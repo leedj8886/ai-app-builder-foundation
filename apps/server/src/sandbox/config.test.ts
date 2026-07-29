@@ -15,6 +15,7 @@ test('getSandboxConfig uses safe defaults', () => {
   assert.equal(config.leaseSeconds, 900);
   assert.equal(config.autoDeleteSeconds, 1_800);
   assert.equal(config.orphanGraceMs, 300_000);
+  assert.equal(config.reconcileIntervalMs, 30_000);
   assert.deepEqual(config.commandTimeouts, {
     install: 180_000,
     typeCheck: 60_000,
@@ -27,13 +28,23 @@ test('getSandboxConfig parses strict overrides', () => {
     SANDBOX_PROVIDER: 'daytona',
     SANDBOX_LOCAL_ENABLED: 'true',
     SANDBOX_ALLOWED_BUILD_IMAGES: 'node:22, node:24',
-    SANDBOX_QUOTA_LOCK_TTL_MS: '7000'
+    SANDBOX_QUOTA_LOCK_TTL_MS: '7000',
+    SANDBOX_READINESS_TIMEOUT_MS: '8000',
+    SANDBOX_LEASE_SECONDS: '9000',
+    SANDBOX_AUTO_DELETE_SECONDS: '10000',
+    SANDBOX_ORPHAN_GRACE_MS: '11000',
+    SANDBOX_RECONCILE_INTERVAL_MS: '12000'
   });
 
   assert.equal(config.provider, 'daytona');
   assert.equal(config.localEnabled, true);
   assert.deepEqual(config.allowedBuildImages, ['node:22', 'node:24']);
   assert.equal(config.quotaLockTtlMs, 7_000);
+  assert.equal(config.readinessTimeoutMs, 8_000);
+  assert.equal(config.leaseSeconds, 9_000);
+  assert.equal(config.autoDeleteSeconds, 10_000);
+  assert.equal(config.orphanGraceMs, 11_000);
+  assert.equal(config.reconcileIntervalMs, 12_000);
 });
 
 test('getSandboxConfig rejects unsafe production local mode', () => {
@@ -68,5 +79,9 @@ test('getSandboxConfig rejects malformed values', () => {
   assert.throws(
     () => getSandboxConfig({ SANDBOX_ALLOWED_BUILD_IMAGES: 'node:22, ' }),
     /non-empty image names/
+  );
+  assert.throws(
+    () => getSandboxConfig({ SANDBOX_RECONCILE_INTERVAL_MS: '0' }),
+    /positive safe integer/
   );
 });

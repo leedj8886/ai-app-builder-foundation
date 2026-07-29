@@ -72,7 +72,8 @@ test('environment examples document the real runtime configuration', async () =>
     'AGENT_MODEL',
     'AGENT_MAX_REPAIR_ATTEMPTS',
     'AGENT_VALIDATION_EXECUTOR',
-    'AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT'
+    'AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT',
+    'SANDBOX_RECONCILE_INTERVAL_MS'
   ]) {
     assert.match(rootEnv, new RegExp(`^${key}=`, 'm'));
   }
@@ -83,6 +84,7 @@ test('environment examples document the real runtime configuration', async () =>
   assert.match(serverEnv, /^AGENT_VALIDATION_EXECUTOR=legacy$/m);
   assert.match(serverEnv, /^SANDBOX_PROVIDER=fake$/m);
   assert.match(serverEnv, /^SANDBOX_LOCAL_ENABLED=false$/m);
+  assert.match(serverEnv, /^SANDBOX_RECONCILE_INTERVAL_MS=30000$/m);
   assert.doesNotMatch(serverEnv, /^OPENAI_API_KEY=/m);
   assert.match(webEnv, /^VITE_API_URL=/m);
 

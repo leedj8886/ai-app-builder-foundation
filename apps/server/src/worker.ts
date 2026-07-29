@@ -3,7 +3,10 @@ import { connectDB, disconnectDB } from './utils/db';
 import { getAgentConfig } from './agent/config';
 import { createRedisConnection } from './agent/redis';
 import { createProductionModelClient } from './agent/modelClient';
-import { createProjectValidator } from './agent/validator';
+import {
+  createProjectValidator,
+  type ProjectValidator
+} from './agent/validator';
 import { createAgentWorker } from './agent/createWorker';
 import { getDeepSeekConfig } from './services/modelProvider';
 import { cleanupDependencyCache } from './agent/validation/cacheCleanup';
@@ -11,6 +14,10 @@ import { createSandboxRuntime } from './sandbox/runtime';
 import { createSandboxProjectValidator } from './agent/sandboxValidator';
 import { getArtifactService } from './artifacts/runtime';
 import { getSandboxConfig } from './sandbox/config';
+import {
+  startSandboxReconcilerLoop,
+  type SandboxReconcilerLoop
+} from './sandbox/reconcilerLoop';
 
 dotenv.config();
 
@@ -27,22 +34,45 @@ const startWorker = async () => {
     ...providerConfig,
     model: config.model
   });
-  const validator = config.validationExecutor === 'legacy'
-    ? createProjectValidator({
+  let reconcilerLoop: SandboxReconcilerLoop | undefined;
+  let validator: ProjectValidator;
+  if (config.validationExecutor === 'legacy') {
+    validator = createProjectValidator({
       workspaceRoot: config.workspaceRoot,
       validation: config.validation,
       artifactService: getArtifactService()
-    })
-    : await createSandboxRuntime({ redis: connection }).then((runtime) =>
-      createSandboxProjectValidator({
-        service: runtime.service,
-        artifactService: getArtifactService(),
-        provider: runtime.provider,
-        image: runtime.image,
-        resources: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
-        verification: runtime.verification
-      })
+    });
+  } else {
+    const runtime = await createSandboxRuntime({ redis: connection });
+    reconcilerLoop = startSandboxReconcilerLoop({
+      reconciler: runtime.reconciler,
+      intervalMs: runtime.reconcileIntervalMs,
+      onResult: (result) => {
+        if (Object.values(result).some((count) => count > 0)) {
+          console.log('Sandbox reconciliation completed:', result);
+        }
+      },
+      onError: (error) => {
+        console.warn(
+          'Sandbox reconciliation failed:',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+      }
+    });
+    await reconcilerLoop.reconcileNow();
+    console.log(
+      `Sandbox reconciler started ` +
+      `(interval: ${runtime.reconcileIntervalMs}ms)`
     );
+    validator = createSandboxProjectValidator({
+      service: runtime.service,
+      artifactService: getArtifactService(),
+      provider: runtime.provider,
+      image: runtime.image,
+      resources: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
+      verification: runtime.verification
+    });
+  }
   const worker = createAgentWorker({
     queueName: config.queueName,
     connection,
@@ -86,6 +116,7 @@ const startWorker = async () => {
   const shutdown = async () => {
     clearInterval(cleanupTimer);
     await worker.close();
+    await reconcilerLoop?.close();
     await connection.quit();
     await disconnectDB();
     process.exit(0);

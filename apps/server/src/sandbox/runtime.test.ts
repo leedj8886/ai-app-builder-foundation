@@ -16,13 +16,16 @@ test('Sandbox runtime marks Fake execution simulated', async () => {
     artifactService,
     env: {
       NODE_ENV: 'test',
-      SANDBOX_PROVIDER: 'fake'
+      SANDBOX_PROVIDER: 'fake',
+      SANDBOX_RECONCILE_INTERVAL_MS: '12345'
     }
   });
 
   assert.equal(runtime.provider, 'fake');
   assert.equal(runtime.verification, 'simulated');
   assert.ok(runtime.fakeState);
+  assert.ok(runtime.reconciler);
+  assert.equal(runtime.reconcileIntervalMs, 12_345);
 });
 
 test('Sandbox runtime enables verified Local execution only outside production', async () => {

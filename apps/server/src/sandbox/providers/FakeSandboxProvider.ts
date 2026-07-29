@@ -48,6 +48,7 @@ export class FakeSandboxState {
   private nextCreateFailure?: NextCreateFailure;
   private readonly commandResults: SandboxCommandResult[] = [];
   private buildOutput = new Map<string, Uint8Array>();
+  private readonly readinessTimeoutValues: number[] = [];
 
   failNextCreate(input: NextCreateFailure): void {
     this.nextCreateFailure = input;
@@ -81,6 +82,14 @@ export class FakeSandboxState {
 
   takeCommandResult(): SandboxCommandResult | undefined {
     return this.commandResults.shift();
+  }
+
+  recordReadinessTimeout(timeoutMs: number): void {
+    this.readinessTimeoutValues.push(timeoutMs);
+  }
+
+  readinessTimeouts(): readonly number[] {
+    return [...this.readinessTimeoutValues];
   }
 
   setReadiness(ref: SandboxRef, value: 'ready' | 'timeout'): void {
@@ -232,7 +241,8 @@ export class FakeSandboxProvider implements SandboxProvider {
 
     return {
       ref: { ...resource.ref },
-      waitUntilReady: async () => {
+      waitUntilReady: async ({ timeoutMs }) => {
+        this.state.recordReadinessTimeout(timeoutMs);
         const current = ensurePresent();
         if (current.readiness === 'timeout') {
           throw new SandboxError(

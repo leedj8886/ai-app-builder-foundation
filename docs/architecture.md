@@ -116,6 +116,11 @@ LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 
 - 客户端按 Run ID 和 sequence 去重。
 - 编辑以活动快照和 revision 为基础，避免旧结果覆盖新状态。
 - 基础设施重试复用已保存候选，不重新生成用户对话。
+- Sandbox Worker 启动时先恢复未完成 Lease，之后以非重叠周期执行
+  Reconcile；它会处理超时预留、未知创建结果、丢失资源、延迟销毁、重复资源
+  和带有效所有权标签的孤儿资源。
+- Readiness、Lease、自动删除、孤儿保护窗口与 Reconcile 周期均来自运行时
+  配置，不在 SandboxService 中硬编码。
 
 ## 扩展点
 

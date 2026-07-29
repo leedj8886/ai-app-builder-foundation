@@ -9,6 +9,7 @@ export interface SandboxConfig {
   leaseSeconds: number;
   autoDeleteSeconds: number;
   orphanGraceMs: number;
+  reconcileIntervalMs: number;
   commandTimeouts: {
     install: number;
     typeCheck: number;
@@ -108,6 +109,11 @@ export const getSandboxConfig = (
       env.SANDBOX_ORPHAN_GRACE_MS,
       300_000,
       'SANDBOX_ORPHAN_GRACE_MS'
+    ),
+    reconcileIntervalMs: positive(
+      env.SANDBOX_RECONCILE_INTERVAL_MS,
+      30_000,
+      'SANDBOX_RECONCILE_INTERVAL_MS'
     ),
     commandTimeouts: {
       install: positive(

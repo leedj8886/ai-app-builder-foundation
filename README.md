@@ -194,7 +194,9 @@ docker compose --profile maintenance run --rm artifact-reconciler
 
 当前包含 provider-neutral Sandbox Core、Fake Provider、仅限开发测试的
 LocalProcessProvider、持久化 Lease、Redis 配额调度、Artifact hydration 和
-Sandbox Reconciler。Redis 不可用时，新预留 fail closed。
+Sandbox Reconciler。选择 sandbox executor 的 Worker 会在启动时先执行一次
+Reconcile，之后按 `SANDBOX_RECONCILE_INTERVAL_MS` 周期恢复或回收 Lease；
+Redis 不可用时，新预留 fail closed。
 
 以下 Lease 状态占用 Project/Workspace 配额：`reserved`、`provisioning`、
 `ready`、`running`、`terminating`。每个 Branch 最多一个占用配额的 Build
@@ -216,6 +218,10 @@ AGENT_VALIDATION_EXECUTOR=sandbox
 `SANDBOX_PROVIDER=local` 和 `SANDBOX_LOCAL_ENABLED=true`，使用
 LocalProcessProvider 完成标记为 `verified` 的本机真实构建。生产环境禁止
 local，配置错误会使 Worker 启动失败。
+
+Readiness、Lease、自动删除、孤儿保护窗口、Reconcile 周期和三段构建命令超时
+均通过 `SANDBOX_*` 环境变量配置。周期任务不会并发执行；Worker 退出时会等待
+当前 Reconcile 安全结束。
 
 Compose 默认继续使用 `legacy`；因此升级不会改变当前 Worker 的生产校验行为。
 Daytona Provider 和长驻 PreviewDeployment 仍属于后续阶段。

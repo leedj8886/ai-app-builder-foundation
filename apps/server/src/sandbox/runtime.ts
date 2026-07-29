@@ -9,6 +9,7 @@ import { FakeSandboxProvider, FakeSandboxState } from './providers/FakeSandboxPr
 import { LocalProcessProvider } from './providers/LocalProcessProvider';
 import { QuotaScheduler } from './QuotaScheduler';
 import { SandboxRepository } from './SandboxRepository';
+import { SandboxReconciler } from './SandboxReconciler';
 import { SandboxService } from './SandboxService';
 import { WorkspaceQuotaLock } from './WorkspaceQuotaLock';
 
@@ -21,6 +22,8 @@ interface CreateSandboxRuntimeOptions {
 
 export interface SandboxRuntime {
   service: SandboxService;
+  reconciler: SandboxReconciler;
+  reconcileIntervalMs: number;
   provider: string;
   image: string;
   verification: 'verified' | 'simulated';
@@ -59,14 +62,23 @@ export const createSandboxRuntime = async (
   const scheduler = new QuotaScheduler(lock, repository);
   const service = new SandboxService({
     artifactService: options.artifactService ?? getArtifactService(),
+    config,
     scheduler,
     repository,
     policy: createSandboxPolicy(config),
     providers
   });
+  const reconciler = new SandboxReconciler({
+    repository,
+    service,
+    providers,
+    orphanGraceMs: config.orphanGraceMs
+  });
 
   return {
     service,
+    reconciler,
+    reconcileIntervalMs: config.reconcileIntervalMs,
     provider: config.provider,
     image: config.allowedBuildImages[0],
     verification: config.provider === 'fake' ? 'simulated' : 'verified',

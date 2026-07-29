@@ -154,10 +154,28 @@ export class SandboxRepository {
     return SandboxLease.findOneAndUpdate(
       {
         _id: input.leaseId,
+        state: 'provisioning',
         provider: input.provider,
         externalId: { $exists: false }
       },
       { $set: { externalId: input.externalId } },
+      { new: true, runValidators: true }
+    ).exec();
+  }
+
+  clearExternalId(input: {
+    leaseId: Types.ObjectId;
+    provider: string;
+    externalId: string;
+  }): Promise<SandboxLeaseDocument | null> {
+    return SandboxLease.findOneAndUpdate(
+      {
+        _id: input.leaseId,
+        state: 'provisioning',
+        provider: input.provider,
+        externalId: input.externalId
+      },
+      { $unset: { externalId: 1 } },
       { new: true, runValidators: true }
     ).exec();
   }

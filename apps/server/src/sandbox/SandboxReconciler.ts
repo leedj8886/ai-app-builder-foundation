@@ -1,9 +1,14 @@
 import { Types } from 'mongoose';
 import { SandboxLease, type SandboxLeaseDocument } from '../models/SandboxLease';
 import type { SandboxProvider } from './provider/SandboxProvider';
+import { isSandboxError } from './errors';
 import { SandboxRepository } from './SandboxRepository';
 import type { SandboxService } from './SandboxService';
-import type { SandboxOwnership, SandboxSpec } from './types';
+import type {
+  SandboxInspection,
+  SandboxOwnership,
+  SandboxSpec
+} from './types';
 
 export const SANDBOX_RECONCILER_BATCH_SIZE = 100;
 
@@ -14,6 +19,7 @@ export interface SandboxReconcileResult {
   terminated: number;
   destroyedDuplicates: number;
   destroyedOrphans: number;
+  errors: number;
 }
 
 interface SandboxReconcilerOptions {
@@ -38,7 +44,8 @@ export class SandboxReconciler {
       lost: 0,
       terminated: 0,
       destroyedDuplicates: 0,
-      destroyedOrphans: 0
+      destroyedOrphans: 0,
+      errors: 0
     };
     const leases = await SandboxLease.find({
       state: { $ne: 'terminated' }
@@ -52,10 +59,13 @@ export class SandboxReconciler {
         await this.reconcileLease(lease, result);
       } catch {
         // Provider and Artifact failures preserve durable state for a later run.
+        result.errors += 1;
       }
     }
     for (const provider of this.options.providers.values()) {
-      await this.reconcileOrphans(provider, result).catch(() => undefined);
+      await this.reconcileOrphans(provider, result).catch(() => {
+        result.errors += 1;
+      });
     }
     return result;
   }
@@ -105,11 +115,12 @@ export class SandboxReconciler {
       if (!lease.externalId) return;
       const provider = this.options.providers.get(lease.provider);
       if (!provider) return;
-      const inspection = await provider.inspect({
+      const ref = {
         provider: lease.provider,
         externalId: lease.externalId
-      });
-      if (inspection.status === 'missing') {
+      };
+      const inspection = await this.inspect(provider, ref);
+      if (!inspection || inspection.status === 'missing') {
         const changed = await this.options.repository.transition({
           leaseId: lease._id,
           from: [lease.state],
@@ -140,11 +151,20 @@ export class SandboxReconciler {
     if (!provider) return;
     let externalId = lease.externalId;
     if (externalId) {
-      const inspection = await provider.inspect({
+      const ref = {
         provider: lease.provider,
         externalId
-      });
-      if (inspection.status === 'missing') externalId = undefined;
+      };
+      const inspection = await this.inspect(provider, ref);
+      if (!inspection || inspection.status === 'missing') {
+        const cleared = await this.options.repository.clearExternalId({
+          leaseId: lease._id,
+          provider: lease.provider,
+          externalId
+        });
+        if (!cleared) return;
+        externalId = undefined;
+      }
     }
 
     if (!externalId) {
@@ -153,8 +173,15 @@ export class SandboxReconciler {
         provisioningKey: lease.provisioningKey,
         labels: spec.labels
       });
-      const inspections = await Promise.all(
-        refs.map(async (ref) => ({ ref, value: await provider.inspect(ref) }))
+      const inspections = (await Promise.all(
+        refs.map(async (ref) => {
+          const value = await this.inspect(provider, ref);
+          return value && value.status !== 'missing'
+            ? { ref, value }
+            : undefined;
+        })
+      )).filter(
+        (entry): entry is NonNullable<typeof entry> => entry !== undefined
       );
       inspections.sort(
         (left, right) =>
@@ -199,8 +226,10 @@ export class SandboxReconciler {
     });
     const cutoff = this.now().getTime() - this.options.orphanGraceMs;
     for (const ref of refs.slice(0, SANDBOX_RECONCILER_BATCH_SIZE)) {
-      const inspection = await provider.inspect(ref);
+      const inspection = await this.inspect(provider, ref);
       if (
+        !inspection ||
+        inspection.status === 'missing' ||
         inspection.createdAt.getTime() > cutoff ||
         !this.validOwnershipLabels(inspection.labels) ||
         (await this.options.repository.findByProviderRef(
@@ -263,5 +292,22 @@ export class SandboxReconciler {
       Types.ObjectId.isValid(labels.branchId ?? '') &&
       (labels.purpose === 'build' || labels.purpose === 'preview')
     );
+  }
+
+  private async inspect(
+    provider: SandboxProvider,
+    ref: { provider: string; externalId: string }
+  ): Promise<SandboxInspection | undefined> {
+    try {
+      return await provider.inspect(ref);
+    } catch (error) {
+      if (
+        isSandboxError(error) &&
+        error.code === 'SANDBOX_NOT_FOUND'
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 }

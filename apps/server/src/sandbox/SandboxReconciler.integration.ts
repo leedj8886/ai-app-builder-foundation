@@ -168,6 +168,29 @@ test('SandboxReconciler creates, binds, and resumes provisioning', async () => {
   assert.equal(current?.externalId, state.resources()[0].ref.externalId);
 });
 
+test('SandboxReconciler replaces a missing provisioning reference', async () => {
+  const { repository, state, reconciler } = harness();
+  const input = record();
+  const lease = await repository.createReserved(input);
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['reserved'],
+    to: 'provisioning'
+  });
+  await repository.bindExternalId({
+    leaseId: lease._id,
+    provider: 'fake',
+    externalId: 'fake-missing'
+  });
+
+  const result = await reconciler.reconcile();
+  const current = await repository.findById(lease._id);
+  assert.equal(result.resumedProvisioning, 1);
+  assert.equal(current?.state, 'ready');
+  assert.notEqual(current?.externalId, 'fake-missing');
+  assert.equal(current?.externalId, state.resources()[0].ref.externalId);
+});
+
 test('SandboxReconciler marks missing running resources lost', async () => {
   const { repository, state, provider, reconciler } = harness();
   const input = record();

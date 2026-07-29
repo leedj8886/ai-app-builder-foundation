@@ -106,6 +106,11 @@ test('SandboxRepository rejects invalid programmer transitions', async () => {
 
 test('SandboxRepository binds one external id', async () => {
   const lease = await repository.createReserved(reservation());
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['reserved'],
+    to: 'provisioning'
+  });
   assert.equal(
     (
       await repository.bindExternalId({
@@ -123,6 +128,39 @@ test('SandboxRepository binds one external id', async () => {
       externalId: 'resource-2'
     }),
     null
+  );
+});
+
+test('SandboxRepository clears only the expected provisioning reference', async () => {
+  const lease = await repository.createReserved(reservation());
+  await repository.transition({
+    leaseId: lease._id,
+    from: ['reserved'],
+    to: 'provisioning'
+  });
+  await repository.bindExternalId({
+    leaseId: lease._id,
+    provider: 'fake',
+    externalId: 'resource-1'
+  });
+
+  assert.equal(
+    await repository.clearExternalId({
+      leaseId: lease._id,
+      provider: 'fake',
+      externalId: 'other-resource'
+    }),
+    null
+  );
+  assert.equal(
+    (
+      await repository.clearExternalId({
+        leaseId: lease._id,
+        provider: 'fake',
+        externalId: 'resource-1'
+      })
+    )?.externalId,
+    undefined
   );
 });
 

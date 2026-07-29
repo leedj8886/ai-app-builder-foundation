@@ -54,8 +54,10 @@ const input = (): CreateBuildSandboxInput => ({
 });
 
 const harness = (
-  artifact: ProjectArtifactBundleV1 = bundle
+  artifact: ProjectArtifactBundleV1 = bundle,
+  env: Record<string, string | undefined> = {}
 ) => {
+  const config = getSandboxConfig(env);
   const repository = new SandboxRepository();
   const state = new FakeSandboxState();
   const provider = new FakeSandboxProvider(state);
@@ -71,9 +73,10 @@ const harness = (
   } as QuotaScheduler;
   const service = new SandboxService({
     artifactService,
+    config,
     scheduler,
     repository,
-    policy: createSandboxPolicy(getSandboxConfig({})),
+    policy: createSandboxPolicy(config),
     providers: new Map([['fake', provider]])
   });
   return { service, state, repository };
@@ -96,6 +99,23 @@ test('SandboxService provisions one ready Lease from an Artifact', async () => {
   assert.equal(
     new TextDecoder().decode(files.get('package.json')),
     `${JSON.stringify(bundle.packageJson, null, 2)}\n`
+  );
+});
+
+test('SandboxService applies configured readiness and Lease lifecycle', async () => {
+  const { service, state } = harness(bundle, {
+    SANDBOX_READINESS_TIMEOUT_MS: '2345',
+    SANDBOX_LEASE_SECONDS: '67',
+    SANDBOX_AUTO_DELETE_SECONDS: '89'
+  });
+  const lease = await service.createBuildSandbox(input());
+
+  assert.deepEqual(state.readinessTimeouts(), [2_345]);
+  assert.equal(lease.spec.leaseSeconds, 67);
+  assert.equal(lease.spec.autoDeleteSeconds, 89);
+  assert.equal(
+    lease.expiresAt.getTime() - lease.reservedAt.getTime(),
+    67_000
   );
 });
 
@@ -147,15 +167,17 @@ test('SandboxService rejects unavailable source before reserving capacity', asyn
       throw new Error('missing');
     }
   } as unknown as ArtifactService;
+  const config = getSandboxConfig({});
   const failing = new SandboxService({
     artifactService,
+    config,
     scheduler: {
       reserve: async () => {
         throw new Error('must not reserve');
       }
     } as unknown as QuotaScheduler,
     repository: new SandboxRepository(),
-    policy: createSandboxPolicy(getSandboxConfig({})),
+    policy: createSandboxPolicy(config),
     providers: new Map([
       ['fake', new FakeSandboxProvider(new FakeSandboxState())]
     ])

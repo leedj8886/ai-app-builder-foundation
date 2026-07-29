@@ -90,6 +90,9 @@ docker compose logs --tail=200 worker
 出现 `SANDBOX_BRANCH_BUSY`、`SANDBOX_QUOTA_EXCEEDED` 或
 `SANDBOX_SCHEDULER_UNAVAILABLE` 时，同时检查 MongoDB 中的 Lease 状态、Redis
 可用性和 Sandbox Reconciler；`terminating` Lease 在确认资源消失前仍占用配额。
+Sandbox executor 的 Worker 启动时会立即 Reconcile，之后默认每 30 秒运行一次。
+只有计数非零或运行失败时才写日志；可通过
+`SANDBOX_RECONCILE_INTERVAL_MS` 调整周期。
 
 ## 验证通过但没有显示 Verified build
 
