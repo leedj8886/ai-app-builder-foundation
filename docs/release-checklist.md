@@ -2,13 +2,15 @@
 
 ## 仓库
 
-- [ ] Apache-2.0、贡献指南、安全策略和路线图已存在
-- [ ] README 定位、快速开始、限制和文档链接准确
-- [ ] `.env.example` 不含真实密钥
-- [ ] GitHub description、topics 和 social preview 已准备
+- [x] Apache-2.0、贡献指南、行为准则、安全策略、支持入口和路线图已存在
+- [x] README 定位、快速开始、限制和文档链接准确
+- [x] `.env.example` 不含真实密钥
+- [x] GitHub description、topics 和 1280×640 social preview 资产已准备
+- [ ] 使用仓库管理员账号应用 GitHub 元数据并上传 social preview
 - [x] README 已声明项目与 Vercel、Kimi、DeepSeek 无官方关系
 - [x] 包名采用可检索的语义名称，所有 workspace 使用同一预发布版本
-- [x] 对外品牌和仓库名统一为 AI App Builder Foundation
+- [x] 产品和文档对外品牌统一为 AI App Builder Foundation
+- [ ] GitHub 仓库重命名为 `ai-app-builder-foundation`
 - [ ] 正式商标及域名检查已确认
 
 ## 自动验证
@@ -18,6 +20,8 @@
 - [x] `npm run test --workspace @ai-app-builder-foundation/web`
 - [x] `npm run build`
 - [x] `docker compose --env-file .env.example config --quiet`
+- [x] GitHub Actions `Quality` 与 `Integration` workflow 已定义
+- [ ] 重命名后的 `main` 首次 CI 全绿并启用 required checks
 - [ ] `npm audit --omit=dev` 无未处置的 high/moderate 项（当前：3 high、8 moderate）
 - [ ] `npm run test:smoke`（本轮 web 镜像 `npm ci` 因 registry `ECONNRESET` 未完成）
 

@@ -2,6 +2,8 @@
 
 > Developer Preview：`ai-app-builder-foundation@0.1.0-preview.1`。本项目与 Vercel、Kimi、DeepSeek 无官方关系。
 
+![AI App Builder Foundation — Auditable agents, verified builds, your infrastructure](docs/assets/github-social-preview.png)
+
 帮助开发团队搭建自己的 AI App Builder：一个开源、可自托管的平台底座，内置可审计 Agent、真实构建验证、项目快照和定向错误恢复。
 
 **不只是生成代码，而是生成能够通过真实构建的代码。**
@@ -12,6 +14,7 @@
 [故障排查](docs/troubleshooting.md) · [路线图](ROADMAP.md) ·
 [模型管理](docs/model-management.md) ·
 [参与贡献](CONTRIBUTING.md) ·
+[获取支持](SUPPORT.md) ·
 [Preview Release 草稿](docs/releases/v0.1.0-preview.1.md)
 
 ## 为什么做这个项目

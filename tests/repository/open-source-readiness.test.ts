@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { access, readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+
+const execFileAsync = promisify(execFile);
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -84,7 +88,9 @@ test('repository contains the approved open-source governance files', async () =
   const requiredFiles = [
     'LICENSE',
     'CONTRIBUTING.md',
+    'CODE_OF_CONDUCT.md',
     'SECURITY.md',
+    'SUPPORT.md',
     'ROADMAP.md'
   ];
 
@@ -111,6 +117,15 @@ test('repository contains the approved open-source governance files', async () =
 
   const security = await readFile(repositoryFile('SECURITY.md'), 'utf8');
   assert.match(security, /不要在公开 Issue 中披露/);
+
+  const conduct = await readFile(
+    repositoryFile('CODE_OF_CONDUCT.md'),
+    'utf8'
+  );
+  assert.match(conduct, /开放、专业、尊重事实/);
+
+  const support = await readFile(repositoryFile('SUPPORT.md'), 'utf8');
+  assert.match(support, /Developer Preview/);
 
   const roadmap = await readFile(repositoryFile('ROADMAP.md'), 'utf8');
   assert.match(roadmap, /帮助开发团队搭建自己的 AI App Builder/);
@@ -169,6 +184,27 @@ test('environment examples document the real runtime configuration', async () =>
   }
 });
 
+test('tracked text files do not expose workstation-specific home paths', async () => {
+  const { stdout } = await execFileAsync('git', ['ls-files', '-z'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8'
+  });
+  const trackedFiles = stdout.split('\0').filter(Boolean);
+  const offenders: string[] = [];
+
+  await Promise.all(trackedFiles.map(async relativePath => {
+    const contents = await readFile(repositoryFile(relativePath));
+    if (contents.includes(0)) return;
+
+    const text = contents.toString('utf8');
+    if (/\/Users\/[^/\s]+\/|[A-Za-z]:\\Users\\[^\\\s]+\\/i.test(text)) {
+      offenders.push(relativePath);
+    }
+  }));
+
+  assert.deepEqual(offenders.sort(), []);
+});
+
 test('README presents the platform-builder positioning and valid core docs', async () => {
   const readme = await readFile(repositoryFile('README.md'), 'utf8');
 
@@ -207,8 +243,11 @@ test('repository includes contribution templates and a reproducible example', as
     '.github/ISSUE_TEMPLATE/feature_request.yml',
     '.github/ISSUE_TEMPLATE/config.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
+    '.github/workflows/ci.yml',
     'docker-compose.local-sandbox.yml',
+    'docs/assets/github-social-preview.png',
     'docs/examples/verified-dashboard.md',
+    'docs/github-repository-setup.md',
     'docs/release-checklist.md',
     'docs/releases/v0.1.0-preview.1.md'
   ];
@@ -240,6 +279,25 @@ test('repository includes contribution templates and a reproducible example', as
   assert.match(previewRelease, /尚未创建 GitHub Release/);
   assert.match(previewRelease, /ai-app-builder-foundation@0\.1\.0-preview\.1/);
   assert.match(previewRelease, /private: true/);
+
+  const workflow = await readFile(
+    repositoryFile('.github/workflows/ci.yml'),
+    'utf8'
+  );
+  assert.match(workflow, /actions\/checkout@v7/);
+  assert.match(workflow, /actions\/setup-node@v7/);
+  assert.match(workflow, /npm run test:readiness/);
+  assert.match(workflow, /npm run test:integration/);
+  assert.match(workflow, /docker compose --env-file \.env\.example config --quiet/);
+
+  const socialPreview = await readFile(
+    repositoryFile('docs/assets/github-social-preview.png')
+  );
+  assert.deepEqual([...socialPreview.subarray(0, 8)], [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
+  ]);
+  assert.equal(socialPreview.readUInt32BE(16), 1280);
+  assert.equal(socialPreview.readUInt32BE(20), 640);
 
   const localSandboxCompose = await readFile(
     repositoryFile('docker-compose.local-sandbox.yml'),
