@@ -1,0 +1,17 @@
+services:
+  server:
+    environment:
+      CLIENT_URL: http://127.0.0.1:4174
+      PREVIEW_PUBLIC_ORIGIN: http://127.0.0.1:43002
+      AGENT_DEFAULT_MODEL_ID: deterministic-demo
+      AGENT_MODELS_JSON: '[{"id":"deterministic-demo","label":"Deterministic Demo","provider":"demo","model":"build-verified-fixture","baseURL":"https://demo.invalid/v1","apiKeyEnv":"DEMO_API_KEY","description":"Deterministic model fixture for the community preview recording"}]'
+
+  worker:
+    environment:
+      AGENT_DEFAULT_MODEL_ID: deterministic-demo
+      AGENT_MODELS_JSON: '[{"id":"deterministic-demo","label":"Deterministic Demo","provider":"demo","model":"build-verified-fixture","baseURL":"https://demo.invalid/v1","apiKeyEnv":"DEMO_API_KEY","description":"Deterministic model fixture for the community preview recording"}]'
+
+  web:
+    build:
+      args:
+        VITE_API_URL: ""

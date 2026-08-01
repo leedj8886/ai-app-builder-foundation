@@ -32,6 +32,7 @@
     "test:smoke:browser": "playwright test tests/smoke/workspace.spec.ts",
     "test:smoke": "tsx tests/smoke/run-smoke.ts",
     "test:readiness": "node --import tsx --test tests/repository/open-source-readiness.test.ts",
+    "demo:record": "tsx scripts/record-community-demo.ts",
     "daytona:init": "sh scripts/init-daytona-env.sh",
     "clean": "turbo run clean"
   },

@@ -181,7 +181,7 @@ export const templates: Template[] = [
   },
   {
     id: 'dashboard',
-    title: 'Dashboard - M.O.N.K.Y',
+    title: 'Operations Dashboard',
     category: 'dashboard',
     prompt: 'Build a dashboard with charts, task cards, revenue stats, database tables, and team activity.',
     views: '10.8K',

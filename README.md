@@ -15,6 +15,10 @@
 [获取支持](SUPPORT.md) ·
 [Preview Release 草稿](docs/releases/v0.1.0-preview.1.md)
 
+[![AI App Builder Foundation：经过构建验证的 Agent Run](docs/assets/community-preview/hero.png)](docs/assets/community-preview/demo.mp4)
+
+*24 秒真实产品导览：选择模型 → 可审计 Run → 代码与 Preview → 明确的导出边界。演示使用[确定性模型 fixture](docs/community-demo.md)，不调用真实 Provider。*
+
 ## 为什么做这个项目
 
 多数 AI App Builder 在模型输出代码后就宣布完成。本项目把 prompt-to-app 能力放入一个可审计、可恢复的执行流程：
