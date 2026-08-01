@@ -199,6 +199,10 @@ function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
 
   return (
     <div className="space-y-3">
+      <ActivityRow icon={<Sparkles className="h-3.5 w-3.5" />}>
+        模型：{turn.agent.modelProvider ? `${turn.agent.modelProvider} · ` : ''}{turn.agent.model}
+      </ActivityRow>
+
       {planningDuration ? (
         <ActivityRow icon={<Sparkles className="h-3.5 w-3.5" />}>
           {planningDuration}

@@ -25,6 +25,8 @@ export interface IAgentRun {
   retryable?: boolean;
   attempt: number;
   maxRepairAttempts: number;
+  modelId?: string;
+  modelProvider?: string;
   model: string;
   error?: AgentErrorPayload;
   usage?: {
@@ -78,6 +80,8 @@ const AgentRunSchema = new Schema<IAgentRun>(
     retryable: { type: Boolean, default: false },
     attempt: { type: Number, required: true, default: 0 },
     maxRepairAttempts: { type: Number, required: true, default: 2 },
+    modelId: { type: String, trim: true },
+    modelProvider: { type: String, trim: true },
     model: { type: String, required: true },
     error: {
       code: String,

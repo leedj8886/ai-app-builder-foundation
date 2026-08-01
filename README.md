@@ -10,6 +10,7 @@
 
 [快速开始](#快速开始) · [系统架构](docs/architecture.md) ·
 [故障排查](docs/troubleshooting.md) · [路线图](ROADMAP.md) ·
+[模型管理](docs/model-management.md) ·
 [参与贡献](CONTRIBUTING.md) ·
 [Preview Release 草稿](docs/releases/v0.1.0-preview.1.md)
 
@@ -152,20 +153,25 @@ Smoke Worker 使用确定性的 FakeModelClient，不调用真实模型，不产
 
 ## 模型配置
 
-当前生产 Worker 通过 OpenAI SDK 调用 DeepSeek-compatible API：
+模型目录由部署者管理，浏览器只接收脱敏后的模型 ID、名称和 Provider。Project
+保存应用默认模型，每次 Run 也可以显式覆盖；Worker 按 Run 中已解析的模型 ID
+选择客户端。示例配置提供两个 DeepSeek-compatible 模型：
 
 ```dotenv
 DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
 AGENT_MODEL=
+AGENT_DEFAULT_MODEL_ID=deepseek-flash
+# AGENT_MODELS_JSON 的完整、可复制示例见 .env.example
 ```
 
-`AGENT_MODEL` 只覆盖 Agent Worker 模型。Provider-neutral Adapter 属于公开路线图中的下一阶段。
+未设置 `AGENT_MODELS_JSON` 时，系统继续兼容 `AGENT_MODEL → DEEPSEEK_MODEL`
+的单模型配置。模型目录格式、多 Provider 部署和应用绑定方式见[模型管理](docs/model-management.md)。
 
 ## 当前限制
 
-- 当前生产 Provider 配置仍以 DeepSeek 命名。
+- 当前模型传输支持 OpenAI-compatible Chat Completions；原生非兼容 Provider 仍需 Adapter。
 - 生成目标聚焦 React + TypeScript；样式能力会从文件、依赖和配置自动识别，
   项目元数据只作为弱提示。
 - 构建通过不代表生成代码已通过业务、安全或合规审计。

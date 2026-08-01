@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { agentRunModes } from './types';
+import { modelIdSchema } from '../services/modelCatalog';
 
 const safeProjectPathSchema = z.string().trim().min(1).refine(value => {
   const normalized = value.replace(/\\/g, '/');
@@ -60,7 +61,8 @@ export const createAgentRunRequestSchema = z.object({
   projectId: objectIdStringSchema,
   chatId: objectIdStringSchema.optional(),
   prompt: z.string().trim().min(1),
-  mode: z.enum(agentRunModes).default('create')
+  mode: z.enum(agentRunModes).default('create'),
+  modelId: modelIdSchema.optional()
 });
 
 export const listAgentRunsQuerySchema = z.object({

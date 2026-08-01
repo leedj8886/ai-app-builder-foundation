@@ -183,6 +183,10 @@ test('AgentRun model exposes required paths and indexes', () => {
   assert.ok(AgentRun.schema.path('prompt'));
   assert.ok(AgentRun.schema.path('status'));
   assert.ok(AgentRun.schema.path('baseSnapshotRevision'));
+  assert.ok(AgentRun.schema.path('modelId'));
+  assert.ok(AgentRun.schema.path('modelProvider'));
+  assert.ok(AgentRun.schema.path('model'));
+  assert.ok(Project.schema.path('settings.agentModelId'));
 
   const indexes = AgentRun.schema.indexes().map(([fields]) => fields);
   assert.deepEqual(indexes[0], { userId: 1, updatedAt: -1 });

@@ -18,6 +18,7 @@ export const buildEditRunRequest = (input: {
   projectId: string
   prompt: string
   activeSnapshotId?: string
+  modelId?: string
 }) => {
   const prompt = input.prompt.trim()
 
@@ -33,5 +34,6 @@ export const buildEditRunRequest = (input: {
     projectId: input.projectId,
     prompt,
     mode: 'edit' as const,
+    ...(input.modelId ? { modelId: input.modelId } : {}),
   }
 }

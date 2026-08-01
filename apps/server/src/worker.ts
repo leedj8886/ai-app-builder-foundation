@@ -8,18 +8,32 @@ import {
   type ProjectValidator
 } from './agent/validator';
 import { createAgentWorker } from './agent/createWorker';
-import { getDeepSeekConfig } from './services/modelProvider';
+import {
+  findModelDefinition,
+  getModelCatalog,
+  requireModelDefinition,
+  resolveModelClientConfig
+} from './services/modelCatalog';
+import { AgentRun } from './models/AgentRun';
 import { cleanupDependencyCache } from './agent/validation/cacheCleanup';
 import { createSandboxRuntime } from './sandbox/runtime';
 import { createSandboxProjectValidator } from './agent/sandboxValidator';
 import { getArtifactService } from './artifacts/runtime';
 import { getSandboxConfig } from './sandbox/config';
+import type { ModelClient } from './agent/types';
 import {
   startSandboxReconcilerLoop,
   type SandboxReconcilerLoop
 } from './sandbox/reconcilerLoop';
 
 dotenv.config();
+
+const failingModelClient = (error: unknown): ModelClient => ({
+  generatePlan: async () => { throw error; },
+  generateFiles: async () => { throw error; },
+  repairFiles: async () => { throw error; },
+  repairDependencies: async () => { throw error; }
+});
 
 const startWorker = async () => {
   await connectDB();
@@ -29,11 +43,18 @@ const startWorker = async () => {
   // is selected, so an unsafe deployment configuration always fails closed.
   getSandboxConfig();
   const connection = createRedisConnection();
-  const providerConfig = getDeepSeekConfig();
-  const modelClient = createProductionModelClient({
-    ...providerConfig,
-    model: config.model
-  });
+  const modelCatalog = getModelCatalog();
+  const modelClients = new Map<string, ReturnType<typeof createProductionModelClient>>();
+  const modelClientFor = (modelId: string) => {
+    const existing = modelClients.get(modelId);
+    if (existing) return existing;
+    const client = createProductionModelClient(
+      resolveModelClientConfig(modelCatalog, modelId)
+    );
+    modelClients.set(modelId, client);
+    return client;
+  };
+  const modelClient = modelClientFor(modelCatalog.defaultModelId);
   let reconcilerLoop: SandboxReconcilerLoop | undefined;
   let validator: ProjectValidator;
   if (config.validationExecutor === 'legacy') {
@@ -77,6 +98,31 @@ const startWorker = async () => {
     queueName: config.queueName,
     connection,
     modelClient,
+    resolveModelClient: async (runId) => {
+      try {
+        const run = await AgentRun.findById(runId)
+          .select('modelId modelProvider model')
+          .lean();
+        if (!run) throw new Error(`AgentRun not found: ${runId}`);
+        const modelId = run.modelId ||
+          modelCatalog.models.find(model => model.model === run.model)?.id ||
+          findModelDefinition(modelCatalog, modelCatalog.defaultModelId)?.id;
+        if (!modelId) throw new Error('No default model is configured');
+        const definition = requireModelDefinition(modelCatalog, modelId);
+        if (
+          run.model !== definition.model ||
+          (run.modelProvider && run.modelProvider !== definition.provider)
+        ) {
+          throw Object.assign(
+            new Error(`Run model configuration no longer matches catalog entry: ${modelId}`),
+            { code: 'MODEL_CONFIGURATION_MISMATCH' }
+          );
+        }
+        return modelClientFor(modelId);
+      } catch (error) {
+        return failingModelClient(error);
+      }
+    },
     validator
   });
   const cleanupCache = async (): Promise<void> => {

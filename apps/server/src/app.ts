@@ -11,11 +11,14 @@ import { agentRouter } from './routes/agent';
 import { errorHandler } from './middleware/errorHandler';
 import { previewRouter } from './routes/preview';
 import { getPreviewConfig } from './preview/config';
+import { modelRouter } from './routes/models';
+import { getModelCatalog } from './services/modelCatalog';
 
 dotenv.config();
 
 export const createApp = (): express.Express => {
   getPreviewConfig();
+  getModelCatalog();
   const app = express();
 
   app.use(helmet());
@@ -40,6 +43,7 @@ export const createApp = (): express.Express => {
   app.use(morgan('dev'));
 
   app.use('/api/auth', authRouter);
+  app.use('/api/models', modelRouter);
   app.use('/api/previews', previewRouter);
   app.use('/api/chat', chatRouter);
   app.use('/api/projects', projectRouter);

@@ -46,13 +46,15 @@ sequenceDiagram
     participant S as ArtifactStore / SandboxService
 
     U->>W: 提交需求
-    W->>A: 创建 Agent Run
-    A->>M: 保存 Run 和用户消息
+    W->>A: 创建 Agent Run（可选 modelId）
+    A->>A: 按 Run / Project / 系统默认解析模型
+    A->>M: 保存 Run、解析后的模型和用户消息
     A->>Q: 入队
     A-->>W: 返回 Run ID
     W->>A: 连接 SSE
     Q->>R: 分发任务
-    R->>M: 读取项目上下文和基础快照
+    R->>M: 读取 Run 模型、项目上下文和基础快照
+    R->>R: 按 Run modelId 解析 Provider Client
     R->>R: 规划并生成文件操作
     R->>V: 校验候选项目
     opt sandbox executor
@@ -124,6 +126,7 @@ LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 
 - SSE 先读取持久事件，再订阅实时事件。
 - 客户端按 Run ID 和 sequence 去重。
 - 编辑以活动快照和 revision 为基础，避免旧结果覆盖新状态。
+- API Server 与 Worker 共享部署模型目录；Run 固化 modelId、Provider 和实际模型名，Worker 不静默回退到其他模型。
 - 基础设施重试复用已保存候选，不重新生成用户对话。
 - Sandbox Worker 启动时先恢复未完成 Lease，之后以非重叠周期执行
   Reconcile；它会处理超时预留、未知创建结果、丢失资源、延迟销毁、重复资源
@@ -136,6 +139,7 @@ LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 
 ## 扩展点
 
 - `apps/server/src/agent/modelClient.ts`：模型调用和结构化输出。
+- `apps/server/src/services/modelCatalog.ts`：脱敏模型目录、应用绑定校验和 Worker Client 配置解析。
 - `apps/server/src/agent/contextBuilder.ts`：项目上下文裁剪。
 - `apps/server/src/agent/orchestrator.ts`：生成、验证和修复策略。
 - `apps/server/src/agent/validator.ts`：验证流水线。

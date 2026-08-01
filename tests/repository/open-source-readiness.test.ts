@@ -112,6 +112,8 @@ test('environment examples document the real runtime configuration', async () =>
     'DEEPSEEK_BASE_URL',
     'DEEPSEEK_MODEL',
     'AGENT_MODEL',
+    'AGENT_DEFAULT_MODEL_ID',
+    'AGENT_MODELS_JSON',
     'AGENT_MAX_REPAIR_ATTEMPTS',
     'AGENT_VALIDATION_EXECUTOR',
     'AGENT_VALIDATION_DEPENDENCY_CACHE_ROOT',
@@ -125,6 +127,8 @@ test('environment examples document the real runtime configuration', async () =>
   assert.match(serverEnv, /^REDIS_URL=/m);
   assert.match(serverEnv, /^PREVIEW_PUBLIC_ORIGIN=/m);
   assert.match(serverEnv, /^DEEPSEEK_API_KEY=/m);
+  assert.match(serverEnv, /^AGENT_DEFAULT_MODEL_ID=/m);
+  assert.match(serverEnv, /^AGENT_MODELS_JSON=/m);
   assert.match(serverEnv, /^AGENT_VALIDATION_EXECUTOR=legacy$/m);
   assert.match(serverEnv, /^SANDBOX_PROVIDER=fake$/m);
   assert.match(serverEnv, /^SANDBOX_LOCAL_ENABLED=false$/m);
@@ -159,6 +163,7 @@ test('README presents the platform-builder positioning and valid core docs', asy
   for (const relativePath of [
     'docs/architecture.md',
     'docs/troubleshooting.md',
+    'docs/model-management.md',
     'CONTRIBUTING.md',
     'SECURITY.md',
     'ROADMAP.md'

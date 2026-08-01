@@ -44,6 +44,30 @@ test('createAgentJobProcessor delegates agent-run jobs with injected dependencie
   );
 });
 
+test('createAgentJobProcessor resolves the model client for each Run', async () => {
+  const selectedModelClient = { generatePlan: () => undefined } as unknown as ModelClient;
+  const calls: unknown[][] = [];
+  const processor = createAgentJobProcessor({
+    modelClient,
+    validator,
+    resolveModelClient: async (runId) => {
+      assert.equal(runId, 'run-model-1');
+      return selectedModelClient;
+    },
+    loadRunStatus: async () => 'queued',
+    acquireBranchExecution: async () => ({
+      signal: new AbortController().signal,
+      assertHeld: async () => undefined,
+      release: async () => undefined
+    }),
+    processRun: async (...args) => { calls.push(args); }
+  });
+
+  await processor({ name: 'agent-run', data: { runId: 'run-model-1' } });
+
+  assert.equal(calls[0]?.[1], selectedModelClient);
+});
+
 test('createAgentJobProcessor routes retry-validation jobs separately', async () => {
   const calls: unknown[][] = [];
   const data = {

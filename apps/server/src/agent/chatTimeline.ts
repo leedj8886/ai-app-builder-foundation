@@ -12,6 +12,8 @@ export interface TimelineRunSource {
   retryOfRunId?: Identifier;
   prompt: string;
   status: AgentRunStatus;
+  modelId?: string;
+  modelProvider?: string;
   model: string;
   error?: AgentErrorPayload;
   createdAt: Date;
@@ -50,6 +52,8 @@ export interface ChatTimelineTurn {
   };
   agent: {
     status: AgentRunStatus;
+    modelId?: string;
+    modelProvider?: string;
     model: string;
     startedAt?: string;
     completedAt?: string;
@@ -184,6 +188,10 @@ export const buildChatTimelineTurn = (
     },
     agent: {
       status: input.run.status,
+      ...(input.run.modelId ? { modelId: input.run.modelId } : {}),
+      ...(input.run.modelProvider
+        ? { modelProvider: input.run.modelProvider }
+        : {}),
       model: input.run.model,
       ...(input.run.startedAt
         ? { startedAt: input.run.startedAt.toISOString() }

@@ -26,6 +26,7 @@ import { isTerminalAgentRunStatus } from './stateMachine';
 
 export interface AgentJobProcessorDependencies {
   modelClient: ModelClient;
+  resolveModelClient?: (runId: string) => Promise<ModelClient>;
   validator: ProjectValidator;
   processRun?: typeof processAgentRun;
   processValidation?: typeof processValidationCandidate;
@@ -136,9 +137,12 @@ export const createAgentJobProcessor = (
       )(job.data, dependencies.validator, execution);
       return;
     }
+    const modelClient = dependencies.resolveModelClient && initialStatus !== 'persisting'
+      ? await dependencies.resolveModelClient(job.data.runId)
+      : dependencies.modelClient;
     await (dependencies.processRun ?? processAgentRun)(
       job.data,
-      dependencies.modelClient,
+      modelClient,
       dependencies.validator,
       execution
     );

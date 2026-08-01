@@ -16,6 +16,7 @@ export interface IProject extends Document {
     framework: 'react' | 'vue' | 'svelte';
     styling: 'tailwind' | 'css-modules' | 'styled-components';
     uiLibrary: 'shadcn' | 'mui' | 'antd' | 'none';
+    agentModelId?: string;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -83,6 +84,10 @@ const ProjectSchema = new Schema<IProject>({
       type: String,
       enum: ['shadcn', 'mui', 'antd', 'none'],
       default: 'shadcn'
+    },
+    agentModelId: {
+      type: String,
+      trim: true
     }
   }
 }, {

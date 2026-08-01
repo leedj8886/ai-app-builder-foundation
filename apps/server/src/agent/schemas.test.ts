@@ -18,6 +18,21 @@ test('createAgentRunRequestSchema defaults mode to create', () => {
   assert.equal(parsed.mode, 'create');
 });
 
+test('createAgentRunRequestSchema accepts a safe model id', () => {
+  const parsed = createAgentRunRequestSchema.parse({
+    projectId: '64b7f5086f1f8e9f0f000001',
+    prompt: 'Build a dashboard',
+    modelId: 'quality-model'
+  });
+
+  assert.equal(parsed.modelId, 'quality-model');
+  assert.throws(() => createAgentRunRequestSchema.parse({
+    projectId: '64b7f5086f1f8e9f0f000001',
+    prompt: 'Build a dashboard',
+    modelId: '../unsafe'
+  }));
+});
+
 test('createAgentRunRequestSchema rejects blank prompts', () => {
   assert.throws(() => {
     createAgentRunRequestSchema.parse({

@@ -115,6 +115,36 @@ test('Project creation creates one main Branch', async () => {
   assert.equal(branches.length, 1);
   assert.equal(branches[0]?.name, 'main');
   assert.equal(branches[0]?.headVersion, 0);
+  assert.equal(response.body.project.settings.agentModelId, 'deepseek-default');
+});
+
+test('model catalog is public and does not expose credentials or endpoints', async () => {
+  const response = await request(app).get('/api/models').expect(200);
+
+  assert.equal(response.body.defaultModelId, 'deepseek-default');
+  assert.equal(response.body.models[0].id, 'deepseek-default');
+  assert.equal('baseURL' in response.body.models[0], false);
+  assert.equal('apiKeyEnv' in response.body.models[0], false);
+});
+
+test('Project model assignment is validated and preserves other settings', async () => {
+  const { ownerToken, project } = await fixtures();
+
+  const updated = await request(app)
+    .patch(`/api/projects/${project._id}`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ settings: { agentModelId: 'deepseek-default' } })
+    .expect(200);
+
+  assert.equal(updated.body.project.settings.agentModelId, 'deepseek-default');
+  assert.equal(updated.body.project.settings.framework, 'react');
+  assert.equal(updated.body.project.settings.styling, 'tailwind');
+
+  await request(app)
+    .patch(`/api/projects/${project._id}`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({ settings: { agentModelId: 'unknown-model' } })
+    .expect(400);
 });
 
 test('Chat creation binds to main or an explicitly selected Branch', async () => {
@@ -252,12 +282,29 @@ test('authenticated run creation persists its event and BullMQ job', async () =>
     .expect(201);
 
   assert.equal(response.body.run.status, 'queued');
+  assert.equal(response.body.run.modelId, 'deepseek-default');
+  assert.equal(response.body.run.modelProvider, 'deepseek');
+  assert.equal(response.body.run.model, 'deepseek-v4-flash');
   assert.equal(await AgentRun.countDocuments({ _id: response.body.run._id }), 1);
   assert.equal(await AgentEvent.countDocuments({
     runId: response.body.run._id,
     type: 'run.created'
   }), 1);
   assert.ok(await getAgentRunQueue().getJob(response.body.run._id));
+});
+
+test('run creation rejects a model outside the configured catalog', async () => {
+  const { ownerToken, project } = await fixtures();
+
+  await request(app)
+    .post('/api/agent/runs')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send({
+      projectId: project._id.toString(),
+      prompt: 'Build a dashboard',
+      modelId: 'unknown-model'
+    })
+    .expect(400);
 });
 
 test('retry validation creates a queued Run without regenerating a Chat message', async () => {

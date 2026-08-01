@@ -12,7 +12,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowRight,
   CheckCircle2,
-  ChevronDown,
   Code2,
   Copy,
   Download,
@@ -47,7 +46,16 @@ import { ConversationTimeline } from '@/components/ConversationTimeline'
 import { RecentChats } from '@/components/RecentChats'
 import { WorkspaceEditComposer } from '@/components/WorkspaceEditComposer'
 import { VerifiedBuildPreview } from '@/components/VerifiedBuildPreview'
-import { agentApi, authApi, chatApi, projectApi } from '@/services/api'
+import { ModelManagerDialog } from '@/components/ModelManagerDialog'
+import { ModelPicker } from '@/components/ModelPicker'
+import {
+  agentApi,
+  authApi,
+  chatApi,
+  modelApi,
+  projectApi,
+  type ModelDefinition,
+} from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
 import {
   buildChatPath,
@@ -165,7 +173,7 @@ const getErrorMessage = (error: unknown) => {
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError'
 
-const createDemoProject = async (prompt: string) => {
+const createDemoProject = async (prompt: string, agentModelId?: string) => {
   if (!localStorage.getItem('token')) {
     const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     const authResponse = await authApi.register(
@@ -183,6 +191,7 @@ const createDemoProject = async (prompt: string) => {
       framework: 'react',
       styling: 'tailwind',
       uiLibrary: 'shadcn',
+      ...(agentModelId ? { agentModelId } : {}),
     },
   })
 
@@ -197,8 +206,12 @@ export function V0Clone() {
   const [editDraft, setEditDraft] = useState('')
   const [submissionPending, setSubmissionPending] = useState(false)
   const [routeError, setRouteError] = useState<string>()
-  const [modelOpen, setModelOpen] = useState(false)
-  const [model, setModel] = useState('Mock provider')
+  const [models, setModels] = useState<ModelDefinition[]>([])
+  const [defaultModelId, setDefaultModelId] = useState('')
+  const [selectedModelId, setSelectedModelId] = useState('')
+  const [modelManagerOpen, setModelManagerOpen] = useState(false)
+  const [modelAssignmentPending, setModelAssignmentPending] = useState(false)
+  const [modelManagementError, setModelManagementError] = useState<string>()
   const [category, setCategory] = useState<'all' | Template['category']>('all')
   const [designMode, setDesignMode] = useState(true)
   const [deployOpen, setDeployOpen] = useState(false)
@@ -225,6 +238,11 @@ export function V0Clone() {
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === workspace.selectedTemplateId) ?? templates[0],
     [workspace.selectedTemplateId],
+  )
+
+  const selectedModel = useMemo(
+    () => models.find((model) => model.id === selectedModelId),
+    [models, selectedModelId],
   )
 
   const currentPrompt = workspace.prompt || draftPrompt || selectedTemplate.prompt
@@ -291,6 +309,25 @@ export function V0Clone() {
   }, [])
 
   useEffect(() => {
+    let active = true
+    void modelApi.getCatalog()
+      .then((response) => {
+        if (!active) return
+        setModels(response.data.models)
+        setDefaultModelId(response.data.defaultModelId)
+        setSelectedModelId((current) => current || response.data.defaultModelId)
+      })
+      .catch((error) => {
+        if (active) setModelManagementError(getErrorMessage(error))
+      })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!chatId && defaultModelId) setSelectedModelId(defaultModelId)
+  }, [chatId, defaultModelId])
+
+  useEffect(() => {
     if (chatId) void loadChatHistoryList()
   }, [chatId, loadChatHistoryList])
 
@@ -338,8 +375,14 @@ export function V0Clone() {
         }))
         void loadTimeline(chatId)
 
-        const snapshots = await refreshProjectData(routedProjectId)
+        const [snapshots, projectResponse] = await Promise.all([
+          refreshProjectData(routedProjectId),
+          projectApi.getById(routedProjectId),
+        ])
         if (requestId !== routeRequestRef.current) return
+        if (projectResponse.data.project.settings.agentModelId) {
+          setSelectedModelId(projectResponse.data.project.settings.agentModelId)
+        }
         const activeSnapshotId = snapshots?.find((snapshot) => snapshot.isActive)?.id
         if (!activeSnapshotId) return
 
@@ -387,7 +430,7 @@ export function V0Clone() {
       let runRequest: Parameters<typeof agentApi.createRun>[0]
 
       if (!activeChatId) {
-        activeProjectId = await createDemoProject(prompt)
+        activeProjectId = await createDemoProject(prompt, selectedModelId || undefined)
         const chatResponse = await chatApi.create(prompt, activeProjectId)
         activeChatId = chatResponse.data.chat._id
         runRequest = {
@@ -395,6 +438,7 @@ export function V0Clone() {
           chatId: activeChatId,
           prompt,
           mode: 'create',
+          ...(selectedModelId ? { modelId: selectedModelId } : {}),
         }
       } else {
         runRequest = buildEditRunRequest({
@@ -402,6 +446,7 @@ export function V0Clone() {
           projectId: activeProjectId,
           prompt,
           activeSnapshotId: workspace.snapshot?.id,
+          modelId: selectedModelId || undefined,
         })
       }
 
@@ -548,6 +593,26 @@ export function V0Clone() {
     void submitPromptToAgent(draftPrompt || selectedTemplate.prompt)
   }
 
+  const handleModelSelect = async (modelId: string) => {
+    if (modelId === selectedModelId || modelAssignmentPending) return
+    const previousModelId = selectedModelId
+    setSelectedModelId(modelId)
+    setModelManagementError(undefined)
+    if (!projectId) return
+
+    setModelAssignmentPending(true)
+    try {
+      await projectApi.update(projectId, {
+        settings: { agentModelId: modelId },
+      })
+    } catch (error) {
+      setSelectedModelId(previousModelId)
+      setModelManagementError(getErrorMessage(error))
+    } finally {
+      setModelAssignmentPending(false)
+    }
+  }
+
   const handleTemplateSelect = (templateId: string) => {
     const next = selectTemplate(workspace, templateId)
     setWorkspace(next)
@@ -616,35 +681,13 @@ export function V0Clone() {
                 className="h-20 w-full resize-none rounded-t-lg bg-transparent px-4 py-4 text-sm leading-6 text-neutral-800 outline-none placeholder:text-neutral-400 sm:h-[74px]"
               />
               <div className="flex items-center justify-between px-3 pb-3">
-                <div className="relative">
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100"
-                    onClick={() => setModelOpen((open) => !open)}
-                  >
-                    <Sparkles className="h-4 w-4 text-orange-500" />
-                    {model}
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </button>
-                  {modelOpen ? (
-                    <div className="absolute left-0 top-10 z-20 w-44 rounded-lg border border-neutral-200 bg-white p-1 text-left text-sm shadow-xl">
-                      {['Mock provider', 'Fable 5', 'Opus 4.5', 'Fast Build'].map((item) => (
-                        <button
-                          type="button"
-                          key={item}
-                          className="flex w-full items-center justify-between rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100"
-                          onClick={() => {
-                            setModel(item)
-                            setModelOpen(false)
-                          }}
-                        >
-                          {item}
-                          {model === item ? <CheckCircle2 className="h-4 w-4" /> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
+                <ModelPicker
+                  models={models}
+                  selectedModelId={selectedModelId}
+                  disabled={submissionPending || modelAssignmentPending}
+                  onSelect={(modelId) => void handleModelSelect(modelId)}
+                  onManage={() => setModelManagerOpen(true)}
+                />
 
                 <div className="flex items-center gap-2">
                   <button
@@ -784,6 +827,8 @@ export function V0Clone() {
           submissionPending={submissionPending}
           onEditDraftChange={setEditDraft}
           onSubmitEdit={() => void submitPromptToAgent(editDraft)}
+          modelLabel={selectedModel?.label ?? 'Configured model'}
+          onManageModel={() => setModelManagerOpen(true)}
           timeline={timeline}
           onToggleTimelineTurn={(runId) =>
             setTimeline((state) => toggleTimelineTurn(state, runId))
@@ -809,6 +854,16 @@ export function V0Clone() {
           onRetryChatHistory={() => void loadChatHistoryList()}
         />
       )}
+      <ModelManagerDialog
+        open={modelManagerOpen}
+        models={models}
+        selectedModelId={selectedModelId}
+        applicationBound={Boolean(projectId)}
+        saving={modelAssignmentPending}
+        error={modelManagementError}
+        onSelect={(modelId) => void handleModelSelect(modelId)}
+        onClose={() => setModelManagerOpen(false)}
+      />
     </div>
   )
 }
@@ -913,6 +968,8 @@ function WorkspaceScreen({
   submissionPending,
   onEditDraftChange,
   onSubmitEdit,
+  modelLabel,
+  onManageModel,
   timeline,
   onToggleTimelineTurn,
   onLoadOlderTimeline,
@@ -947,6 +1004,8 @@ function WorkspaceScreen({
   submissionPending: boolean
   onEditDraftChange: (value: string) => void
   onSubmitEdit: () => void
+  modelLabel: string
+  onManageModel: () => void
   timeline: ChatTimelineState
   onToggleTimelineTurn: (runId: string) => void
   onLoadOlderTimeline: () => void
@@ -999,9 +1058,12 @@ function WorkspaceScreen({
               <Github className="h-4 w-4" />
               Sync with repo
             </button>
-            <button className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100">
+            <button
+              className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100"
+              onClick={onManageModel}
+            >
               <Settings2 className="h-4 w-4" />
-              Settings
+              Model settings
             </button>
           </div>
         </aside>
@@ -1063,8 +1125,10 @@ function WorkspaceScreen({
               value={editDraft}
               disabled={state.generation.status === 'running' || submissionPending}
               canSubmit={Boolean(state.snapshot) && Boolean(editDraft.trim())}
+              modelLabel={modelLabel}
               onChange={onEditDraftChange}
               onSubmit={onSubmitEdit}
+              onManageModel={onManageModel}
             />
           </section>
 

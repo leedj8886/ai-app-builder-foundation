@@ -24,11 +24,13 @@ test('buildEditRunRequest requires an active Snapshot and preserves ids', () => 
     projectId: 'project_123',
     prompt: '  Add filters  ',
     activeSnapshotId: 'snapshot_123',
+    modelId: 'quality-model',
   }), {
     chatId: 'chat_123',
     projectId: 'project_123',
     prompt: 'Add filters',
     mode: 'edit',
+    modelId: 'quality-model',
   })
   assert.throws(
     () => buildEditRunRequest({

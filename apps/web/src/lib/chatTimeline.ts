@@ -290,6 +290,8 @@ export const insertTimelineRun = (
     },
     agent: {
       status: run.status,
+      ...(run.modelId ? { modelId: run.modelId } : {}),
+      ...(run.modelProvider ? { modelProvider: run.modelProvider } : {}),
       model: run.model ?? 'configured model',
       ...(run.startedAt ? { startedAt: run.startedAt } : {}),
       ...(run.completedAt ? { completedAt: run.completedAt } : {}),

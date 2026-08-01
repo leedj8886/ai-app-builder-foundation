@@ -25,6 +25,11 @@ import { ArtifactManifest } from '../models/ArtifactManifest';
 import { getArtifactService } from '../artifacts/runtime';
 import type { ProjectArtifactBundleV1 } from '../artifacts/types';
 import { verifiedPreviewDescriptor } from '../preview/descriptor';
+import {
+  getModelCatalog,
+  modelIdSchema,
+  requireModelDefinition
+} from '../services/modelCatalog';
 
 const router = Router();
 
@@ -292,9 +297,14 @@ router.post('/', async (req: AuthRequest, res, next) => {
       settings: z.object({
         framework: z.enum(['react', 'vue', 'svelte']).optional(),
         styling: z.enum(['tailwind', 'css-modules', 'styled-components']).optional(),
-        uiLibrary: z.enum(['shadcn', 'mui', 'antd', 'none']).optional()
+        uiLibrary: z.enum(['shadcn', 'mui', 'antd', 'none']).optional(),
+        agentModelId: modelIdSchema.optional()
       }).optional()
     }).parse(req.body);
+
+    const modelCatalog = getModelCatalog();
+    const modelId = settings?.agentModelId || modelCatalog.defaultModelId;
+    requireModelDefinition(modelCatalog, modelId);
 
     const { workspace } = await ensureDefaultWorkspaceForUser(req.user!._id);
     const project = new Project({
@@ -305,7 +315,8 @@ router.post('/', async (req: AuthRequest, res, next) => {
       settings: {
         framework: settings?.framework || 'react',
         styling: settings?.styling || 'tailwind',
-        uiLibrary: settings?.uiLibrary || 'shadcn'
+        uiLibrary: settings?.uiLibrary || 'shadcn',
+        agentModelId: modelId
       },
       chatIds: []
     });
@@ -376,9 +387,14 @@ router.patch('/:id', async (req: AuthRequest, res, next) => {
       settings: z.object({
         framework: z.enum(['react', 'vue', 'svelte']).optional(),
         styling: z.enum(['tailwind', 'css-modules', 'styled-components']).optional(),
-        uiLibrary: z.enum(['shadcn', 'mui', 'antd', 'none']).optional()
+        uiLibrary: z.enum(['shadcn', 'mui', 'antd', 'none']).optional(),
+        agentModelId: modelIdSchema.optional()
       }).optional()
     }).parse(req.body);
+
+    if (settings?.agentModelId) {
+      requireModelDefinition(getModelCatalog(), settings.agentModelId);
+    }
 
     const ownedProject = await findOwnedWorkspaceProject({
       projectId: req.params.id,
@@ -391,9 +407,16 @@ router.patch('/:id', async (req: AuthRequest, res, next) => {
     const project = await Project.findByIdAndUpdate(
       ownedProject._id,
       {
-        ...(name && { name }),
-        ...(description !== undefined && { description }),
-        ...(settings && { settings })
+        $set: {
+          ...(name && { name }),
+          ...(description !== undefined && { description }),
+          ...(settings?.framework && { 'settings.framework': settings.framework }),
+          ...(settings?.styling && { 'settings.styling': settings.styling }),
+          ...(settings?.uiLibrary && { 'settings.uiLibrary': settings.uiLibrary }),
+          ...(settings?.agentModelId && {
+            'settings.agentModelId': settings.agentModelId
+          })
+        }
       },
       { new: true }
     );

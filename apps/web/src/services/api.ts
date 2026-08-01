@@ -56,6 +56,8 @@ export interface AgentRun {
   prompt: string;
   status: 'waiting_for_capacity' | 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'completed_with_conflict' | 'failed' | 'cancelled';
   mode: 'create' | 'edit';
+  modelId?: string;
+  modelProvider?: string;
   model?: string;
   baseSnapshotId?: string;
   baseHeadVersion?: number;
@@ -151,6 +153,34 @@ export interface AgentRunDetailResponse {
   resultSnapshot?: ProjectSnapshot | null;
 }
 
+export interface ModelDefinition {
+  id: string;
+  label: string;
+  provider: string;
+  transport: 'openai-compatible';
+  model: string;
+  description?: string;
+}
+
+export interface ModelCatalogResponse {
+  defaultModelId: string;
+  models: ModelDefinition[];
+}
+
+export interface ProjectSettings {
+  framework: 'react' | 'vue' | 'svelte';
+  styling: 'tailwind' | 'css-modules' | 'styled-components';
+  uiLibrary: 'shadcn' | 'mui' | 'antd' | 'none';
+  agentModelId?: string;
+}
+
+export interface ProjectResponse {
+  _id: string;
+  name: string;
+  description?: string;
+  settings: ProjectSettings;
+}
+
 export interface RoutedChat {
   _id: string;
   userId: string;
@@ -206,6 +236,8 @@ export interface ChatTimelineTurn {
   };
   agent: {
     status: ChatTimelineStatus;
+    modelId?: string;
+    modelProvider?: string;
     model: string;
     startedAt?: string;
     completedAt?: string;
@@ -246,6 +278,7 @@ export const agentApi = {
     chatId?: string;
     prompt: string;
     mode?: 'create' | 'edit';
+    modelId?: string;
   }) => api.post<{ run: AgentRun }>('/api/agent/runs', data),
   getRun: (runId: string) =>
     api.get<AgentRunDetailResponse>(`/api/agent/runs/${runId}`),
@@ -259,6 +292,10 @@ export const agentApi = {
     api.post<{ run: AgentRun }>(
       `/api/agent/runs/${runId}/retry-validation`,
     ),
+};
+
+export const modelApi = {
+  getCatalog: () => api.get<ModelCatalogResponse>('/api/models'),
 };
 
 // Chat API
@@ -283,7 +320,7 @@ export const chatApi = {
 // Project API
 export const projectApi = {
   getAll: () => api.get('/api/projects'),
-  getById: (id: string) => api.get(`/api/projects/${id}`),
+  getById: (id: string) => api.get<{ project: ProjectResponse }>(`/api/projects/${id}`),
   create: (data: {
     name: string;
     description?: string;
@@ -291,17 +328,14 @@ export const projectApi = {
       framework?: 'react' | 'vue' | 'svelte';
       styling?: 'tailwind' | 'css-modules' | 'styled-components';
       uiLibrary?: 'shadcn' | 'mui' | 'antd' | 'none';
+      agentModelId?: string;
     };
-  }) => api.post('/api/projects', data),
+  }) => api.post<{ project: ProjectResponse }>('/api/projects', data),
   update: (id: string, data: Partial<{
     name: string;
     description: string;
-    settings: {
-      framework: 'react' | 'vue' | 'svelte';
-      styling: 'tailwind' | 'css-modules' | 'styled-components';
-      uiLibrary: 'shadcn' | 'mui' | 'antd' | 'none';
-    };
-  }>) => api.patch(`/api/projects/${id}`, data),
+    settings: Partial<ProjectSettings>;
+  }>) => api.patch<{ project: ProjectResponse }>(`/api/projects/${id}`, data),
   addChat: (id: string, chatId: string) =>
     api.post(`/api/projects/${id}/chats`, { chatId }),
   removeChat: (id: string, chatId: string) =>

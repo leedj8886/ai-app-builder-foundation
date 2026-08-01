@@ -26,6 +26,10 @@ import { resolveProjectBranch } from '../branches/branchService';
 import { getArtifactService } from '../artifacts/runtime';
 import type { Types } from 'mongoose';
 import { verifiedPreviewDescriptor } from '../preview/descriptor';
+import {
+  getModelCatalog,
+  requireModelDefinition
+} from '../services/modelCatalog';
 
 const snapshotDetail = async (
   snapshot: InstanceType<typeof ProjectSnapshot>,
@@ -85,7 +89,7 @@ router.get('/runs', async (req: AuthRequest, res, next) => {
     }
 
     const runs = await AgentRun.find({ projectId, userId })
-      .select('workspaceId projectId branchId prompt status mode baseSnapshotId baseHeadVersion resultSnapshotId attempt maxRepairAttempts error startedAt completedAt createdAt updatedAt')
+      .select('workspaceId projectId branchId prompt status mode modelId modelProvider model baseSnapshotId baseHeadVersion resultSnapshotId attempt maxRepairAttempts error startedAt completedAt createdAt updatedAt')
       .sort({ createdAt: -1 })
       .limit(limit);
 
@@ -145,6 +149,11 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
     }
 
     const config = getAgentConfig();
+    const modelCatalog = getModelCatalog();
+    const modelDefinition = requireModelDefinition(
+      modelCatalog,
+      body.modelId || project.settings.agentModelId || modelCatalog.defaultModelId
+    );
     const run = await AgentRun.create({
       userId,
       workspaceId: project.workspaceId,
@@ -157,7 +166,9 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       baseSnapshotRevision: branch.headVersion,
       baseHeadVersion: branch.headVersion,
       status: 'queued',
-      model: config.model,
+      modelId: modelDefinition.id,
+      modelProvider: modelDefinition.provider,
+      model: modelDefinition.model,
       maxRepairAttempts: config.maxRepairAttempts
     });
 
@@ -258,6 +269,8 @@ router.post(
           retryOfRunId: source._id,
           validationCandidateId: candidate._id,
           status: 'queued',
+          modelId: source.modelId,
+          modelProvider: source.modelProvider,
           model: source.model,
           maxRepairAttempts: source.maxRepairAttempts
         });

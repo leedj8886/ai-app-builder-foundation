@@ -10,20 +10,25 @@ import {
   MessageCircle,
   Plus,
   ScanLine,
+  Sparkles,
 } from 'lucide-react'
 
 export function WorkspaceEditComposer({
   value,
   disabled,
   canSubmit,
+  modelLabel,
   onChange,
   onSubmit,
+  onManageModel,
 }: {
   value: string
   disabled: boolean
   canSubmit: boolean
+  modelLabel: string
   onChange: (value: string) => void
   onSubmit: () => void
+  onManageModel: () => void
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -73,6 +78,18 @@ export function WorkspaceEditComposer({
           onKeyDown={handleKeyDown}
         />
         <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            aria-label={`Generation model: ${modelLabel}`}
+            title={modelLabel}
+            disabled={disabled}
+            className="hidden h-7 max-w-40 items-center gap-1.5 rounded-md px-2 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
+            onClick={onManageModel}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-orange-500" />
+            <span className="truncate">{modelLabel}</span>
+            <ChevronDown className="h-3 w-3 shrink-0" />
+          </button>
           <button
             type="button"
             aria-label="Prompt options"
