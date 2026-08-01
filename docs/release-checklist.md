@@ -6,7 +6,8 @@
 - [ ] README 定位、快速开始、限制和文档链接准确
 - [ ] `.env.example` 不含真实密钥
 - [ ] GitHub description、topics 和 social preview 已准备
-- [ ] 正式品牌及与 Vercel 无关的声明已确认
+- [x] README 已声明项目与 Vercel、Kimi、DeepSeek 无官方关系
+- [ ] 正式品牌、仓库名及商标/域名检查已确认
 
 ## 自动验证
 
@@ -29,7 +30,7 @@
 
 - [ ] 20–30 秒失败恢复演示对应真实 Release
 - [ ] 架构图与当前实现一致
-- [ ] Release Notes 明确新增能力、限制和升级方式
+- [x] `v0.1.0-preview.1` Release 草稿明确新增能力、限制和稳定版门槛
 - [ ] Show HN、Reddit、V2EX 和 X 文案按社区分别撰写
 
 ## 发布后

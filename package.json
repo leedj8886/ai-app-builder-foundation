@@ -1,7 +1,7 @@
 {
   "name": "v0-by-kimi",
   "version": "1.0.0",
-  "description": "AI-powered web app generator through natural language conversations",
+  "description": "Open-source foundation for building self-hosted AI App Builders with auditable, build-verified generation",
   "private": true,
   "workspaces": [
     "apps/*",

@@ -1,18 +1,21 @@
-# Open v0 Platform Foundation
+# Open AI App Builder Foundation
 
-> 当前开发代号：`v0-by-kimi`。正式品牌将在独立命名阶段确定。
+> 当前开发代号：`v0-by-kimi`。正式品牌将独立命名；本项目与 Vercel、Kimi、DeepSeek 无官方关系。
 
-帮助团队搭建自己的 v0：一个开源、可自托管的 AI App Builder 平台底座。
+帮助开发团队搭建自己的 AI App Builder：一个开源、可自托管的平台底座，内置可审计 Agent、真实构建验证、项目快照和定向错误恢复。
 
 **不只是生成代码，而是生成能够通过真实构建的代码。**
 
+*Your platform. Your models. Your infrastructure. Code that actually builds.*
+
 [快速开始](#快速开始) · [系统架构](docs/architecture.md) ·
 [故障排查](docs/troubleshooting.md) · [路线图](ROADMAP.md) ·
-[参与贡献](CONTRIBUTING.md)
+[参与贡献](CONTRIBUTING.md) ·
+[Preview Release 草稿](docs/releases/v0.1.0-preview.1.md)
 
 ## 为什么做这个项目
 
-多数 AI App Builder 在模型输出代码后就宣布完成。本项目将代码生成放入一个可审计、可恢复的执行流程：
+多数 AI App Builder 在模型输出代码后就宣布完成。本项目把 prompt-to-app 能力放入一个可审计、可恢复的执行流程：
 
 `规划 → 生成 → 安装依赖 → 类型检查 → 生产构建 → 诊断 → 修复 → 快照`
 

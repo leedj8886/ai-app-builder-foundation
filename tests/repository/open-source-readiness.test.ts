@@ -45,7 +45,7 @@ test('repository contains the approved open-source governance files', async () =
   assert.match(security, /不要在公开 Issue 中披露/);
 
   const roadmap = await readFile(repositoryFile('ROADMAP.md'), 'utf8');
-  assert.match(roadmap, /帮助团队搭建自己的 v0/);
+  assert.match(roadmap, /帮助开发团队搭建自己的 AI App Builder/);
   assert.match(roadmap, /## 长期架构护栏/);
   assert.match(roadmap, /TypeScript Native/);
   assert.match(roadmap, /Framework-Agnostic Core/);
@@ -100,8 +100,9 @@ test('environment examples document the real runtime configuration', async () =>
 test('README presents the platform-builder positioning and valid core docs', async () => {
   const readme = await readFile(repositoryFile('README.md'), 'utf8');
 
-  assert.match(readme, /帮助团队搭建自己的 v0/);
+  assert.match(readme, /帮助开发团队搭建自己的 AI App Builder/);
   assert.match(readme, /不只是生成代码，而是生成能够通过真实构建的代码/);
+  assert.match(readme, /与 Vercel、Kimi、DeepSeek 无官方关系/);
   assert.match(readme, /TypeScript Native/);
   assert.match(readme, /Framework-Agnostic Core/);
   assert.match(readme, /LangChain、LangGraph、AI SDK/);
@@ -134,7 +135,8 @@ test('repository includes contribution templates and a reproducible example', as
     '.github/PULL_REQUEST_TEMPLATE.md',
     'docker-compose.local-sandbox.yml',
     'docs/examples/verified-dashboard.md',
-    'docs/release-checklist.md'
+    'docs/release-checklist.md',
+    'docs/releases/v0.1.0-preview.1.md'
   ];
 
   await Promise.all(
@@ -154,6 +156,14 @@ test('repository includes contribution templates and a reproducible example', as
   );
   assert.match(checklist, /npm run test:smoke/);
   assert.match(checklist, /四名测试者/);
+
+  const previewRelease = await readFile(
+    repositoryFile('docs/releases/v0.1.0-preview.1.md'),
+    'utf8'
+  );
+  assert.match(previewRelease, /v0\.1\.0-preview\.1 — Build-Verified Foundation/);
+  assert.match(previewRelease, /Developer Preview/);
+  assert.match(previewRelease, /尚未创建 GitHub Release/);
 
   const localSandboxCompose = await readFile(
     repositoryFile('docker-compose.local-sandbox.yml'),
