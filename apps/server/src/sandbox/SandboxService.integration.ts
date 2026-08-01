@@ -61,6 +61,7 @@ const harness = (
   const repository = new SandboxRepository();
   const state = new FakeSandboxState();
   const provider = new FakeSandboxProvider(state);
+  const now = new Date();
   const artifactService = {
     readOwnedBundle: async () => structuredClone(artifact)
   } as unknown as ArtifactService;
@@ -68,7 +69,7 @@ const harness = (
     reserve: async (request: SandboxReservationRequest) =>
       repository.createReserved({
         ...request,
-        reservedAt: new Date()
+        reservedAt: now
       })
   } as QuotaScheduler;
   const service = new SandboxService({
@@ -77,7 +78,8 @@ const harness = (
     scheduler,
     repository,
     policy: createSandboxPolicy(config),
-    providers: new Map([['fake', provider]])
+    providers: new Map([['fake', provider]]),
+    now: () => now
   });
   return { service, state, repository };
 };

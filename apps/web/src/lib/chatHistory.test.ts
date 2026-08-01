@@ -37,13 +37,15 @@ test('models loading ready and error states', () => {
 })
 
 test('formats same-day and older updated times', () => {
-  const now = new Date('2026-07-25T12:00:00+08:00')
+  const now = new Date(2026, 6, 25, 12)
+  const sameDay = new Date(2026, 6, 25, 11).toISOString()
+  const older = new Date(2026, 6, 20, 11).toISOString()
   assert.equal(
-    formatChatUpdatedAt('2026-07-25T11:00:00+08:00', now, 'zh-CN'),
+    formatChatUpdatedAt(sameDay, now, 'zh-CN'),
     '11:00',
   )
   assert.match(
-    formatChatUpdatedAt('2026-07-20T11:00:00+08:00', now, 'zh-CN'),
+    formatChatUpdatedAt(older, now, 'zh-CN'),
     /7月20日/,
   )
 })
