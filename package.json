@@ -41,6 +41,9 @@
     "turbo": "^1.13.0",
     "typescript": "^5.4.0"
   },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.60.0"
+  },
   "engines": {
     "node": ">=20.0.0"
   }

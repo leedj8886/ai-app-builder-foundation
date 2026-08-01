@@ -48,6 +48,14 @@ test('package manifests expose one agent-readable prerelease identity', async ()
   assert.match(serverPackage.scripts['test:integration'], /run-node-tests\.mjs/);
   assert.match(webPackage.scripts.test, /run-node-tests\.mjs/);
   await access(repositoryFile('scripts/run-node-tests.mjs'));
+  assert.equal(
+    rootPackage.optionalDependencies['@rollup/rollup-linux-x64-gnu'],
+    '4.60.0'
+  );
+  assert.equal(
+    lockfile.packages['node_modules/@rollup/rollup-linux-x64-gnu'].version,
+    '4.60.0'
+  );
 
   for (const packageManifest of [serverPackage, webPackage]) {
     assert.equal(packageManifest.version, version);
