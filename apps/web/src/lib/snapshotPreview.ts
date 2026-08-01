@@ -1,7 +1,7 @@
 import type {
   GenerationStatus,
   WorkspaceSnapshot,
-} from './v0Workspace'
+} from './appBuilderWorkspace'
 import { augmentPreviewStyling } from './stylingCapabilities'
 
 export interface SnapshotPreviewModel {

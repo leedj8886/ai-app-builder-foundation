@@ -2,6 +2,7 @@ import * as React from "react"
 import { cn } from "@/utils/cn"
 import { Button } from "./Button"
 import { Plus, Settings, LogOut, Menu, X } from "lucide-react"
+import { BrandMark } from "@/components/BrandMark"
 
 interface SidebarProps {
   isOpen: boolean
@@ -31,12 +32,7 @@ const Sidebar = ({ isOpen, onToggle, onNewChat, children }: SidebarProps) => {
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">v0</span>
-              </div>
-              <span className="font-semibold">v0 by kimi</span>
-            </div>
+            <BrandMark />
             <Button
               variant="ghost"
               size="icon"

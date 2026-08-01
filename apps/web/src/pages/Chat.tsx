@@ -87,7 +87,7 @@ export function Chat() {
     if (chatId) {
       sendMessageMutation.mutate({ chatId, content: message })
     } else {
-      toast.error('Create a project conversation from the v0 home page')
+      toast.error('Create a project conversation from the AI App Builder home page')
     }
   }
 

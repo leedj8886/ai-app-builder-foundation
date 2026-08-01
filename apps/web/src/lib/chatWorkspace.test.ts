@@ -7,7 +7,7 @@ import {
 } from './chatWorkspace'
 
 test('buildChatPath encodes a Chat id', () => {
-  assert.equal(buildChatPath('chat / 1'), '/v0/chats/chat%20%2F%201')
+  assert.equal(buildChatPath('chat / 1'), '/chats/chat%20%2F%201')
 })
 
 test('resolveRoutedProjectId requires a Chat-associated Project', () => {

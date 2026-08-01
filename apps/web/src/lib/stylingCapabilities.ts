@@ -1,4 +1,4 @@
-import type { SnapshotPackageJson } from './v0Workspace'
+import type { SnapshotPackageJson } from './appBuilderWorkspace'
 
 export type StylingCapability =
   | 'plain-css'

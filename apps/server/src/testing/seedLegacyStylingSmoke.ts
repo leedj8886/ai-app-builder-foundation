@@ -8,7 +8,7 @@ import { AgentEvent } from '../models/AgentEvent';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 
 export const legacyStylingSmoke = {
-  email: 'legacy-styling@v0.local',
+  email: 'legacy-styling@ai-app-builder.local',
   password: 'legacy-styling-password',
   chatId: '64b7f5086f1f8e9f0f000101'
 } as const;

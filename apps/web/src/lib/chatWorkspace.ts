@@ -3,7 +3,7 @@ export interface RoutedChatProject {
 }
 
 export const buildChatPath = (chatId: string): string =>
-  `/v0/chats/${encodeURIComponent(chatId)}`
+  `/chats/${encodeURIComponent(chatId)}`
 
 export const resolveRoutedProjectId = (chat: RoutedChatProject): string => {
   if (!chat.projectId) {

@@ -8,7 +8,8 @@
 - [ ] GitHub description、topics 和 social preview 已准备
 - [x] README 已声明项目与 Vercel、Kimi、DeepSeek 无官方关系
 - [x] 包名采用可检索的语义名称，所有 workspace 使用同一预发布版本
-- [ ] 正式品牌、仓库名及商标/域名检查已确认
+- [x] 对外品牌和仓库名统一为 AI App Builder Foundation
+- [ ] 正式商标及域名检查已确认
 
 ## 自动验证
 

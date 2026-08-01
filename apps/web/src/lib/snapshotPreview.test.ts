@@ -5,7 +5,7 @@ import {
   getSnapshotPreviewState,
   type SnapshotPreviewModel,
 } from './snapshotPreview'
-import type { SnapshotFile, WorkspaceSnapshot } from './v0Workspace'
+import type { SnapshotFile, WorkspaceSnapshot } from './appBuilderWorkspace'
 
 const createSnapshot = ({
   files,

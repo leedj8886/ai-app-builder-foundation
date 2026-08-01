@@ -18,7 +18,7 @@ test('legacy Tailwind Snapshot compiles Preview-only compatibility', async ({ pa
     localStorage.setItem('token', value);
   }, token);
 
-  await page.goto(`/v0/chats/${legacyStylingSmoke.chatId}`);
+  await page.goto(`/chats/${legacyStylingSmoke.chatId}`);
   await expect(page.getByTestId('snapshot-preview')).toBeVisible();
   const generatedPreview = page.frameLocator(
     '[data-testid="snapshot-preview"] iframe[title="Sandpack Preview"]'
@@ -48,7 +48,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page.getByText('Templates', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Resources', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Enterprise', { exact: true })).toHaveCount(0);
-  await page.getByPlaceholder('让 v0 构建...').fill(prompt);
+  await page.getByPlaceholder('描述你想构建的应用...').fill(prompt);
   await page.getByLabel('Build prompt').click();
 
   const timeline = page.getByTestId('conversation-timeline');
@@ -56,7 +56,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(timeline).toContainText('Agent 已开始工作');
   await expect(page.getByTestId('agent-generation-status'))
     .toHaveAttribute('data-status', 'ready', { timeout: 90_000 });
-  await expect(page).toHaveURL(/\/v0\/chats\/[a-f\d]{24}$/);
+  await expect(page).toHaveURL(/\/chats\/[a-f\d]{24}$/);
   const chatUrl = page.url();
   await expect(page.getByText('Recent', { exact: true })).toHaveCount(0);
   await expect(timeline.locator('[data-testid^="conversation-turn-"]').first())
@@ -153,7 +153,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   ).toContainText('Generated app', { timeout: 30_000 });
 
   await page.getByTestId('recent-chats').getByRole('link', { name: 'More' }).click();
-  await expect(page).toHaveURL('/v0/chats');
+  await expect(page).toHaveURL('/chats');
   const historyList = page.getByTestId('chat-history-list');
   await expect(historyList).toContainText(prompt);
   await historyList.getByRole('link', { name: `打开对话：${prompt}` }).click();
@@ -161,7 +161,7 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
 
   await page.getByTestId('recent-chats').getByRole('link', { name: 'More' }).click();
-  await expect(page).toHaveURL('/v0/chats');
+  await expect(page).toHaveURL('/chats');
   await page.getByRole('link', { name: 'New chat' }).first().click();
   await expect(page).toHaveURL('/');
 });

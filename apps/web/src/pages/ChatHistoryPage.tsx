@@ -10,6 +10,7 @@ import {
 } from '@/lib/chatHistory'
 import { buildChatPath } from '@/lib/chatWorkspace'
 import { chatApi } from '@/services/api'
+import { BrandMark } from '@/components/BrandMark'
 
 export function ChatHistoryPage() {
   const [state, setState] = useState(createChatHistoryState)
@@ -38,7 +39,7 @@ export function ChatHistoryPage() {
             to="/"
             className="inline-flex items-center gap-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950"
           >
-            <span className="text-xl font-black">v0</span>
+            <BrandMark />
           </Link>
           <Link
             to="/"

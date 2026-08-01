@@ -14,9 +14,9 @@ import {
   submitPrompt,
   isCancellableRunId,
   type AgentEventSummary,
-} from './v0Workspace'
+} from './appBuilderWorkspace'
 
-describe('v0 workspace state', () => {
+describe('app builder workspace state', () => {
   it('completed_with_conflict keeps the validated Snapshot ready', () => {
     const state = applyAgentRunDetail(
       startApiGeneration(

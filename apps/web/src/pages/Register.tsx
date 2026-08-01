@@ -58,7 +58,7 @@ export function Register() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Create an account</CardTitle>
             <CardDescription>
-              Get started with v0 by kimi today
+              Get started with AI App Builder Foundation
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>

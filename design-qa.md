@@ -1,9 +1,7 @@
 # Design QA: Workspace Continue Composer
 
-- Source visual truth:
-  `/Users/a015265/Desktop/截屏2026-07-26 09.12.43.png`
-- Implementation screenshot:
-  `/Users/a015265/projects/demos/v0-by-kimi/work/composer-implementation-final-1440x900.png`
+- Source visual truth: local design reference, not committed
+- Implementation screenshot: `work/composer-implementation-final-1440x900.png`
 - Source pixels: `836 × 953`
 - Implementation pixels: `1440 × 900`
 - CSS viewport: `1440 × 900`

@@ -1,3 +1,4 @@
+// Client-side state for the AI App Builder Foundation workspace.
 export type Screen = 'home' | 'workspace'
 
 export type Panel = 'preview' | 'code' | 'design' | 'deploy'

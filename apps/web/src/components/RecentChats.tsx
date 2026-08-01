@@ -95,7 +95,7 @@ export function RecentChats({
 
           {chats.length > 0 ? (
             <Link
-              to="/v0/chats"
+              to="/chats"
               className="flex h-9 items-center gap-2 rounded-md px-2 text-sm text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950"
             >
               <MoreHorizontal className="h-3.5 w-3.5" />

@@ -13,12 +13,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leedj8886/my-v0.git"
+    "url": "git+https://github.com/leedj8886/ai-app-builder-foundation.git"
   },
   "bugs": {
-    "url": "https://github.com/leedj8886/my-v0/issues"
+    "url": "https://github.com/leedj8886/ai-app-builder-foundation/issues"
   },
-  "homepage": "https://github.com/leedj8886/my-v0#readme",
+  "homepage": "https://github.com/leedj8886/ai-app-builder-foundation#readme",
   "workspaces": [
     "apps/*",
     "packages/*"

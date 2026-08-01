@@ -1,14 +1,21 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { ChatHistoryPage } from '@/pages/ChatHistoryPage'
-import { V0Clone } from '@/pages/V0Clone'
+import { AppBuilderPage } from '@/pages/AppBuilderPage'
+
+function LegacyChatRedirect() {
+  const { chatId } = useParams<{ chatId: string }>()
+  return <Navigate to={chatId ? `/chats/${encodeURIComponent(chatId)}` : '/chats'} replace />
+}
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<V0Clone />} />
-        <Route path="/v0/chats" element={<ChatHistoryPage />} />
-        <Route path="/v0/chats/:chatId" element={<V0Clone />} />
+        <Route path="/" element={<AppBuilderPage />} />
+        <Route path="/chats" element={<ChatHistoryPage />} />
+        <Route path="/chats/:chatId" element={<AppBuilderPage />} />
+        <Route path="/v0/chats" element={<LegacyChatRedirect />} />
+        <Route path="/v0/chats/:chatId" element={<LegacyChatRedirect />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

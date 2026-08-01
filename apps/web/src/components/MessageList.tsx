@@ -108,7 +108,7 @@ function MessageItem({ message }: { message: Message }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-medium text-sm">
-              {isUser ? 'You' : 'v0'}
+              {isUser ? 'You' : 'Builder Agent'}
             </span>
             <span className="text-xs text-muted-foreground">
               {new Date(message.createdAt).toLocaleTimeString()}
@@ -152,7 +152,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center mb-4">
             <Bot className="h-8 w-8 text-white" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Welcome to v0 by kimi</h2>
+          <h2 className="text-2xl font-bold mb-2">Welcome to AI App Builder Foundation</h2>
           <p className="text-muted-foreground max-w-md">
             Describe what you want to build, and I'll generate a beautiful, 
             production-ready React component for you.

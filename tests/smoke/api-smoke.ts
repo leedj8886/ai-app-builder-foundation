@@ -73,7 +73,7 @@ const main = async (): Promise<void> => {
   const registered = await requestJson<{ token: string }>('/api/auth/register', jsonRequest(
     'POST',
     {
-      email: `phase6-${unique}@v0.local`,
+      email: `smoke-${unique}@ai-app-builder.local`,
       password: 'phase6-password',
       name: 'Phase 6 Smoke'
     }
