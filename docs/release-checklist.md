@@ -7,7 +7,6 @@
 - [x] `.env.example` 不含真实密钥
 - [x] GitHub description、topics 和 1280×640 social preview 资产已准备
 - [ ] 使用仓库管理员账号应用 GitHub 元数据并上传 social preview
-- [x] README 已声明项目与 Vercel、Kimi、DeepSeek 无官方关系
 - [x] 包名采用可检索的语义名称，所有 workspace 使用同一预发布版本
 - [x] 产品和文档对外品牌统一为 AI App Builder Foundation
 - [ ] GitHub 仓库重命名为 `ai-app-builder-foundation`

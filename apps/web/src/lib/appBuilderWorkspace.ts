@@ -165,7 +165,7 @@ export const templates: Template[] = [
     id: 'landing',
     title: 'Brillance SaaS Landing Page',
     category: 'landing',
-    prompt: 'Build a polished SaaS landing page with a hero, feature proof, pricing, FAQ, and a Vercel-style deploy CTA.',
+    prompt: 'Build a polished SaaS landing page with a hero, feature proof, pricing, FAQ, and a production-ready deploy CTA.',
     views: '13.6K',
     likes: '2K',
     image: 'row02',

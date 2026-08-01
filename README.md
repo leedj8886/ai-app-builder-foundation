@@ -180,10 +180,6 @@ AGENT_DEFAULT_MODEL_ID=deepseek-flash
 - 当前包名仍属预发布身份，稳定版前可能调整。
 - 完整 Docker Smoke 尚需在 npm registry 网络稳定时重新运行；生产依赖审计项仍需在公开部署前处置或完成风险评估。
 
-历史开发环境中的 `v0-by-kimi` 数据库名、`open-v0` Artifact 格式和旧
-`/v0/chats` 路由仅作为兼容标识保留，不是对外品牌。新界面和链接统一使用
-AI App Builder Foundation。
-
 ## Workspace、Branch 与 Artifact
 
 新项目使用 Workspace 作为租户边界。一个 Project 可以关联多个 Chat，每个 Chat
