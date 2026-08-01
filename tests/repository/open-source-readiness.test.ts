@@ -80,6 +80,19 @@ test('public product surfaces use the AI App Builder Foundation brand', async ()
   );
 });
 
+test('workspace does not expose unimplemented publishing capabilities', async () => {
+  const workspace = await readFile(
+    repositoryFile('apps/web/src/pages/AppBuilderPage.tsx'),
+    'utf8'
+  );
+
+  assert.doesNotMatch(
+    workspace,
+    /Repo sync|Sync with repo|Publish|Deploy(?:ment)? planned|Deploy to|open pull request|mocked deployment/i
+  );
+  assert.doesNotMatch(workspace, /['"]deploy['"]/);
+});
+
 test('repository contains the approved open-source governance files', async () => {
   const requiredFiles = [
     'LICENSE',

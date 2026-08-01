@@ -1,7 +1,7 @@
 // Client-side state for the AI App Builder Foundation workspace.
 export type Screen = 'home' | 'workspace'
 
-export type Panel = 'preview' | 'code' | 'design' | 'deploy'
+export type Panel = 'preview' | 'code' | 'design'
 
 export type GenerationStatus = 'idle' | 'running' | 'ready' | 'failed' | 'cancelled'
 

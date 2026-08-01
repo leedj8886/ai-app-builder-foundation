@@ -11,14 +11,12 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowRight,
-  CheckCircle2,
   Code2,
   Copy,
   Download,
   Eye,
   FileCode2,
   Gamepad2,
-  Github,
   Grid2X2,
   Heart,
   Image,
@@ -30,7 +28,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
-  Rocket,
   Settings2,
   SlidersHorizontal,
   Sparkles,
@@ -131,7 +128,6 @@ const panelTabs: Array<{
   { id: 'preview', label: 'Preview', icon: Eye },
   { id: 'code', label: 'Code', icon: Code2 },
   { id: 'design', label: 'Design', icon: SlidersHorizontal },
-  { id: 'deploy', label: 'Export', icon: Rocket },
 ]
 
 const promptIcons = {
@@ -1047,14 +1043,6 @@ function WorkspaceScreen({
           <div className="flex-1" />
           <div className="space-y-1 border-t border-neutral-200 p-2">
             <button
-              className="flex h-9 w-full cursor-not-allowed items-center gap-2 rounded-md px-2 text-sm text-neutral-400"
-              disabled
-              title="Repository synchronization is planned for a future preview"
-            >
-              <Github className="h-4 w-4" />
-              Repo sync · planned
-            </button>
-            <button
               className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100"
               onClick={onManageModel}
             >
@@ -1074,26 +1062,10 @@ function WorkspaceScreen({
       )}
 
       <section className="flex min-h-0 min-w-0 flex-col">
-        <div className="flex h-13 min-h-13 items-center justify-between border-b border-neutral-200 px-3 py-2 sm:px-4">
+        <div className="flex h-13 min-h-13 items-center border-b border-neutral-200 px-3 py-2 sm:px-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{selectedTemplate.title}</p>
             <p className="truncate text-xs text-neutral-500">{prompt}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="hidden h-8 cursor-not-allowed items-center gap-2 rounded-md border border-neutral-200 px-3 text-sm text-neutral-400 sm:inline-flex"
-              disabled
-              title="Repository synchronization is planned for a future preview"
-            >
-              <Github className="h-4 w-4" />
-              Repo sync
-            </button>
-            <button
-              className="h-8 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800"
-              onClick={() => onSwitchPanel('deploy')}
-            >
-              Export
-            </button>
           </div>
         </div>
 
@@ -1192,7 +1164,6 @@ function WorkspaceScreen({
                 />
               ) : null}
               {state.activePanel === 'design' ? <DesignPanel enabled={designMode} onToggle={onToggleDesignMode} /> : null}
-              {state.activePanel === 'deploy' ? <DeployPanel /> : null}
             </div>
           </section>
         </div>
@@ -1394,60 +1365,6 @@ function TokenSlider({ label, value, width }: { label: string; value: string; wi
       </div>
       <div className="h-2 rounded-full bg-neutral-100">
         <div className="h-full rounded-full bg-neutral-950" style={{ width }} />
-      </div>
-    </div>
-  )
-}
-
-function DeployPanel() {
-  return (
-    <div className="mx-auto max-w-5xl rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-neutral-500">Verified build</p>
-          <h2 className="mt-1 text-2xl font-semibold">Export and deployment adapters</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
-            Download the verified source today. Repository sync and deployment providers are explicit extension points planned for a future preview.
-          </p>
-        </div>
-        <button
-          className="inline-flex h-9 min-w-[156px] cursor-not-allowed items-center justify-center gap-2 whitespace-nowrap rounded-md bg-neutral-100 px-4 text-sm font-medium text-neutral-500"
-          disabled
-          title="Deployment adapters are not configured in this preview"
-        >
-          <Rocket className="h-4 w-4" />
-          Deployment planned
-        </button>
-      </div>
-
-      <div className="mt-6 grid gap-3 md:grid-cols-3">
-        {[
-          ['Verified build', 'Ready to export', CheckCircle2],
-          ['Repository', 'Not connected', Github],
-          ['Deployment provider', 'Not configured', Rocket],
-        ].map(([label, value, Icon]) => (
-          <div key={label as string} className="rounded-lg border border-neutral-200 bg-[#fafafa] p-4">
-            <Icon className="h-5 w-5 text-neutral-500" />
-            <p className="mt-4 text-xs text-neutral-500">{label as string}</p>
-            <p className="mt-1 truncate text-sm font-medium">{value as string}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-        This Developer Preview does not publish applications or open pull requests. Integrate a deployment adapter before exposing those actions.
-      </div>
-
-      <div className="mt-5 rounded-lg border border-neutral-200">
-        {['Install dependencies', 'Run type checks', 'Export verified source'].map((item, index) => (
-          <div key={item} className="flex items-center gap-3 border-b border-neutral-200 px-4 py-3 last:border-b-0">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-950 text-xs text-white">
-              {index + 1}
-            </span>
-            <span className="text-sm">{item}</span>
-            <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-600" />
-          </div>
-        ))}
       </div>
     </div>
   )
