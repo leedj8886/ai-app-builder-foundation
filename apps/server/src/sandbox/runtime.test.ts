@@ -6,6 +6,7 @@ import test from 'node:test';
 import type IORedis from 'ioredis';
 import type { ArtifactService } from '../artifacts/artifactService';
 import { createSandboxRuntime } from './runtime';
+import type { DaytonaClientLike } from './providers/DaytonaProvider';
 
 const redis = {} as IORedis;
 const artifactService = {} as ArtifactService;
@@ -60,4 +61,22 @@ test('Sandbox runtime enables verified Local execution only outside production',
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('Sandbox runtime marks Daytona execution verified', async () => {
+  const daytonaClient = {} as DaytonaClientLike;
+  const runtime = await createSandboxRuntime({
+    redis,
+    artifactService,
+    daytonaClient,
+    env: {
+      NODE_ENV: 'production',
+      SANDBOX_PROVIDER: 'daytona',
+      DAYTONA_API_KEY: 'test-api-key'
+    }
+  });
+
+  assert.equal(runtime.provider, 'daytona');
+  assert.equal(runtime.verification, 'verified');
+  assert.equal(runtime.fakeState, undefined);
 });

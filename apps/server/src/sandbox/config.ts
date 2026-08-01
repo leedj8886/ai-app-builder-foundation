@@ -2,6 +2,13 @@ export interface SandboxConfig {
   provider: string;
   localEnabled: boolean;
   localRoot: string;
+  daytona: {
+    apiKey?: string;
+    jwtToken?: string;
+    organizationId?: string;
+    apiUrl?: string;
+    target?: string;
+  };
   allowedBuildImages: string[];
   quotaLockTtlMs: number;
   quotaLockWaitMs: number;
@@ -58,6 +65,11 @@ const images = (value: string | undefined): string[] => {
   return parsed;
 };
 
+const optional = (value: string | undefined): string | undefined => {
+  const parsed = value?.trim();
+  return parsed ? parsed : undefined;
+};
+
 export const getSandboxConfig = (
   env: Record<string, string | undefined> = process.env
 ): SandboxConfig => {
@@ -74,6 +86,30 @@ export const getSandboxConfig = (
   ) {
     throw new Error(
       'LocalProcessProvider cannot be enabled in production'
+    );
+  }
+  const daytonaApiKey = optional(env.DAYTONA_API_KEY);
+  const daytonaJwtToken = optional(env.DAYTONA_JWT_TOKEN);
+  const daytonaOrganizationId = optional(env.DAYTONA_ORGANIZATION_ID);
+  const daytonaApiUrl = optional(env.DAYTONA_API_URL);
+  const daytonaTarget = optional(env.DAYTONA_TARGET);
+  if (
+    provider === 'daytona' &&
+    daytonaJwtToken &&
+    !daytonaOrganizationId
+  ) {
+    throw new Error(
+      'DAYTONA_ORGANIZATION_ID is required with DAYTONA_JWT_TOKEN'
+    );
+  }
+  if (
+    provider === 'daytona' &&
+    !daytonaApiKey &&
+    !(daytonaJwtToken && daytonaOrganizationId)
+  ) {
+    throw new Error(
+      'DaytonaProvider requires DAYTONA_API_KEY or ' +
+      'DAYTONA_JWT_TOKEN with DAYTONA_ORGANIZATION_ID'
     );
   }
   const heartbeatIntervalMs = positive(
@@ -97,6 +133,19 @@ export const getSandboxConfig = (
     provider,
     localEnabled,
     localRoot: env.SANDBOX_LOCAL_ROOT || '/tmp/open-v0-sandboxes',
+    daytona: {
+      ...(daytonaApiKey && { apiKey: daytonaApiKey }),
+      ...(daytonaJwtToken && { jwtToken: daytonaJwtToken }),
+      ...(daytonaOrganizationId && {
+        organizationId: daytonaOrganizationId
+      }),
+      ...(daytonaApiUrl && {
+        apiUrl: daytonaApiUrl
+      }),
+      ...(daytonaTarget && {
+        target: daytonaTarget
+      })
+    },
     allowedBuildImages: images(env.SANDBOX_ALLOWED_BUILD_IMAGES),
     quotaLockTtlMs: positive(
       env.SANDBOX_QUOTA_LOCK_TTL_MS,

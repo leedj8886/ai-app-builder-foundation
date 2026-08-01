@@ -16,6 +16,7 @@
     "test:smoke:browser": "playwright test tests/smoke/workspace.spec.ts",
     "test:smoke": "tsx tests/smoke/run-smoke.ts",
     "test:readiness": "node --import tsx --test tests/repository/open-source-readiness.test.ts",
+    "daytona:init": "sh scripts/init-daytona-env.sh",
     "clean": "turbo run clean"
   },
   "devDependencies": {
@@ -25,6 +26,6 @@
     "typescript": "^5.4.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }

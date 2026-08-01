@@ -109,7 +109,14 @@ Preview URL 使用短期、只读、限定单个 Snapshot/Artifact 的签名 Tok
 Source Preview。
 
 LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 local Provider
-或启用开关时会 fail closed。首个生产 Sandbox Provider 尚未实现。
+或启用开关时会 fail closed。DaytonaProvider 是首个生产 Build Provider，
+负责隔离 Artifact hydration、依赖安装、类型检查和构建，并通过 provider label
+支持 Worker 重启后的资源重连与回收。Daytona PreviewDeployment 尚未实现。
+
+项目通过 `docker-compose.daytona.yml` 提供默认的本地/集成 Daytona OSS
+控制面。它与应用共用 Compose 网络，但拥有独立的 PostgreSQL、Redis、Registry
+和 MinIO 数据边界。Overlay 不属于生产拓扑；生产 Worker 只依赖 Daytona API
+协议，通过外部 `DAYTONA_API_URL` 和最小权限 API Key 连接独立控制面。
 
 ## 一致性和恢复
 

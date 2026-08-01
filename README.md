@@ -193,8 +193,9 @@ docker compose --profile maintenance run --rm artifact-reconciler
 ## Sandbox 校验执行器
 
 当前包含 provider-neutral Sandbox Core、Fake Provider、仅限开发测试的
-LocalProcessProvider、持久化 Lease、Redis 配额调度、Artifact hydration 和
-Sandbox Reconciler。选择 sandbox executor 的 Worker 会在启动时先执行一次
+LocalProcessProvider、生产可用的 Daytona Build Provider、持久化 Lease、
+Redis 配额调度、Artifact hydration 和 Sandbox Reconciler。选择 sandbox
+executor 的 Worker 会在启动时先执行一次
 Reconcile，之后按 `SANDBOX_RECONCILE_INTERVAL_MS` 周期恢复或回收 Lease；
 Redis 不可用时，新预留 fail closed。
 
@@ -219,6 +220,54 @@ AGENT_VALIDATION_EXECUTOR=sandbox
 LocalProcessProvider 完成标记为 `verified` 的本机真实构建。生产环境禁止
 local，配置错误会使 Worker 启动失败。
 
+生产 Build Sandbox 可使用 Daytona：
+
+```dotenv
+AGENT_VALIDATION_EXECUTOR=sandbox
+SANDBOX_PROVIDER=daytona
+DAYTONA_API_KEY=...
+# 自托管时指向 Daytona API；Daytona Cloud 保持相同 Provider 协议。
+DAYTONA_API_URL=https://app.daytona.io/api
+DAYTONA_TARGET=
+```
+
+也可使用 `DAYTONA_JWT_TOKEN` + `DAYTONA_ORGANIZATION_ID` 认证。Daytona
+资源使用 provisioning key 和规范哈希实现幂等创建与所有权校验，支持 Worker
+重启后按 ID/label 重连和回收。该 Provider 目前只负责临时 Build Sandbox；
+页面预览仍使用已验证的 `dist` Artifact，长驻 Daytona PreviewDeployment
+属于下一阶段。
+
+项目提供了一个默认的本地 Daytona OSS Build 栈：
+
+```bash
+cp .env.example .env
+npm run daytona:init
+
+docker compose \
+  --env-file .env \
+  --env-file .env.daytona \
+  -f docker-compose.yml \
+  -f docker-compose.daytona.yml \
+  up -d daytona-api
+```
+
+在 `http://localhost:3010` 使用本地账号 `dev@daytona.io` / `password`
+登录并创建 Worker API Key，将 Key 写入 `.env` 的 `DAYTONA_API_KEY`，然后：
+
+```bash
+docker compose \
+  --env-file .env \
+  --env-file .env.daytona \
+  -f docker-compose.yml \
+  -f docker-compose.daytona.yml \
+  up -d --build worker
+```
+
+该 Overlay 自动把 Worker 切换到 `sandbox + daytona`，普通 Compose 默认行为
+不变。完整服务清单、权限和启停说明见
+[`infra/daytona/README.md`](infra/daytona/README.md)。Bundled Runner 使用
+privileged 容器和本地 Dex，仅用于开发/集成；生产 Daytona 必须独立部署。
+
 Readiness、Lease、自动删除、孤儿保护窗口、Reconcile 周期和三段构建命令超时
 均通过 `SANDBOX_*` 环境变量配置。周期任务不会并发执行；Worker 退出时会等待
 当前 Reconcile 安全结束。
@@ -231,7 +280,7 @@ Lease 心跳；Reconciler 使用 `SANDBOX_HEARTBEAT_TIMEOUT_MS` 以 CAS 抢占�
 失去 Worker 的陈旧 Lease，避免误杀刚刚续约的活跃构建。
 
 Compose 默认继续使用 `legacy`；因此升级不会改变当前 Worker 的生产校验行为。
-Daytona Provider 和长驻 PreviewDeployment 仍属于后续阶段。
+长驻 Daytona PreviewDeployment 仍属于后续阶段。
 
 本地页面端到端验证 LocalProcessProvider 时，使用专用 Compose Override：
 

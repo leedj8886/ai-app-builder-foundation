@@ -28,6 +28,9 @@ test('getSandboxConfig uses safe defaults', () => {
 test('getSandboxConfig parses strict overrides', () => {
   const config = getSandboxConfig({
     SANDBOX_PROVIDER: 'daytona',
+    DAYTONA_API_KEY: 'test-api-key',
+    DAYTONA_API_URL: 'https://example.test/api',
+    DAYTONA_TARGET: 'eu',
     SANDBOX_LOCAL_ENABLED: 'true',
     SANDBOX_ALLOWED_BUILD_IMAGES: 'node:22, node:24',
     SANDBOX_QUOTA_LOCK_TTL_MS: '7000',
@@ -41,6 +44,11 @@ test('getSandboxConfig parses strict overrides', () => {
   });
 
   assert.equal(config.provider, 'daytona');
+  assert.deepEqual(config.daytona, {
+    apiKey: 'test-api-key',
+    apiUrl: 'https://example.test/api',
+    target: 'eu'
+  });
   assert.equal(config.localEnabled, true);
   assert.deepEqual(config.allowedBuildImages, ['node:22', 'node:24']);
   assert.equal(config.quotaLockTtlMs, 7_000);
@@ -74,6 +82,17 @@ test('getSandboxConfig rejects unsafe production local mode', () => {
 });
 
 test('getSandboxConfig rejects malformed values', () => {
+  assert.throws(
+    () => getSandboxConfig({ SANDBOX_PROVIDER: 'daytona' }),
+    /DaytonaProvider requires/
+  );
+  assert.throws(
+    () => getSandboxConfig({
+      SANDBOX_PROVIDER: 'daytona',
+      DAYTONA_JWT_TOKEN: 'jwt'
+    }),
+    /DAYTONA_ORGANIZATION_ID is required/
+  );
   assert.throws(
     () => getSandboxConfig({ SANDBOX_QUOTA_LOCK_TTL_MS: '0' }),
     /positive safe integer/

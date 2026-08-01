@@ -84,6 +84,18 @@ docker compose logs --tail=200 worker
     up -d --build worker
   ```
 
+- Daytona Build Provider 需要设置 `SANDBOX_PROVIDER=daytona`，并提供
+  `DAYTONA_API_KEY`，或同时提供 `DAYTONA_JWT_TOKEN` 和
+  `DAYTONA_ORGANIZATION_ID`。自托管部署还应设置正确的
+  `DAYTONA_API_URL`；可用 `DAYTONA_TARGET` 选择目标环境。认证缺失时 Worker
+  会在启动阶段 fail closed。
+
+  使用项目默认 Daytona OSS 栈时，先运行 `npm run daytona:init`，再使用
+  `docker-compose.daytona.yml` 启动 `daytona-api`。Dashboard 位于
+  `http://localhost:3010`；创建 API Key 并写入 `.env` 后才能启动 Worker。
+  如果 Worker 循环重启，优先检查 API Key 是否为空、默认 Snapshot 是否 active，
+  以及 `daytona-api`、`daytona-runner`、`daytona-minio` 日志。
+
 - Compose 将 Worker 以 `NODE_ENV=production` 运行，故意禁止 local。不要通过
   修改主 Compose 放宽该保护；本地 Override 只对 Worker 显式启用开发模式。
 

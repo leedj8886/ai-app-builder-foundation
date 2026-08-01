@@ -1,0 +1,257 @@
+# Local/integration Daytona OSS control plane for the Build Provider.
+# This overlay follows Daytona's official OSS Compose topology but intentionally
+# omits browser preview routing, SSH gateway, admin UIs, and observability.
+# It is not a production deployment.
+services:
+  worker:
+    environment:
+      AGENT_VALIDATION_EXECUTOR: sandbox
+      SANDBOX_PROVIDER: daytona
+      SANDBOX_LOCAL_ENABLED: "false"
+      DAYTONA_API_KEY: ${DAYTONA_API_KEY:-}
+      DAYTONA_API_URL: http://daytona-api:3000/api
+      DAYTONA_TARGET: ${DAYTONA_TARGET:-us}
+      NODE_ENV: production
+    depends_on:
+      daytona-api:
+        condition: service_healthy
+      daytona-proxy:
+        condition: service_healthy
+
+  daytona-api:
+    image: daytonaio/daytona-api:${DAYTONA_OSS_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "127.0.0.1:3010:3000"
+    environment:
+      OTEL_ENABLED: "false"
+      DEFAULT_SNAPSHOT: ${DAYTONA_DEFAULT_SNAPSHOT:-daytonaio/sandbox:0.5.0-slim}
+      ENCRYPTION_KEY: ${DAYTONA_INTERNAL_ENCRYPTION_KEY:?Run npm run daytona:init first}
+      ENCRYPTION_SALT: ${DAYTONA_INTERNAL_ENCRYPTION_SALT:?Run npm run daytona:init first}
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: daytona-db
+      DB_PORT: "5432"
+      DB_USERNAME: daytona
+      DB_PASSWORD: ${DAYTONA_INTERNAL_POSTGRES_PASSWORD:?Run npm run daytona:init first}
+      DB_DATABASE: daytona
+      REDIS_HOST: daytona-redis
+      REDIS_PORT: "6379"
+      OIDC_CLIENT_ID: daytona
+      OIDC_ISSUER_BASE_URL: http://daytona-dex:5556/dex
+      PUBLIC_OIDC_DOMAIN: http://localhost:5556/dex
+      OIDC_AUDIENCE: daytona
+      OIDC_MANAGEMENT_API_ENABLED: ""
+      DASHBOARD_URL: http://localhost:3010/dashboard
+      DASHBOARD_BASE_API_URL: http://localhost:3010
+      POSTHOG_API_KEY: ""
+      POSTHOG_ENVIRONMENT: local
+      TRANSIENT_REGISTRY_URL: http://registry:6000
+      TRANSIENT_REGISTRY_ADMIN: admin
+      TRANSIENT_REGISTRY_PASSWORD: ${DAYTONA_INTERNAL_REGISTRY_PASSWORD:?Run npm run daytona:init first}
+      TRANSIENT_REGISTRY_PROJECT_ID: daytona
+      INTERNAL_REGISTRY_URL: http://registry:6000
+      INTERNAL_REGISTRY_ADMIN: admin
+      INTERNAL_REGISTRY_PASSWORD: ${DAYTONA_INTERNAL_REGISTRY_PASSWORD:?Run npm run daytona:init first}
+      INTERNAL_REGISTRY_PROJECT_ID: daytona
+      SMTP_HOST: daytona-mail
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_SECURE: ""
+      SMTP_EMAIL_FROM: Daytona Local <no-reply@localhost>
+      S3_ENDPOINT: http://daytona-minio:9000
+      S3_STS_ENDPOINT: http://daytona-minio:9000/minio/v1/assume-role
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${DAYTONA_INTERNAL_MINIO_USER:?Run npm run daytona:init first}
+      S3_SECRET_KEY: ${DAYTONA_INTERNAL_MINIO_PASSWORD:?Run npm run daytona:init first}
+      S3_DEFAULT_BUCKET: daytona
+      S3_ACCOUNT_ID: /
+      S3_ROLE_NAME: /
+      ENVIRONMENT: docker-compose
+      MAX_AUTO_ARCHIVE_INTERVAL: "43200"
+      MAINTENANCE_MODE: "false"
+      PROXY_DOMAIN: proxy.localhost:4010
+      PROXY_PROTOCOL: http
+      PROXY_API_KEY: ${DAYTONA_INTERNAL_PROXY_KEY:?Run npm run daytona:init first}
+      SSH_GATEWAY_API_KEY: ${DAYTONA_INTERNAL_SSH_GATEWAY_KEY:?Run npm run daytona:init first}
+      PROXY_TEMPLATE_URL: http://{{PORT}}-{{sandboxId}}.proxy.localhost:4010
+      DEFAULT_RUNNER_DOMAIN: daytona-runner:3003
+      DEFAULT_RUNNER_API_URL: http://daytona-runner:3003
+      DEFAULT_RUNNER_PROXY_URL: http://daytona-runner:3003
+      DEFAULT_RUNNER_API_KEY: ${DAYTONA_INTERNAL_RUNNER_TOKEN:?Run npm run daytona:init first}
+      DEFAULT_RUNNER_CPU: "4"
+      DEFAULT_RUNNER_MEMORY: "8"
+      DEFAULT_RUNNER_DISK: "50"
+      DEFAULT_RUNNER_NAME: default
+      DEFAULT_REGION_ID: us
+      DEFAULT_REGION_NAME: us
+      DEFAULT_REGION_ENFORCE_QUOTAS: "false"
+      DEFAULT_ORG_QUOTA_TOTAL_CPU_QUOTA: "10000"
+      DEFAULT_ORG_QUOTA_TOTAL_MEMORY_QUOTA: "10000"
+      DEFAULT_ORG_QUOTA_TOTAL_DISK_QUOTA: "100000"
+      DEFAULT_ORG_QUOTA_MAX_CPU_PER_SANDBOX: "100"
+      DEFAULT_ORG_QUOTA_MAX_MEMORY_PER_SANDBOX: "100"
+      DEFAULT_ORG_QUOTA_MAX_DISK_PER_SANDBOX: "1000"
+      DEFAULT_ORG_QUOTA_SNAPSHOT_QUOTA: "1000"
+      DEFAULT_ORG_QUOTA_MAX_SNAPSHOT_SIZE: "1000"
+      DEFAULT_ORG_QUOTA_VOLUME_QUOTA: "10000"
+      RUNNER_DECLARATIVE_BUILD_SCORE_THRESHOLD: "10"
+      RUNNER_AVAILABILITY_SCORE_THRESHOLD: "10"
+      RUNNER_START_SCORE_THRESHOLD: "3"
+      SKIP_USER_EMAIL_VERIFICATION: "true"
+      RUN_MIGRATIONS: "true"
+      HEALTH_CHECK_API_KEY: ${DAYTONA_INTERNAL_HEALTH_KEY:?Run npm run daytona:init first}
+    depends_on:
+      daytona-db:
+        condition: service_healthy
+      daytona-redis:
+        condition: service_healthy
+      daytona-dex:
+        condition: service_healthy
+      daytona-runner:
+        condition: service_started
+      daytona-registry:
+        condition: service_started
+      daytona-minio:
+        condition: service_started
+    networks:
+      - v0-network
+
+  daytona-proxy:
+    image: daytonaio/daytona-proxy:${DAYTONA_PROXY_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      PROXY_PORT: "4010"
+      PROXY_PROTOCOL: http
+      PROXY_API_KEY: ${DAYTONA_INTERNAL_PROXY_KEY:?Run npm run daytona:init first}
+      DAYTONA_API_URL: http://daytona-api:3000/api
+    depends_on:
+      daytona-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4010/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      v0-network:
+        aliases:
+          - proxy.localhost
+
+  daytona-runner:
+    image: daytonaio/daytona-runner:${DAYTONA_OSS_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    privileged: true
+    environment:
+      ENVIRONMENT: development
+      API_PORT: "3003"
+      DAYTONA_RUNNER_TOKEN: ${DAYTONA_INTERNAL_RUNNER_TOKEN:?Run npm run daytona:init first}
+      LOG_FILE_PATH: /home/daytona/runner/runner.log
+      RESOURCE_LIMITS_DISABLED: "true"
+      AWS_ENDPOINT_URL: http://daytona-minio:9000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${DAYTONA_INTERNAL_MINIO_USER:?Run npm run daytona:init first}
+      AWS_SECRET_ACCESS_KEY: ${DAYTONA_INTERNAL_MINIO_PASSWORD:?Run npm run daytona:init first}
+      AWS_DEFAULT_BUCKET: daytona
+      DAYTONA_API_URL: http://daytona-api:3000/api
+      RUNNER_DOMAIN: daytona-runner
+      SSH_GATEWAY_ENABLE: "false"
+      INTER_SANDBOX_NETWORK_ENABLED: "false"
+    depends_on:
+      daytona-minio:
+        condition: service_started
+    networks:
+      - v0-network
+
+  daytona-db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: daytona
+      POSTGRES_PASSWORD: ${DAYTONA_INTERNAL_POSTGRES_PASSWORD:?Run npm run daytona:init first}
+      POSTGRES_DB: daytona
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daytona -d daytona"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - daytona_db_data:/var/lib/postgresql/18/docker
+    networks:
+      - v0-network
+
+  daytona-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - v0-network
+
+  daytona-dex:
+    image: dexidp/dex:v2.42.0
+    restart: unless-stopped
+    entrypoint:
+      - sh
+      - -c
+      - touch /var/dex/dex.db && exec dex serve /etc/dex/config.yaml
+    volumes:
+      - ./infra/daytona/dex/config.yaml:/etc/dex/config.yaml:ro
+      - daytona_dex_data:/var/dex
+    ports:
+      - "127.0.0.1:5556:5556"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - --quiet
+        - http://localhost:5556/dex/.well-known/openid-configuration
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - v0-network
+
+  daytona-registry:
+    image: registry:2.8.2
+    restart: unless-stopped
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+      REGISTRY_HTTP_ADDR: daytona-registry:6000
+    volumes:
+      - daytona_registry_data:/var/lib/registry
+    networks:
+      v0-network:
+        aliases:
+          - registry
+
+  daytona-minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${DAYTONA_INTERNAL_MINIO_USER:?Run npm run daytona:init first}
+      MINIO_ROOT_PASSWORD: ${DAYTONA_INTERNAL_MINIO_PASSWORD:?Run npm run daytona:init first}
+      MINIO_IDENTITY_STS_EXPIRY: 24h
+    volumes:
+      - daytona_minio_data:/data
+    networks:
+      - v0-network
+
+  daytona-mail:
+    image: maildev/maildev:latest
+    restart: unless-stopped
+    networks:
+      - v0-network
+
+volumes:
+  daytona_db_data:
+  daytona_dex_data:
+  daytona_registry_data:
+  daytona_minio_data:

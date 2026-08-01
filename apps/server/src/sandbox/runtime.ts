@@ -1,11 +1,19 @@
 import { mkdir } from 'node:fs/promises';
+import { Daytona } from '@daytona/sdk';
 import type IORedis from 'ioredis';
 import type { ArtifactService } from '../artifacts/artifactService';
 import { getArtifactService } from '../artifacts/runtime';
 import { getSandboxConfig } from './config';
 import { createSandboxPolicy } from './policy';
 import type { SandboxProvider } from './provider/SandboxProvider';
-import { FakeSandboxProvider, FakeSandboxState } from './providers/FakeSandboxProvider';
+import {
+  DaytonaProvider,
+  type DaytonaClientLike
+} from './providers/DaytonaProvider';
+import {
+  FakeSandboxProvider,
+  FakeSandboxState
+} from './providers/FakeSandboxProvider';
 import { LocalProcessProvider } from './providers/LocalProcessProvider';
 import { QuotaScheduler } from './QuotaScheduler';
 import { SandboxRepository } from './SandboxRepository';
@@ -18,6 +26,7 @@ interface CreateSandboxRuntimeOptions {
   env?: Record<string, string | undefined>;
   artifactService?: ArtifactService;
   fakeState?: FakeSandboxState;
+  daytonaClient?: DaytonaClientLike;
 }
 
 export interface SandboxRuntime {
@@ -46,6 +55,15 @@ export const createSandboxRuntime = async (
     providers.set('local', new LocalProcessProvider({
       root: config.localRoot,
       production: env.NODE_ENV === 'production'
+    }));
+  } else if (config.provider === 'daytona') {
+    const client = options.daytonaClient ?? new Daytona({
+      ...config.daytona,
+      otelEnabled: false
+    });
+    providers.set('daytona', new DaytonaProvider({
+      client,
+      operationTimeoutMs: config.readinessTimeoutMs
     }));
   } else {
     throw new Error(
@@ -82,7 +100,9 @@ export const createSandboxRuntime = async (
     reconcileIntervalMs: config.reconcileIntervalMs,
     provider: config.provider,
     image: config.allowedBuildImages[0],
-    verification: config.provider === 'fake' ? 'simulated' : 'verified',
+    verification: (
+      config.provider === 'local' || config.provider === 'daytona'
+    ) ? 'verified' : 'simulated',
     ...(fakeState && { fakeState })
   };
 };
