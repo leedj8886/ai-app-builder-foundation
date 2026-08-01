@@ -53,7 +53,7 @@ Plan the smallest coherent implementation. Return:
 {"summary":"...","steps":[{"title":"...","intent":"...","filesLikelyTouched":["src/App.tsx"]}],"assumptions":["..."]}`;
 
 const generationSystemInstruction = `${sharedSystemInstruction}
-Generate complete file contents using relative project paths with extensions ts, tsx, css, json, html, or md.
+Generate complete file contents using relative project paths with extensions ts, tsx, js, cjs, or mjs for JavaScript configuration, plus css, json, html, or md.
 Do not return scripts or shell commands. Return:
 {"message":"...","operations":[{"type":"create|update","path":"src/App.tsx","content":"..."}],"dependencies":{},"devDependencies":{}}`;
 

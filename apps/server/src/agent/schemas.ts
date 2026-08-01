@@ -9,7 +9,7 @@ const safeProjectPathSchema = z.string().trim().min(1).refine(value => {
     normalized !== '..' &&
     !normalized.startsWith('../') &&
     !normalized.includes('/../') &&
-    /\.(ts|tsx|css|json|html|md)$/.test(normalized);
+    /\.(ts|tsx|js|cjs|mjs|css|json|html|md)$/.test(normalized);
 }, 'File path must be a safe supported project path');
 
 const dependencyMapSchema = z.record(z.string().trim().min(1));

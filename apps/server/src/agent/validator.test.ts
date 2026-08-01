@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { createProjectTemplateFiles } from './projectTemplate';
 import { ProjectFile } from './types';
 import { createProjectValidator } from './validator';
@@ -89,6 +90,34 @@ test('project validator runs structure install type-check and build phases', asy
     ['structure', 'install', 'type-check', 'build']
   );
   assert.equal(cleaned, true);
+});
+
+test('project validator runs npm with the worker Node runtime first on PATH', async () => {
+  const commands: RunCommandInput[] = [];
+  const validator = createProjectValidator({
+    workspaceRoot: '/tmp/unused',
+    validation,
+    env: { PATH: '/legacy-node/bin' },
+    dependencyCache: cacheMiss,
+    createWorkspace: async () => ({
+      path: '/tmp/workspace',
+      cleanup: async () => {}
+    }),
+    commandRunner: async input => {
+      commands.push(input);
+      return success();
+    }
+  });
+
+  const result = await validator.validate({
+    runId: 'run-node-runtime',
+    files: projectFiles()
+  });
+
+  assert.equal(result.status, 'passed');
+  const expectedPrefix = `${path.dirname(process.execPath)}${path.delimiter}`;
+  assert.ok(commands.every(command => command.env?.PATH?.startsWith(expectedPrefix)));
+  assert.ok(commands.every(command => command.env?.PATH?.endsWith('/legacy-node/bin')));
 });
 
 test('project validator stops before npm on structural failure', async () => {

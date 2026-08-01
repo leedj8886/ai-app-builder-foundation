@@ -162,8 +162,12 @@ export const createProjectValidator = (
     root: validation.dependencyCacheRoot
   });
   const sourceEnvironment = options.env ?? process.env;
+  const selectedEnvironment = pickValidationEnvironment(sourceEnvironment);
   const commandEnvironment = {
-    ...pickValidationEnvironment(sourceEnvironment),
+    ...selectedEnvironment,
+    PATH: [path.dirname(process.execPath), selectedEnvironment.PATH]
+      .filter((value): value is string => Boolean(value))
+      .join(path.delimiter),
     npm_config_cache: validation.npmCacheRoot
   };
 

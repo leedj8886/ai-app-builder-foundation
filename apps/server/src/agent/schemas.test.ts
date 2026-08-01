@@ -139,6 +139,24 @@ test('generationResultSchema accepts safe structured file operations', () => {
   assert.equal(parsed.operations.length, 2);
 });
 
+test('generationResultSchema accepts supported JavaScript configuration files', () => {
+  const parsed = generationResultSchema.parse({
+    message: 'Updated build configuration',
+    operations: [
+      { type: 'update', path: 'tailwind.config.js', content: 'export default {}' },
+      { type: 'update', path: 'postcss.config.cjs', content: 'module.exports = {}' },
+      { type: 'create', path: 'vite.config.mjs', content: 'export default {}' }
+    ],
+    dependencies: {},
+    devDependencies: {}
+  });
+
+  assert.deepEqual(
+    parsed.operations.map(operation => operation.path),
+    ['tailwind.config.js', 'postcss.config.cjs', 'vite.config.mjs']
+  );
+});
+
 test('generationResultSchema rejects unsafe or incomplete operations', () => {
   const base = {
     message: 'Created the app',

@@ -63,24 +63,28 @@ test('OpenAI model client parses plans and normalizes usage', async () => {
 });
 
 test('OpenAI model client parses structured file generation', async () => {
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = [];
   const client = createOpenAIModelClient({
     model: 'test-model',
-    createCompletion: async () => ({
-      choices: [{
-        message: {
-          content: JSON.stringify({
-            message: 'Created app',
-            operations: [{
-              type: 'create',
-              path: 'src/App.tsx',
-              content: 'export default function App() { return <main />; }'
-            }],
-            dependencies: { react: '^18.2.0' },
-            devDependencies: { typescript: '^5.4.0' }
-          })
-        }
-      }]
-    })
+    createCompletion: async request => {
+      requests.push(request);
+      return {
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              message: 'Created app',
+              operations: [{
+                type: 'create',
+                path: 'src/App.tsx',
+                content: 'export default function App() { return <main />; }'
+              }],
+              dependencies: { react: '^18.2.0' },
+              devDependencies: { typescript: '^5.4.0' }
+            })
+          }
+        }]
+      };
+    }
   });
 
   const plan = {
@@ -95,6 +99,7 @@ test('OpenAI model client parses structured file generation', async () => {
   const result = await client.generateFiles({ context, plan });
 
   assert.equal(result.value.operations[0].path, 'src/App.tsx');
+  assert.match(requests[0].messages[0].content, /js, cjs, or mjs/);
 });
 
 test('OpenAI model client reports invalid model output after one retry', async () => {
