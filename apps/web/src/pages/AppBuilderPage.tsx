@@ -48,6 +48,10 @@ import { ModelManagerDialog } from '@/components/ModelManagerDialog'
 import { ModelPicker } from '@/components/ModelPicker'
 import { BrandMark } from '@/components/BrandMark'
 import {
+  AttachmentChips,
+  FileAttachmentButton,
+} from '@/components/FileAttachments'
+import {
   agentApi,
   authApi,
   chatApi,
@@ -58,10 +62,11 @@ import {
 import { monitorAgentRun } from '@/services/agentRunMonitor'
 import {
   buildChatPath,
-  buildEditRunRequest,
+  buildWorkspaceRunRequest,
   resolveRoutedProjectId,
 } from '@/lib/chatWorkspace'
 import { getSnapshotPreviewState } from '@/lib/snapshotPreview'
+import type { PendingAttachment } from '@/lib/fileAttachments'
 import {
   createChatHistoryState,
   failChatHistory,
@@ -203,6 +208,8 @@ export function AppBuilderPage() {
   const [workspace, setWorkspace] = useState(createInitialWorkspaceState)
   const [draftPrompt, setDraftPrompt] = useState('')
   const [editDraft, setEditDraft] = useState('')
+  const [homeAttachments, setHomeAttachments] = useState<PendingAttachment[]>([])
+  const [editAttachments, setEditAttachments] = useState<PendingAttachment[]>([])
   const [submissionPending, setSubmissionPending] = useState(false)
   const [routeError, setRouteError] = useState<string>()
   const [models, setModels] = useState<ModelDefinition[]>([])
@@ -333,6 +340,7 @@ export function AppBuilderPage() {
     const requestId = ++routeRequestRef.current
     setRouteError(undefined)
     setEditDraft('')
+    setEditAttachments([])
 
     if (!chatId) {
       timelineRequestRef.current += 1
@@ -403,7 +411,10 @@ export function AppBuilderPage() {
     monitorControllerRef.current?.abort()
   }, [])
 
-  const submitPromptToAgent = async (rawPrompt: string) => {
+  const submitPromptToAgent = async (
+    rawPrompt: string,
+    attachments: PendingAttachment[] = [],
+  ) => {
     const prompt = rawPrompt.trim()
 
     if (!prompt || workspace.generation.status === 'running' || submissionInFlightRef.current) {
@@ -437,20 +448,24 @@ export function AppBuilderPage() {
           prompt,
           mode: 'create',
           ...(selectedModelId ? { modelId: selectedModelId } : {}),
+          ...(attachments.length ? { attachments } : {}),
         }
       } else {
-        runRequest = buildEditRunRequest({
+        runRequest = buildWorkspaceRunRequest({
           chatId: activeChatId,
           projectId: activeProjectId,
           prompt,
           activeSnapshotId: workspace.snapshot?.id,
           modelId: selectedModelId || undefined,
+          attachments,
         })
       }
 
       const runResponse = await agentApi.createRun(runRequest)
 
       if (submissionId !== submissionIdRef.current) return
+      if (chatId) setEditAttachments([])
+      else setHomeAttachments([])
       if (!chatId) {
         setProjectId(activeProjectId)
         pendingNavigationChatRef.current = activeChatId
@@ -588,7 +603,11 @@ export function AppBuilderPage() {
 
   const handlePromptSubmit = (event?: FormEvent) => {
     event?.preventDefault()
-    void submitPromptToAgent(draftPrompt || selectedTemplate.prompt)
+    const prompt = draftPrompt.trim()
+      || (homeAttachments.length
+        ? 'Use the attached files as the primary context for this application.'
+        : selectedTemplate.prompt)
+    void submitPromptToAgent(prompt, homeAttachments)
   }
 
   const handleModelSelect = async (modelId: string) => {
@@ -672,12 +691,21 @@ export function AppBuilderPage() {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
-                    void submitPromptToAgent(draftPrompt || selectedTemplate.prompt)
+                    handlePromptSubmit()
                   }
                 }}
                 placeholder="描述你想构建的应用..."
                 className="h-20 w-full resize-none rounded-t-lg bg-transparent px-4 py-4 text-sm leading-6 text-neutral-800 outline-none placeholder:text-neutral-400 sm:h-[74px]"
               />
+              {homeAttachments.length > 0 ? (
+                <div className="px-3 pb-3 text-left">
+                  <AttachmentChips
+                    attachments={homeAttachments}
+                    disabled={submissionPending}
+                    onChange={setHomeAttachments}
+                  />
+                </div>
+              ) : null}
               <div className="flex items-center justify-between px-3 pb-3">
                 <ModelPicker
                   models={models}
@@ -688,13 +716,15 @@ export function AppBuilderPage() {
                 />
 
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="hidden h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 sm:inline-flex"
-                    aria-label="Upload context"
+                  <FileAttachmentButton
+                    attachments={homeAttachments}
+                    disabled={submissionPending}
+                    label="Upload context"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    onChange={setHomeAttachments}
                   >
                     <Upload className="h-4 w-4" />
-                  </button>
+                  </FileAttachmentButton>
                   <button
                     type="button"
                     className="h-8 w-8 rounded-md bg-neutral-950 text-white hover:bg-neutral-800"
@@ -702,7 +732,7 @@ export function AppBuilderPage() {
                   >
                     <Mic className="mx-auto h-4 w-4" />
                   </button>
-                  {draftPrompt.trim() ? (
+                  {draftPrompt.trim() || homeAttachments.length > 0 ? (
                     <button
                       type="submit"
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-neutral-950 text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
@@ -784,7 +814,7 @@ export function AppBuilderPage() {
                     const next = selectTemplate(workspace, template.id)
                     setWorkspace(next)
                     setDraftPrompt(next.prompt)
-                    void submitPromptToAgent(next.prompt)
+                    void submitPromptToAgent(next.prompt, homeAttachments)
                   }}
                 />
               ))}
@@ -820,9 +850,14 @@ export function AppBuilderPage() {
           currentCode={currentCode}
           currentFileName={currentFileName}
           editDraft={editDraft}
+          editAttachments={editAttachments}
           submissionPending={submissionPending}
           onEditDraftChange={setEditDraft}
-          onSubmitEdit={() => void submitPromptToAgent(editDraft)}
+          onEditAttachmentsChange={setEditAttachments}
+          onSubmitEdit={() => void submitPromptToAgent(
+            editDraft.trim() || 'Use the attached files as context for this update.',
+            editAttachments,
+          )}
           modelLabel={selectedModel?.label ?? 'Configured model'}
           onManageModel={() => setModelManagerOpen(true)}
           timeline={timeline}
@@ -959,8 +994,10 @@ function WorkspaceScreen({
   currentCode,
   currentFileName,
   editDraft,
+  editAttachments,
   submissionPending,
   onEditDraftChange,
+  onEditAttachmentsChange,
   onSubmitEdit,
   modelLabel,
   onManageModel,
@@ -993,8 +1030,10 @@ function WorkspaceScreen({
   currentCode: string
   currentFileName: string
   editDraft: string
+  editAttachments: PendingAttachment[]
   submissionPending: boolean
   onEditDraftChange: (value: string) => void
+  onEditAttachmentsChange: (attachments: PendingAttachment[]) => void
   onSubmitEdit: () => void
   modelLabel: string
   onManageModel: () => void
@@ -1124,11 +1163,18 @@ function WorkspaceScreen({
             <WorkspaceEditComposer
               value={editDraft}
               disabled={state.generation.status === 'running' || submissionPending}
-              canSubmit={Boolean(state.snapshot) && Boolean(editDraft.trim())}
+              canSubmit={Boolean(editDraft.trim()) || editAttachments.length > 0}
+              placeholder={
+                state.snapshot
+                  ? '提出后续问题…'
+                  : '补充要求并重新生成…'
+              }
               modelLabel={modelLabel}
               onChange={onEditDraftChange}
               onSubmit={onSubmitEdit}
               onManageModel={onManageModel}
+              attachments={editAttachments}
+              onAttachmentsChange={onEditAttachmentsChange}
             />
           </section>
 

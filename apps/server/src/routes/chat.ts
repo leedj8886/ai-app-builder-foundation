@@ -93,6 +93,7 @@ router.get('/:id/timeline', async (req: AuthRequest, res, next) => {
         ]
       } : {})
     })
+      .select('-attachments.content')
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit + 1)
       .lean();

@@ -12,23 +12,34 @@ import {
   ScanLine,
   Sparkles,
 } from 'lucide-react'
+import {
+  AttachmentChips,
+  FileAttachmentButton,
+} from './FileAttachments'
+import type { PendingAttachment } from '@/lib/fileAttachments'
 
 export function WorkspaceEditComposer({
   value,
   disabled,
   canSubmit,
+  placeholder,
   modelLabel,
   onChange,
   onSubmit,
   onManageModel,
+  attachments,
+  onAttachmentsChange,
 }: {
   value: string
   disabled: boolean
   canSubmit: boolean
+  placeholder: string
   modelLabel: string
   onChange: (value: string) => void
   onSubmit: () => void
   onManageModel: () => void
+  attachments: PendingAttachment[]
+  onAttachmentsChange: (attachments: PendingAttachment[]) => void
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -57,27 +68,38 @@ export function WorkspaceEditComposer({
       data-testid="workspace-edit-composer"
       onSubmit={submit}
     >
-      <div className="flex min-h-10 items-end gap-1 rounded-lg border border-neutral-200 bg-white px-1.5 py-1 shadow-sm transition focus-within:border-neutral-400 focus-within:ring-1 focus-within:ring-neutral-200">
-        <button
-          type="button"
-          aria-label="Add attachment"
-          disabled={disabled}
-          className="mb-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          className="max-h-24 min-h-8 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-1.5 text-sm leading-5 text-neutral-800 outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed disabled:text-neutral-400"
-          aria-label="Edit prompt"
-          placeholder={disabled ? '正在生成…' : '提出后续问题…'}
-          value={value}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
+      <div className="rounded-lg border border-neutral-200 bg-white px-1.5 py-1 shadow-sm transition focus-within:border-neutral-400 focus-within:ring-1 focus-within:ring-neutral-200">
+        {attachments.length > 0 ? (
+          <div className="px-1.5 pb-1 pt-1">
+            <AttachmentChips
+              attachments={attachments}
+              disabled={disabled}
+              onChange={onAttachmentsChange}
+            />
+          </div>
+        ) : null}
+        <div className="flex min-h-8 items-end gap-1">
+          <FileAttachmentButton
+            attachments={attachments}
+            disabled={disabled}
+            label="Add attachment"
+            className="mb-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40"
+            onChange={onAttachmentsChange}
+          >
+            <Plus className="h-4 w-4" />
+          </FileAttachmentButton>
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            className="max-h-24 min-h-8 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-1.5 text-sm leading-5 text-neutral-800 outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed disabled:text-neutral-400"
+            aria-label="Edit prompt"
+            placeholder={disabled ? '正在生成…' : placeholder}
+            value={value}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
           <button
             type="button"
             aria-label={`Generation model: ${modelLabel}`}
@@ -116,12 +138,13 @@ export function WorkspaceEditComposer({
           </button>
           <button
             type="submit"
-            aria-label={disabled ? '正在生成' : 'Send edit'}
+            aria-label={disabled ? '正在生成' : '发送消息'}
             disabled={!canSubmit || disabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-950 text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-950 disabled:text-white"
           >
             <ArrowUp className="h-4 w-4 stroke-[2.5]" />
           </button>
+          </div>
         </div>
       </div>
     </form>

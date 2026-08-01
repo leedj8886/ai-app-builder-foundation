@@ -4,6 +4,7 @@ import { Project } from '../models/Project';
 import { ProjectSnapshot } from '../models/ProjectSnapshot';
 import {
   AgentContext,
+  AgentAttachment,
   AgentContextMessage,
   AgentRunMode
 } from './types';
@@ -23,6 +24,7 @@ interface ContextBuilderInput {
     };
   };
   messages: AgentContextMessage[];
+  attachments?: AgentAttachment[];
   files: Array<{ path: string; content: string }>;
 }
 
@@ -47,6 +49,13 @@ export const buildAgentContext = (
   const fileManifest = input.files
     .map(file => ({ path: take(file.path), original: file }))
     .filter(file => file.path.length > 0);
+  const attachmentManifest = (input.attachments ?? []).map(attachment => ({
+    id: attachment.id,
+    name: take(attachment.name),
+    mediaType: take(attachment.mediaType),
+    size: attachment.size,
+    original: attachment
+  }));
   const selectedMessages: AgentContextMessage[] = [];
 
   for (const message of input.messages.slice(-20).reverse()) {
@@ -59,6 +68,14 @@ export const buildAgentContext = (
       content: take(message.content)
     });
   }
+
+  const attachments = attachmentManifest.map(attachment => ({
+    id: attachment.id,
+    name: attachment.name,
+    mediaType: attachment.mediaType,
+    size: attachment.size,
+    content: take(attachment.original.content)
+  }));
 
   const includeContents = fileManifest.every(
     file => file.original.content.length <= remaining
@@ -75,6 +92,7 @@ export const buildAgentContext = (
       uiLibrary: input.project.settings.uiLibrary
     },
     messages: selectedMessages,
+    attachments,
     files: fileManifest
       .map(file => ({
         path: file.path,
@@ -156,6 +174,7 @@ export const loadAgentContext = async (
       role: message.role,
       content: message.content
     })) ?? [],
+    attachments: run.attachments ?? [],
     files: contextFiles.map(file => ({
       path: file.path,
       content: file.content

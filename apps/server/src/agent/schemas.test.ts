@@ -33,6 +33,32 @@ test('createAgentRunRequestSchema accepts a safe model id', () => {
   }));
 });
 
+test('createAgentRunRequestSchema accepts bounded text attachments', () => {
+  const attachment = {
+    id: 'b4c62ae1-ea47-4cba-a8d2-53ef778d18f1',
+    name: 'requirements.md',
+    mediaType: 'text/markdown',
+    size: 18,
+    content: '# Product context'
+  };
+  const parsed = createAgentRunRequestSchema.parse({
+    projectId: '64b7f5086f1f8e9f0f000001',
+    prompt: 'Build the attached specification',
+    attachments: [attachment]
+  });
+
+  assert.deepEqual(parsed.attachments, [attachment]);
+  assert.throws(() => createAgentRunRequestSchema.parse({
+    projectId: '64b7f5086f1f8e9f0f000001',
+    prompt: 'Read this file',
+    attachments: [{
+      ...attachment,
+      name: 'archive.zip',
+      mediaType: 'application/zip'
+    }]
+  }));
+});
+
 test('createAgentRunRequestSchema rejects blank prompts', () => {
   assert.throws(() => {
     createAgentRunRequestSchema.parse({

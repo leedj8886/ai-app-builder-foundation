@@ -45,6 +45,27 @@ test('buildAgentContext includes project chat and small snapshot contents', () =
   assert.equal(context.files[0].content, input.files[0].content);
 });
 
+test('buildAgentContext includes uploaded text before snapshot contents', () => {
+  const context = buildAgentContext({
+    ...input,
+    attachments: [{
+      id: 'b4c62ae1-ea47-4cba-a8d2-53ef778d18f1',
+      name: 'requirements.md',
+      mediaType: 'text/markdown',
+      size: 18,
+      content: '# Product context'
+    }]
+  }, 10_000);
+
+  assert.deepEqual(context.attachments, [{
+    id: 'b4c62ae1-ea47-4cba-a8d2-53ef778d18f1',
+    name: 'requirements.md',
+    mediaType: 'text/markdown',
+    size: 18,
+    content: '# Product context'
+  }]);
+});
+
 test('buildAgentContext falls back to a file manifest over the character limit', () => {
   const context = buildAgentContext(input, 120);
 

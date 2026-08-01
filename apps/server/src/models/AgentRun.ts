@@ -1,6 +1,7 @@
 import mongoose, { Schema, Types } from 'mongoose';
 import {
   AgentErrorPayload,
+  AgentAttachment,
   AgentRunMode,
   AgentRunStatus,
   agentRunModes,
@@ -14,6 +15,7 @@ export interface IAgentRun {
   branchId?: Types.ObjectId;
   chatId?: Types.ObjectId;
   prompt: string;
+  attachments?: AgentAttachment[];
   status: AgentRunStatus;
   mode: AgentRunMode;
   baseSnapshotId?: Types.ObjectId;
@@ -56,6 +58,14 @@ const AgentRunSchema = new Schema<IAgentRun>(
     },
     chatId: { type: Schema.Types.ObjectId, ref: 'Chat' },
     prompt: { type: String, required: true, trim: true },
+    attachments: [{
+      _id: false,
+      id: { type: String, required: true },
+      name: { type: String, required: true },
+      mediaType: { type: String, required: true },
+      size: { type: Number, required: true },
+      content: { type: String, required: true }
+    }],
     status: {
       type: String,
       enum: agentRunStatuses,

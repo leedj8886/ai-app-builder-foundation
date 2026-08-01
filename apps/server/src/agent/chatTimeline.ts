@@ -15,6 +15,12 @@ export interface TimelineRunSource {
   modelId?: string;
   modelProvider?: string;
   model: string;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    mediaType: string;
+    size: number;
+  }>;
   error?: AgentErrorPayload;
   createdAt: Date;
   startedAt?: Date;
@@ -49,6 +55,12 @@ export interface ChatTimelineTurn {
   userMessage: {
     content: string;
     createdAt: string;
+    attachments?: Array<{
+      id: string;
+      name: string;
+      mediaType: string;
+      size: number;
+    }>;
   };
   agent: {
     status: AgentRunStatus;
@@ -184,7 +196,15 @@ export const buildChatTimelineTurn = (
       : {}),
     userMessage: {
       content: input.run.prompt,
-      createdAt: input.run.createdAt.toISOString()
+      createdAt: input.run.createdAt.toISOString(),
+      ...(input.run.attachments?.length ? {
+        attachments: input.run.attachments.map(attachment => ({
+          id: attachment.id,
+          name: attachment.name,
+          mediaType: attachment.mediaType,
+          size: attachment.size
+        }))
+      } : {})
     },
     agent: {
       status: input.run.status,

@@ -54,6 +54,7 @@ export interface AgentRun {
   projectId: string;
   branchId?: string;
   prompt: string;
+  attachments?: AgentAttachment[];
   status: 'waiting_for_capacity' | 'queued' | 'running' | 'planning' | 'generating' | 'validating' | 'repairing' | 'persisting' | 'completed' | 'completed_with_conflict' | 'failed' | 'cancelled';
   mode: 'create' | 'edit';
   modelId?: string;
@@ -76,6 +77,14 @@ export interface AgentRun {
   startedAt?: string;
   updatedAt?: string;
   completedAt?: string;
+}
+
+export interface AgentAttachment {
+  id: string;
+  name: string;
+  mediaType: string;
+  size: number;
+  content?: string;
 }
 
 export interface AgentEvent {
@@ -233,6 +242,7 @@ export interface ChatTimelineTurn {
   userMessage: {
     content: string;
     createdAt: string;
+    attachments?: AgentAttachment[];
   };
   agent: {
     status: ChatTimelineStatus;
@@ -279,6 +289,7 @@ export const agentApi = {
     prompt: string;
     mode?: 'create' | 'edit';
     modelId?: string;
+    attachments?: Array<AgentAttachment & { content: string }>;
   }) => api.post<{ run: AgentRun }>('/api/agent/runs', data),
   getRun: (runId: string) =>
     api.get<AgentRunDetailResponse>(`/api/agent/runs/${runId}`),

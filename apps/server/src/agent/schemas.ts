@@ -14,6 +14,47 @@ const safeProjectPathSchema = z.string().trim().min(1).refine(value => {
 
 const dependencyMapSchema = z.record(z.string().trim().min(1));
 
+export const MAX_AGENT_ATTACHMENT_COUNT = 5;
+export const MAX_AGENT_ATTACHMENT_BYTES = 512 * 1024;
+export const MAX_AGENT_ATTACHMENTS_TOTAL_BYTES = 1024 * 1024;
+
+export const agentAttachmentSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(160).refine(
+    value => !/[\\/]/.test(value),
+    'Attachment name cannot contain path separators'
+  ),
+  mediaType: z.string().trim().min(1).max(128).refine(
+    value => value.startsWith('text/') || [
+      'application/json',
+      'application/javascript',
+      'application/xml'
+    ].includes(value),
+    'Only text and code attachments are supported'
+  ),
+  size: z.number().int().nonnegative().max(MAX_AGENT_ATTACHMENT_BYTES),
+  content: z.string().refine(
+    value => !value.includes('\0')
+      && Buffer.byteLength(value, 'utf8') <= MAX_AGENT_ATTACHMENT_BYTES,
+    'Attachment must be text no larger than 512 KB'
+  )
+}).strict();
+
+const agentAttachmentsSchema = z.array(agentAttachmentSchema)
+  .max(MAX_AGENT_ATTACHMENT_COUNT)
+  .superRefine((attachments, context) => {
+    const totalBytes = attachments.reduce(
+      (sum, attachment) => sum + Buffer.byteLength(attachment.content, 'utf8'),
+      0
+    );
+    if (totalBytes > MAX_AGENT_ATTACHMENTS_TOTAL_BYTES) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Attachments cannot exceed 1 MB in total'
+      });
+    }
+  });
+
 export const agentPlanSchema = z.object({
   summary: z.string().trim().min(1),
   steps: z.array(z.object({
@@ -62,7 +103,8 @@ export const createAgentRunRequestSchema = z.object({
   chatId: objectIdStringSchema.optional(),
   prompt: z.string().trim().min(1),
   mode: z.enum(agentRunModes).default('create'),
-  modelId: modelIdSchema.optional()
+  modelId: modelIdSchema.optional(),
+  attachments: agentAttachmentsSchema.default([])
 });
 
 export const listAgentRunsQuerySchema = z.object({

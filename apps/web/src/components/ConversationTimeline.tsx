@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileCode2,
+  FileText,
   Loader2,
   RotateCcw,
   Sparkles,
@@ -29,6 +30,7 @@ import type {
   ChatTimelineEvent,
   ChatTimelineTurn,
 } from '@/services/api'
+import { formatAttachmentSize } from '@/lib/fileAttachments'
 
 interface ConversationTimelineProps {
   state: ChatTimelineState
@@ -121,7 +123,23 @@ function UserMessage({ turn }: { turn: ChatTimelineTurn }) {
     <div className="flex justify-end">
       <div className="max-w-[88%]">
         <div className="rounded-2xl rounded-br-md bg-neutral-100 px-4 py-3 text-sm leading-6 text-neutral-800">
-          {turn.userMessage.content}
+          <p className="whitespace-pre-wrap">{turn.userMessage.content}</p>
+          {turn.userMessage.attachments?.length ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {turn.userMessage.attachments.map((attachment) => (
+                <span
+                  key={attachment.id}
+                  className="inline-flex max-w-full items-center gap-1 rounded-md border border-neutral-200 bg-white/70 px-2 py-1 text-[11px] leading-4 text-neutral-600"
+                >
+                  <FileText className="h-3 w-3 shrink-0 text-neutral-400" />
+                  <span className="max-w-40 truncate">{attachment.name}</span>
+                  <span className="shrink-0 text-neutral-400">
+                    {formatAttachmentSize(attachment.size)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <p className="mt-1 text-right text-[11px] text-neutral-400">
           {formatTime(turn.userMessage.createdAt)}

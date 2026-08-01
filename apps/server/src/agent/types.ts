@@ -160,6 +160,18 @@ export interface AgentContextFile {
   content?: string;
 }
 
+export interface AgentAttachment {
+  id: string;
+  name: string;
+  mediaType: string;
+  size: number;
+  content: string;
+}
+
+export interface AgentContextAttachment extends AgentAttachment {
+  content: string;
+}
+
 export interface AgentContext {
   prompt: string;
   mode: AgentRunMode;
@@ -171,6 +183,7 @@ export interface AgentContext {
     uiLibrary: string;
   };
   messages: AgentContextMessage[];
+  attachments?: AgentContextAttachment[];
   files: AgentContextFile[];
 }
 

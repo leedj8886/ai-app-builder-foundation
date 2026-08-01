@@ -33,6 +33,12 @@ test('projects a completed Run into an auditable timeline turn', () => {
     run: {
       _id: '66a3f4402f24b17418d55abc',
       prompt: 'Add an activity list',
+      attachments: [{
+        id: 'b4c62ae1-ea47-4cba-a8d2-53ef778d18f1',
+        name: 'requirements.md',
+        mediaType: 'text/markdown',
+        size: 18
+      }],
       status: 'completed',
       model: 'deepseek-chat',
       createdAt: new Date('2026-07-25T10:00:00.000Z'),
@@ -83,6 +89,7 @@ test('projects a completed Run into an auditable timeline turn', () => {
   });
 
   assert.equal(turn.userMessage.content, 'Add an activity list');
+  assert.equal(turn.userMessage.attachments?.[0]?.name, 'requirements.md');
   assert.equal(turn.agent.durationMs, 8_000);
   assert.equal(turn.agent.planningDurationMs, 2_000);
   assert.equal(turn.agent.plan?.steps[0]?.title, 'Update App');

@@ -287,6 +287,14 @@ export const insertTimelineRun = (
     userMessage: {
       content: run.prompt,
       createdAt,
+      ...(run.attachments?.length ? {
+        attachments: run.attachments.map((attachment) => ({
+          id: attachment.id,
+          name: attachment.name,
+          mediaType: attachment.mediaType,
+          size: attachment.size,
+        })),
+      } : {}),
     },
     agent: {
       status: run.status,
