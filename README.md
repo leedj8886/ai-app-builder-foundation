@@ -1,7 +1,5 @@
 # AI App Builder Foundation
 
-> Developer Preview：`ai-app-builder-foundation@0.1.0-preview.1`。本项目与 Vercel、Kimi、DeepSeek 无官方关系。
-
 ![AI App Builder Foundation — Auditable agents, verified builds, your infrastructure](docs/assets/github-social-preview.png)
 
 帮助开发团队搭建自己的 AI App Builder：一个开源、可自托管的平台底座，内置可审计 Agent、真实构建验证、项目快照和定向错误恢复。
@@ -179,7 +177,7 @@ AGENT_DEFAULT_MODEL_ID=deepseek-flash
   项目元数据只作为弱提示。
 - 构建通过不代表生成代码已通过业务、安全或合规审计。
 - 尚未提供公开在线 Demo 和一键云部署。
-- 当前包名仍属预发布身份，稳定版前可能调整；项目与 Vercel 无官方关系。
+- 当前包名仍属预发布身份，稳定版前可能调整。
 - 完整 Docker Smoke 尚需在 npm registry 网络稳定时重新运行；生产依赖审计项仍需在公开部署前处置或完成风险评估。
 
 历史开发环境中的 `v0-by-kimi` 数据库名、`open-v0` Artifact 格式和旧

@@ -221,9 +221,9 @@ test('README presents the platform-builder positioning and valid core docs', asy
   const readme = await readFile(repositoryFile('README.md'), 'utf8');
 
   assert.match(readme, /帮助开发团队搭建自己的 AI App Builder/);
-  assert.match(readme, /ai-app-builder-foundation@0\.1\.0-preview\.1/);
   assert.match(readme, /不只是生成代码，而是生成能够通过真实构建的代码/);
-  assert.match(readme, /与 Vercel、Kimi、DeepSeek 无官方关系/);
+  assert.doesNotMatch(readme, /Developer Preview：/);
+  assert.doesNotMatch(readme, /无官方关系/);
   assert.match(readme, /TypeScript Native/);
   assert.match(readme, /Framework-Agnostic Core/);
   assert.match(readme, /LangChain、LangGraph、AI SDK/);
