@@ -36,6 +36,7 @@ services:
       SMOKE_VALIDATION_EVENTS: "true"
     volumes: !override
       - agent_validation_cache_smoke:/var/cache/v0-agent
+      - artifact_store:/var/lib/open-v0/artifacts
 
   web:
     ports: !override

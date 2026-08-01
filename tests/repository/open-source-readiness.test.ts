@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import { test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -248,6 +248,39 @@ test('repository includes contribution templates and a reproducible example', as
   assert.match(localSandboxCompose, /AGENT_VALIDATION_EXECUTOR:\s*sandbox/);
   assert.match(localSandboxCompose, /SANDBOX_PROVIDER:\s*local/);
   assert.match(localSandboxCompose, /NODE_ENV:\s*development/);
+});
+
+test('smoke Worker shares the ArtifactStore used by the API', async () => {
+  const smokeCompose = await readFile(
+    repositoryFile('docker-compose.smoke.yml'),
+    'utf8'
+  );
+
+  assert.match(
+    smokeCompose,
+    /worker:[\s\S]*volumes:\s*!override[\s\S]*artifact_store:\/var\/lib\/open-v0\/artifacts/
+  );
+});
+
+test('community preview assets are published and reproducible', async () => {
+  const hero = await stat(repositoryFile('docs/assets/community-preview/hero.png'));
+  const demo = await stat(repositoryFile('docs/assets/community-preview/demo.mp4'));
+  const readme = await readFile(repositoryFile('README.md'), 'utf8');
+  const guide = await readFile(repositoryFile('docs/community-demo.md'), 'utf8');
+
+  assert.ok(hero.size > 50_000 && hero.size < 1_000_000);
+  assert.ok(demo.size > 200_000 && demo.size < 5_000_000);
+  assert.match(readme, /docs\/assets\/community-preview\/hero\.png/);
+  assert.match(readme, /docs\/assets\/community-preview\/demo\.mp4/);
+  assert.match(readme, /确定性模型 fixture/);
+  assert.match(guide, /docker-compose\.community-demo\.yml/);
+  assert.match(guide, /npm run demo:record/);
+
+  await Promise.all([
+    access(repositoryFile('docker-compose.community-demo.yml')),
+    access(repositoryFile('playwright.community-demo.config.ts')),
+    access(repositoryFile('tests/community-demo/community-demo.spec.ts'))
+  ]);
 });
 
 test('architecture keeps the core independent from application agent frameworks', async () => {
