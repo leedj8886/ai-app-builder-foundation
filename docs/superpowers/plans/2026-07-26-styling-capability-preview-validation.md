@@ -780,7 +780,7 @@ checks emitted CSS.
 - [ ] **Step 7: Run complete verification**
 
 ```bash
-export PATH="/Users/a015265/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH"
+# Use a Node.js 20+ runtime available on PATH.
 npm test --workspace @v0/server
 npm test --workspace @v0/web
 TESTCONTAINERS_RYUK_DISABLED=true \

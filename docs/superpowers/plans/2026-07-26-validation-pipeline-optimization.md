@@ -85,7 +85,7 @@ Run:
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   --test-name-pattern='phase validation cache and retry defaults' \
   src/agent/config.test.ts
 ```
@@ -184,9 +184,9 @@ Run:
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/config.test.ts
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node \
+node \
   ../../node_modules/typescript/bin/tsc --noEmit
 ```
 
@@ -266,7 +266,7 @@ Run:
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/validation/structure.test.ts \
   src/agent/validation/classify.test.ts
 ```
@@ -396,7 +396,7 @@ export interface DependencyCache {
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/validation/dependencyFingerprint.test.ts \
   src/agent/validation/dependencyCache.test.ts
 ```
@@ -442,7 +442,7 @@ Never write generated source into the cache.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/validation/dependencyFingerprint.test.ts \
   src/agent/validation/dependencyCache.test.ts \
   src/agent/workspace/createWorkspace.test.ts
@@ -510,7 +510,7 @@ propagation and no third delay.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/validator.test.ts \
   src/agent/validation/retry.test.ts
 ```
@@ -576,11 +576,11 @@ pass its signal through retry waits and cache waits.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/validator.test.ts \
   src/agent/validation/*.test.ts \
   src/agent/workspace/runCommand.test.ts
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node \
+node \
   ../../node_modules/typescript/bin/tsc --noEmit
 ```
 
@@ -638,7 +638,7 @@ Also cover:
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   --test-name-pattern='infrastructure validation|dependency-focused|diagnostic fingerprint' \
   src/agent/orchestrator.test.ts
 ```
@@ -694,7 +694,7 @@ message. Do not include environment data.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/orchestrator.test.ts \
   src/agent/modelClient.test.ts \
   src/agent/eventBus.test.ts \
@@ -754,7 +754,7 @@ to separate injected processors.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/createWorker.test.ts \
   src/agent/models.test.ts
 ```
@@ -805,10 +805,10 @@ calls.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/createWorker.test.ts \
   src/agent/models.test.ts
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   --test-concurrency=1 src/integration/agentWorker.integration.ts
 ```
 
@@ -857,7 +857,7 @@ await request(app)
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   --test-concurrency=1 \
   --test-name-pattern='retry validation' \
   src/integration/agentRoutes.integration.ts
@@ -933,7 +933,7 @@ Test that:
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/models.test.ts \
   src/agent/chatTimeline.test.ts
 ```
@@ -1023,7 +1023,7 @@ assert.equal(canRetryValidation(codeFailedTurn), false);
 
 ```bash
 cd apps/web
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/lib/chatTimeline.test.ts
 ```
 
@@ -1077,11 +1077,11 @@ create another Chat message.
 
 ```bash
 cd apps/web
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   "src/**/*.test.ts"
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node \
+node \
   ../../node_modules/typescript/bin/tsc --noEmit
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run build
+npm run build
 ```
 
 Expected: all tests PASS, type-check exits zero, and Vite build succeeds.
@@ -1116,7 +1116,7 @@ metadata and current time so the tests do not depend on wall-clock time.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/validation/cacheCleanup.test.ts
 ```
 
@@ -1169,7 +1169,7 @@ consume production cache entries.
 
 ```bash
 cd apps/server
-/Users/a015265/.nvm/versions/node/v24.16.0/bin/node --import tsx --test \
+node --import tsx --test \
   src/agent/validation/cacheCleanup.test.ts
 cd ../../
 docker compose -f docker-compose.yml config >/tmp/v0-compose-config.yml
@@ -1221,12 +1221,9 @@ Document:
 - [ ] **Step 3: Run the complete unit and integration suites**
 
 ```bash
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH \
-  npm test --workspace @v0/server
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH \
-  npm test --workspace @v0/web
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH \
-  npm run test:integration --workspace @v0/server
+npm test --workspace @v0/server
+npm test --workspace @v0/web
+npm run test:integration --workspace @v0/server
 ```
 
 Expected: all suites PASS with zero failures.
@@ -1234,8 +1231,8 @@ Expected: all suites PASS with zero failures.
 - [ ] **Step 4: Run type-check and production builds**
 
 ```bash
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run type-check
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run build
+npm run type-check
+npm run build
 ```
 
 Expected: both commands exit zero.
@@ -1243,8 +1240,8 @@ Expected: both commands exit zero.
 - [ ] **Step 5: Run Docker smoke tests**
 
 ```bash
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run test:smoke
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run test:smoke:browser
+npm run test:smoke
+npm run test:smoke:browser
 ```
 
 Expected: create, edit, infrastructure retry, cache hit, Snapshot persistence,

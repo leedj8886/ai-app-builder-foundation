@@ -15,8 +15,8 @@
     "start:migrate:workspace-branches": "node dist/migrate.js",
     "reconcile:artifacts": "tsx src/reconcileArtifacts.ts",
     "start:reconcile:artifacts": "node dist/reconcileArtifacts.js",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "test:integration": "node --import tsx --test --test-concurrency=1 \"src/integration/**/*.integration.ts\" && node --import tsx --test --test-concurrency=1 \"src/artifacts/*.integration.ts\" && node --import tsx --test --test-concurrency=1 \"src/sandbox/**/*.integration.ts\"",
+    "test": "node ../../scripts/run-node-tests.mjs src .test.ts",
+    "test:integration": "node ../../scripts/run-node-tests.mjs src/integration .integration.ts --test-concurrency=1 && node ../../scripts/run-node-tests.mjs src/artifacts .integration.ts --test-concurrency=1 && node ../../scripts/run-node-tests.mjs src/sandbox .integration.ts --test-concurrency=1",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

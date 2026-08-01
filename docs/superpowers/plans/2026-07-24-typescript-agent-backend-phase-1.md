@@ -62,9 +62,9 @@ npm run build --workspace @v0/server
 If local `npm` is not on PATH in Codex, run with:
 
 ```bash
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run test --workspace @v0/server
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run type-check --workspace @v0/server
-PATH=/Users/a015265/.nvm/versions/node/v24.16.0/bin:$PATH npm run build --workspace @v0/server
+npm run test --workspace @v0/server
+npm run type-check --workspace @v0/server
+npm run build --workspace @v0/server
 ```
 
 ---

@@ -44,6 +44,10 @@ test('package manifests expose one agent-readable prerelease identity', async ()
 
   assert.equal(serverPackage.name, '@ai-app-builder-foundation/server');
   assert.equal(webPackage.name, '@ai-app-builder-foundation/web');
+  assert.match(serverPackage.scripts.test, /run-node-tests\.mjs/);
+  assert.match(serverPackage.scripts['test:integration'], /run-node-tests\.mjs/);
+  assert.match(webPackage.scripts.test, /run-node-tests\.mjs/);
+  await access(repositoryFile('scripts/run-node-tests.mjs'));
 
   for (const packageManifest of [serverPackage, webPackage]) {
     assert.equal(packageManifest.version, version);

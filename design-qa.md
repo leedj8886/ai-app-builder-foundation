@@ -1,7 +1,7 @@
 # Design QA: Workspace Continue Composer
 
 - Source visual truth: local design reference, not committed
-- Implementation screenshot: `work/composer-implementation-final-1440x900.png`
+- Implementation evidence: local QA capture, not committed
 - Source pixels: `836 × 953`
 - Implementation pixels: `1440 × 900`
 - CSS viewport: `1440 × 900`
@@ -55,9 +55,8 @@ existing product icon and preserves the same control density and alignment.
   conversations**.
 - Fix: constrained the Workspace to the viewport height, added `min-h-0` and
   overflow boundaries, and kept only the conversation timeline scrollable.
-- Post-fix evidence:
-  `work/composer-implementation-final-1440x900.png` shows the composer fixed at
-  the bottom while the timeline scrolls independently.
+- Post-fix evidence: local QA confirmed that the composer remains fixed at the
+  bottom while the timeline scrolls independently.
 
 - Earlier finding: **P2 — composer was taller than the source**.
 - Fix: reduced the outer vertical padding and changed the textarea to a

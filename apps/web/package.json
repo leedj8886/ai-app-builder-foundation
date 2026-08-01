@@ -10,7 +10,7 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test": "node ../../scripts/run-node-tests.mjs src .test.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
