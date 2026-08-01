@@ -1,7 +1,9 @@
 {
-  "name": "@v0/server",
-  "version": "1.0.0",
+  "name": "@ai-app-builder-foundation/server",
+  "version": "0.1.0-preview.1",
+  "description": "API, agent runtime, build verification worker, and artifact services for AI App Builder Foundation",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "worker": "tsx watch src/worker.ts",

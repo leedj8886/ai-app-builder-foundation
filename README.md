@@ -1,6 +1,6 @@
-# Open AI App Builder Foundation
+# AI App Builder Foundation
 
-> 当前开发代号：`v0-by-kimi`。正式品牌将独立命名；本项目与 Vercel、Kimi、DeepSeek 无官方关系。
+> 预发布包名：`ai-app-builder-foundation@0.1.0-preview.1`。`v0-by-kimi` 仅为历史开发代号；本项目与 Vercel、Kimi、DeepSeek 无官方关系。
 
 帮助开发团队搭建自己的 AI App Builder：一个开源、可自托管的平台底座，内置可审计 Agent、真实构建验证、项目快照和定向错误恢复。
 
@@ -113,7 +113,7 @@ npm run dev
 另开终端启动 Worker：
 
 ```bash
-npm run worker --workspace @v0/server
+npm run worker --workspace @ai-app-builder-foundation/server
 ```
 
 手动开发模式下 Web 默认位于 `http://localhost:5173`。
@@ -122,8 +122,8 @@ npm run worker --workspace @v0/server
 
 ```bash
 npm run test:readiness
-npm run test --workspace @v0/server
-npm run test --workspace @v0/web
+npm run test --workspace @ai-app-builder-foundation/server
+npm run test --workspace @ai-app-builder-foundation/web
 npm run build
 ```
 
@@ -170,7 +170,8 @@ AGENT_MODEL=
   项目元数据只作为弱提示。
 - 构建通过不代表生成代码已通过业务、安全或合规审计。
 - 尚未提供公开在线 Demo 和一键云部署。
-- 本阶段仍使用开发代号，项目与 Vercel 无官方关系。
+- 当前包名仍属预发布身份，稳定版前可能调整；项目与 Vercel 无官方关系。
+- 完整 Docker Smoke 尚需在 npm registry 网络稳定时重新运行；生产依赖审计项仍需在公开部署前处置或完成风险评估。
 
 ## Workspace、Branch 与 Artifact
 
@@ -179,8 +180,8 @@ AGENT_MODEL=
 如需从早期开发数据库升级，可在停止 API Server 和 Worker、备份 MongoDB 后执行：
 
 ```bash
-npm run build --workspace @v0/server
-npm run start:migrate:workspace-branches --workspace @v0/server
+npm run build --workspace @ai-app-builder-foundation/server
+npm run start:migrate:workspace-branches --workspace @ai-app-builder-foundation/server
 ```
 
 ProjectSnapshot、ValidationCandidate 和经过验证的 Preview Build 不保存在 MongoDB 中。

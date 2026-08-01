@@ -12,6 +12,48 @@ const repositoryRoot = path.resolve(
 const repositoryFile = (relativePath: string): string =>
   path.join(repositoryRoot, relativePath);
 
+const readJson = async (relativePath: string): Promise<Record<string, any>> =>
+  JSON.parse(await readFile(repositoryFile(relativePath), 'utf8'));
+
+test('package manifests expose one agent-readable prerelease identity', async () => {
+  const version = '0.1.0-preview.1';
+  const rootPackage = await readJson('package.json');
+  const serverPackage = await readJson('apps/server/package.json');
+  const webPackage = await readJson('apps/web/package.json');
+  const lockfile = await readJson('package-lock.json');
+
+  assert.equal(rootPackage.name, 'ai-app-builder-foundation');
+  assert.equal(rootPackage.version, version);
+  assert.equal(rootPackage.private, true);
+  assert.equal(rootPackage.license, 'Apache-2.0');
+  assert.deepEqual(rootPackage.keywords, [
+    'ai-app-builder',
+    'coding-agent',
+    'build-verification',
+    'self-hosted',
+    'prompt-to-app'
+  ]);
+
+  assert.equal(serverPackage.name, '@ai-app-builder-foundation/server');
+  assert.equal(webPackage.name, '@ai-app-builder-foundation/web');
+
+  for (const packageManifest of [serverPackage, webPackage]) {
+    assert.equal(packageManifest.version, version);
+    assert.equal(packageManifest.private, true);
+    assert.equal(packageManifest.license, 'Apache-2.0');
+    assert.doesNotMatch(packageManifest.name, /v0|kimi|deepseek/i);
+  }
+
+  assert.equal(lockfile.name, rootPackage.name);
+  assert.equal(lockfile.version, version);
+  assert.equal(lockfile.packages[''].name, rootPackage.name);
+  assert.equal(lockfile.packages[''].version, version);
+  assert.equal(lockfile.packages['apps/server'].name, serverPackage.name);
+  assert.equal(lockfile.packages['apps/server'].version, version);
+  assert.equal(lockfile.packages['apps/web'].name, webPackage.name);
+  assert.equal(lockfile.packages['apps/web'].version, version);
+});
+
 test('repository contains the approved open-source governance files', async () => {
   const requiredFiles = [
     'LICENSE',
@@ -101,6 +143,7 @@ test('README presents the platform-builder positioning and valid core docs', asy
   const readme = await readFile(repositoryFile('README.md'), 'utf8');
 
   assert.match(readme, /帮助开发团队搭建自己的 AI App Builder/);
+  assert.match(readme, /ai-app-builder-foundation@0\.1\.0-preview\.1/);
   assert.match(readme, /不只是生成代码，而是生成能够通过真实构建的代码/);
   assert.match(readme, /与 Vercel、Kimi、DeepSeek 无官方关系/);
   assert.match(readme, /TypeScript Native/);
@@ -164,6 +207,8 @@ test('repository includes contribution templates and a reproducible example', as
   assert.match(previewRelease, /v0\.1\.0-preview\.1 — Build-Verified Foundation/);
   assert.match(previewRelease, /Developer Preview/);
   assert.match(previewRelease, /尚未创建 GitHub Release/);
+  assert.match(previewRelease, /ai-app-builder-foundation@0\.1\.0-preview\.1/);
+  assert.match(previewRelease, /private: true/);
 
   const localSandboxCompose = await readFile(
     repositoryFile('docker-compose.local-sandbox.yml'),

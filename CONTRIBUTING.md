@@ -1,6 +1,6 @@
 # 参与贡献
 
-感谢你帮助改进这个面向团队的 Open v0 平台底座。
+感谢你帮助改进 AI App Builder Foundation。
 
 ## 开始之前
 
@@ -21,15 +21,15 @@ npm run dev
 在另一个终端启动 Agent Worker：
 
 ```bash
-npm run worker --workspace @v0/server
+npm run worker --workspace @ai-app-builder-foundation/server
 ```
 
 ## 提交前验证
 
 ```bash
 npm run test:readiness
-npm run test --workspace @v0/server
-npm run test --workspace @v0/web
+npm run test --workspace @ai-app-builder-foundation/server
+npm run test --workspace @ai-app-builder-foundation/web
 npm run build
 ```
 

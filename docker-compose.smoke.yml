@@ -28,7 +28,7 @@ services:
       retries: 60
 
   worker:
-    command: npm run start:smoke-worker --workspace @v0/server
+    command: npm run start:smoke-worker --workspace @ai-app-builder-foundation/server
     environment:
       JWT_SECRET: phase6-smoke-secret
       AGENT_QUEUE_NAME: phase6-smoke-runs

@@ -7,16 +7,18 @@
 - [ ] `.env.example` 不含真实密钥
 - [ ] GitHub description、topics 和 social preview 已准备
 - [x] README 已声明项目与 Vercel、Kimi、DeepSeek 无官方关系
+- [x] 包名采用可检索的语义名称，所有 workspace 使用同一预发布版本
 - [ ] 正式品牌、仓库名及商标/域名检查已确认
 
 ## 自动验证
 
-- [ ] `npm run test:readiness`
-- [ ] `npm run test --workspace @v0/server`
-- [ ] `npm run test --workspace @v0/web`
-- [ ] `npm run build`
-- [ ] `docker compose --env-file .env.example config --quiet`
-- [ ] `npm run test:smoke`
+- [x] `npm run test:readiness`
+- [x] `npm run test --workspace @ai-app-builder-foundation/server`
+- [x] `npm run test --workspace @ai-app-builder-foundation/web`
+- [x] `npm run build`
+- [x] `docker compose --env-file .env.example config --quiet`
+- [ ] `npm audit --omit=dev` 无未处置的 high/moderate 项（当前：3 high、8 moderate）
+- [ ] `npm run test:smoke`（本轮 web 镜像 `npm ci` 因 registry `ECONNRESET` 未完成）
 
 ## 全新环境验证
 

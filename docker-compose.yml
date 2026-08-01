@@ -83,7 +83,7 @@ services:
       context: .
       dockerfile: apps/server/Dockerfile
     restart: unless-stopped
-    command: npm run start:worker --workspace @v0/server
+    command: npm run start:worker --workspace @ai-app-builder-foundation/server
     environment:
       MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-local-development-password}@mongodb:27017/${MONGO_DATABASE:-v0-by-kimi}?authSource=admin
       REDIS_URL: redis://redis:6379
@@ -169,7 +169,7 @@ services:
     profiles:
       - maintenance
     restart: "no"
-    command: npm run start:reconcile:artifacts --workspace @v0/server
+    command: npm run start:reconcile:artifacts --workspace @ai-app-builder-foundation/server
     environment:
       MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-local-development-password}@mongodb:27017/${MONGO_DATABASE:-v0-by-kimi}?authSource=admin
       ARTIFACT_STORE_DRIVER: shared-filesystem

@@ -1,7 +1,9 @@
 {
-  "name": "@v0/web",
+  "name": "@ai-app-builder-foundation/web",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0-preview.1",
+  "description": "Web interface for AI App Builder Foundation",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
