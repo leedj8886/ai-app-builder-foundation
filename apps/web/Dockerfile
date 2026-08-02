@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/root/.npm \
       --fetch-retries=5 \
       --fetch-retry-mintimeout=10000 \
       --fetch-retry-maxtimeout=120000 \
-      "@rollup/rollup-linux-$(node -p 'process.arch')-musl@4.60.0"
+      "@rollup/rollup-linux-$(node -p 'process.arch')-musl@4.62.3"
 
 # Copy source code
 COPY apps/web ./apps/web
