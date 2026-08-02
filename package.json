@@ -3,6 +3,7 @@
   "version": "0.1.0-preview.1",
   "description": "Open-source foundation for building self-hosted AI App Builders with auditable, build-verified generation",
   "private": true,
+  "packageManager": "npm@10.9.3",
   "license": "Apache-2.0",
   "keywords": [
     "ai-app-builder",
@@ -32,14 +33,15 @@
     "test:smoke:browser": "playwright test tests/smoke/workspace.spec.ts",
     "test:smoke": "tsx tests/smoke/run-smoke.ts",
     "test:readiness": "node --import tsx --test tests/repository/open-source-readiness.test.ts",
+    "audit:dependencies": "node scripts/check-npm-audit.mjs",
     "demo:record": "tsx scripts/record-community-demo.ts",
     "daytona:init": "sh scripts/init-daytona-env.sh",
     "clean": "turbo run clean"
   },
   "devDependencies": {
-    "@playwright/test": "1.48.2",
+    "@playwright/test": "1.62.1",
     "tsx": "^4.23.1",
-    "turbo": "^1.13.0",
+    "turbo": "2.10.8",
     "typescript": "^5.4.0"
   },
   "optionalDependencies": {
@@ -50,6 +52,6 @@
     "path-to-regexp": "0.1.13"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.19.0"
   }
 }

@@ -29,6 +29,8 @@ test('package manifests expose one agent-readable prerelease identity', async ()
   assert.equal(rootPackage.name, 'ai-app-builder-foundation');
   assert.equal(rootPackage.version, version);
   assert.equal(rootPackage.private, true);
+  assert.equal(rootPackage.packageManager, 'npm@10.9.3');
+  assert.equal(rootPackage.engines.node, '>=22.19.0');
   assert.equal(rootPackage.license, 'Apache-2.0');
   assert.equal(
     rootPackage.repository.url,
@@ -319,8 +321,11 @@ test('repository includes contribution templates and a reproducible example', as
   assert.match(workflow, /actions\/checkout@v7/);
   assert.match(workflow, /actions\/setup-node@v7/);
   assert.match(workflow, /npm run test:readiness/);
+  assert.match(workflow, /npm run audit:dependencies/);
   assert.match(workflow, /npm run test:integration/);
+  assert.match(workflow, /name:\s*Smoke[\s\S]*playwright install --with-deps chromium[\s\S]*npm run test:smoke/);
   assert.match(workflow, /docker compose --env-file \.env\.example config --quiet/);
+  await access(repositoryFile('scripts/check-npm-audit.mjs'));
 
   const socialPreview = await readFile(
     repositoryFile('docs/assets/github-social-preview.png')
@@ -349,6 +354,10 @@ test('smoke Worker shares the ArtifactStore used by the API', async () => {
   assert.match(
     smokeCompose,
     /worker:[\s\S]*volumes:\s*!override[\s\S]*artifact_store:\/var\/lib\/open-v0\/artifacts/
+  );
+  assert.match(
+    smokeCompose,
+    /web:[\s\S]*build:[\s\S]*args:[\s\S]*VITE_API_URL:\s*["']{2}/
   );
 });
 

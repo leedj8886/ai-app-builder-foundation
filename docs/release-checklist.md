@@ -21,11 +21,11 @@
 - [x] `npm run build`
 - [x] `npm run lint`
 - [x] `docker compose --env-file .env.example config --quiet`
-- [x] GitHub Actions `Quality` 与 `Integration` workflow 已定义
-- [x] 最新 `main` CI 全绿并启用 required checks
-- [x] 生产依赖已升级；剩余 React Router RSC Mode 公告已记录临时风险接受与退出条件
-- [ ] `npm run test:smoke`（API Smoke 与数据种子集成测试通过；Docker 镜像 `npm ci`
-  仍受 registry `ECONNRESET` 阻塞，Browser Smoke 未完成）
+- [x] GitHub Actions `Quality`、`Integration` 与 `Smoke` job 已定义
+- [x] 最新 `main` 的 `Quality` 与 `Integration` 全绿并启用 required checks
+- [ ] 本次变更合入后确认远端 `Smoke` 全绿并设为 required check
+- [x] 全量依赖已升级；自动审计只放行已记录的 React Router RSC Mode 临时风险接受
+- [x] `npm run test:smoke`（API、旧样式数据、浏览器生成与快照恢复全部通过）
 
 ## 全新环境验证
 
