@@ -37,11 +37,11 @@ test('ArtifactManifest exposes integrity metadata and exact indexes', () => {
   for (const path of paths) assert.ok(ArtifactManifest.schema.path(path), path);
 
   assert.deepEqual(ArtifactManifest.schema.indexes(), [
-    [{ artifactId: 1 }, { unique: true, background: true }],
-    [{ idempotencyKey: 1 }, { unique: true, background: true }],
-    [{ workspaceId: 1, projectId: 1, createdAt: -1 }, { background: true }],
-    [{ state: 1, updatedAt: 1 }, { background: true }],
-    [{ createdByRunId: 1, kind: 1 }, { background: true }]
+    [{ artifactId: 1 }, { unique: true }],
+    [{ idempotencyKey: 1 }, { unique: true }],
+    [{ workspaceId: 1, projectId: 1, createdAt: -1 }, {}],
+    [{ state: 1, updatedAt: 1 }, {}],
+    [{ createdByRunId: 1, kind: 1 }, {}]
   ]);
 });
 
@@ -209,8 +209,7 @@ test('AgentRun model exposes required paths and indexes', () => {
           'persisting'
         ]
       }
-    },
-    background: true
+    }
   });
 });
 
