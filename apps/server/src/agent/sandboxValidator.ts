@@ -1,4 +1,3 @@
-import type { Types } from 'mongoose';
 import type { ArtifactService } from '../artifacts/artifactService';
 import type { SandboxLeaseDocument } from '../models/SandboxLease';
 import { SandboxError } from '../sandbox/errors';

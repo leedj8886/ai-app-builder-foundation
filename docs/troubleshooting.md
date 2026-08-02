@@ -144,7 +144,19 @@ docker compose logs --tail=200 server worker
 npm run test:smoke
 ```
 
-测试失败时脚本会输出 Compose 日志并清理隔离项目。确认 Docker 可用、所需端口未被占用，并检查 `test-results/` 与 `playwright-report/`。
+测试会自动选择空闲的 API 和 Web 端口；也可以同时设置 `SMOKE_API_PORT`、
+`SMOKE_API_URL`、`SMOKE_WEB_PORT` 和 `SMOKE_WEB_URL` 显式覆盖。失败时脚本会输出
+Compose 日志并清理隔离项目。确认 Docker 可用，并检查 `test-results/` 与
+`playwright-report/`。
+
+历史 Snapshot 的 Source Preview 使用外部 Sandpack 运行时，单独执行：
+
+```bash
+npm run test:smoke:external
+```
+
+该监控依赖 CodeSandbox 和 jsDelivr。出现 `TIME_OUT` 时先检查这两个外部服务及本机
+网络；它不会阻塞验证 API、Worker、ArtifactStore 和 verified Preview 的核心 Smoke。
 
 ## 寻求帮助
 

@@ -23,9 +23,10 @@
 - [x] `docker compose --env-file .env.example config --quiet`
 - [x] GitHub Actions `Quality`、`Integration` 与 `Smoke` job 已定义
 - [x] 最新 `main` 的 `Quality` 与 `Integration` 全绿并启用 required checks
-- [ ] 本次变更合入后确认远端 `Smoke` 全绿并设为 required check
+- [x] 远端 `Smoke` 全绿并设为 required check
 - [x] 全量依赖已升级；自动审计只放行已记录的 React Router RSC Mode 临时风险接受
-- [x] `npm run test:smoke`（API、旧样式数据、浏览器生成与快照恢复全部通过）
+- [x] `npm run test:smoke`（API、浏览器生成与快照恢复的封闭核心链路全部通过）
+- [x] Sandpack 外部运行时兼容性拆为非阻塞定时监控 `npm run test:smoke:external`
 
 ## 全新环境验证
 

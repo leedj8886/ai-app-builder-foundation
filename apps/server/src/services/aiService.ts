@@ -84,11 +84,9 @@ export const Button: React.FC<ButtonProps> = ({ children, variant = 'primary', o
 
 export const generateCode = async (
   messages: IMessage[],
-  options: GenerateCodeOptions = {},
+  _options: GenerateCodeOptions = {},
   dependencies: AIServiceDependencies = createDefaultDependencies()
 ): Promise<{ content: string; codeBlocks: ICodeBlock[] }> => {
-  const { framework = 'react', styling = 'tailwind', uiLibrary = 'shadcn' } = options;
-
   const formattedMessages = [
     { role: 'system', content: SYSTEM_PROMPT },
     ...messages.map(m => ({

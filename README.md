@@ -133,6 +133,8 @@ npm run worker --workspace @ai-app-builder-foundation/server
 
 ```bash
 npm run test:readiness
+npm run lint
+npm run type-check
 npm run test --workspace @ai-app-builder-foundation/server
 npm run test --workspace @ai-app-builder-foundation/web
 npm run build
@@ -144,7 +146,14 @@ npm run build
 npm run test:smoke
 ```
 
-Smoke Worker 使用确定性的 FakeModelClient，不调用真实模型，不产生模型费用。
+Smoke Worker 使用确定性的 FakeModelClient，不调用真实模型，不产生模型费用。测试会自动
+选择空闲的本机端口。历史 Snapshot 的 Sandpack 外部运行时兼容性是独立的非阻塞监控：
+
+```bash
+npm run test:smoke:external
+```
+
+该监控需要访问 CodeSandbox 和 jsDelivr，不属于核心自托管门禁。
 
 ## 系统组成
 

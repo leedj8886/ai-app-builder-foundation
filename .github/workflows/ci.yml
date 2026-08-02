@@ -6,6 +6,9 @@ on:
       - main
       - agent/v0-clone
   pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -81,3 +84,24 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run complete Docker smoke
         run: npm run test:smoke
+
+  external-preview:
+    name: External Preview Monitor
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Monitor external Sandpack fallback
+        run: npm run test:smoke:external

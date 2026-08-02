@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 
 const projectName = process.env.SMOKE_PROJECT_NAME ??
   `phase6-${process.pid}-${Date.now()}`;
@@ -32,27 +33,84 @@ const run = (
   });
 });
 
-const smokeEnv: NodeJS.ProcessEnv = {
-  ...process.env,
-  SMOKE_API_URL: process.env.SMOKE_API_URL ?? 'http://127.0.0.1:43001',
-  SMOKE_WEB_URL: process.env.SMOKE_WEB_URL ?? 'http://127.0.0.1:4173'
+type SmokeSuite = 'core' | 'external' | 'all';
+
+const parseSuite = (): SmokeSuite => {
+  const suiteIndex = process.argv.indexOf('--suite');
+  if (suiteIndex === -1) return 'core';
+  const suite = process.argv[suiteIndex + 1];
+  if (suite === 'core' || suite === 'external' || suite === 'all') return suite;
+  throw new Error('--suite must be one of: core, external, all');
+};
+
+const configuredPort = (name: 'SMOKE_API_PORT' | 'SMOKE_WEB_PORT'): string | undefined => {
+  const value = process.env[name];
+  if (value === undefined) return undefined;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${name} must be an integer between 1 and 65535`);
+  }
+  return String(port);
+};
+
+const allocateLoopbackPort = (): Promise<string> => new Promise((resolve, reject) => {
+  const server = createServer();
+  server.unref();
+  server.once('error', reject);
+  server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, () => {
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      server.close();
+      reject(new Error('Unable to allocate a loopback port'));
+      return;
+    }
+    server.close(error => {
+      if (error) reject(error);
+      else resolve(String(address.port));
+    });
+  });
+});
+
+const createSmokeEnv = async (): Promise<NodeJS.ProcessEnv> => {
+  const apiPort = configuredPort('SMOKE_API_PORT') ?? await allocateLoopbackPort();
+  let webPort = configuredPort('SMOKE_WEB_PORT') ?? await allocateLoopbackPort();
+  while (webPort === apiPort) webPort = await allocateLoopbackPort();
+
+  return {
+    ...process.env,
+    SMOKE_API_PORT: apiPort,
+    SMOKE_WEB_PORT: webPort,
+    SMOKE_API_URL: process.env.SMOKE_API_URL ?? `http://127.0.0.1:${apiPort}`,
+    SMOKE_WEB_URL: process.env.SMOKE_WEB_URL ?? `http://127.0.0.1:${webPort}`
+  };
+};
+
+const seedLegacyStylingSnapshot = async (smokeEnv: NodeJS.ProcessEnv): Promise<void> => {
+  await run('docker', [
+    ...composeArgs,
+    'exec',
+    '-T',
+    '-e', 'SMOKE_LEGACY_STYLING_SEED=true',
+    'server',
+    'node',
+    'dist/testing/seedLegacyStylingSmoke.js'
+  ], smokeEnv);
 };
 
 const main = async (): Promise<void> => {
+  const suite = parseSuite();
+  const smokeEnv = await createSmokeEnv();
   let failed = false;
   try {
     await run('docker', [...composeArgs, 'up', '-d', '--build', '--wait'], smokeEnv);
-    await run('npm', ['run', 'test:smoke:api'], smokeEnv);
-    await run('docker', [
-      ...composeArgs,
-      'exec',
-      '-T',
-      '-e', 'SMOKE_LEGACY_STYLING_SEED=true',
-      'server',
-      'node',
-      'dist/testing/seedLegacyStylingSmoke.js'
-    ], smokeEnv);
-    await run('npm', ['run', 'test:smoke:browser'], smokeEnv);
+    if (suite === 'core' || suite === 'all') {
+      await run('npm', ['run', 'test:smoke:api'], smokeEnv);
+      await run('npm', ['run', 'test:smoke:browser'], smokeEnv);
+    }
+    if (suite === 'external' || suite === 'all') {
+      await seedLegacyStylingSnapshot(smokeEnv);
+      await run('npm', ['run', 'test:smoke:browser:external'], smokeEnv);
+    }
   } catch (error) {
     failed = true;
     console.error(error);

@@ -7,7 +7,7 @@ Provider 的完整安全审计。
 
 预发布候选已升级 Express、Mongoose、Morgan、PostCSS、Form Data、
 Path-to-RegExp 等生产依赖，并使用 Node.js `crypto.randomUUID()` 替换旧 `uuid`
-依赖。开发与构建工具同步升级到 Playwright 1.62.1、Turbo 2.10.8、Vite 6.4.3 和
+依赖。开发与构建工具同步升级到 Playwright 1.62.1、Turbo 2.10.8、Vite 8.1.5 和
 Testcontainers 12.0.4，Node.js 最低版本提升至 22.19。除下述 React Router 公告外，
 全量依赖审计项已清零。
 

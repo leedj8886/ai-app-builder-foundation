@@ -522,7 +522,7 @@ router.delete('/:id', async (req: AuthRequest, res, next) => {
       res.status(404).json({ error: 'Project not found' });
       return;
     }
-    const project = await Project.findByIdAndDelete(ownedProject._id);
+    await Project.findByIdAndDelete(ownedProject._id);
 
     // Remove project reference from all chats
     await Chat.updateMany(

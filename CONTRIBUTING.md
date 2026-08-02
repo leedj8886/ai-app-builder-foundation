@@ -28,6 +28,8 @@ npm run worker --workspace @ai-app-builder-foundation/server
 
 ```bash
 npm run test:readiness
+npm run lint
+npm run type-check
 npm run test --workspace @ai-app-builder-foundation/server
 npm run test --workspace @ai-app-builder-foundation/web
 npm run build

@@ -48,6 +48,7 @@ test('package manifests expose one agent-readable prerelease identity', async ()
   assert.equal(webPackage.name, '@ai-app-builder-foundation/web');
   assert.match(serverPackage.scripts.test, /run-node-tests\.mjs/);
   assert.match(serverPackage.scripts['test:integration'], /run-node-tests\.mjs/);
+  assert.match(serverPackage.scripts.lint, /eslint/);
   assert.match(webPackage.scripts.test, /run-node-tests\.mjs/);
   await access(repositoryFile('scripts/run-node-tests.mjs'));
   assert.equal(
@@ -273,6 +274,8 @@ test('repository includes contribution templates and a reproducible example', as
     '.github/ISSUE_TEMPLATE/config.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
     '.github/workflows/ci.yml',
+    '.dockerignore',
+    'apps/server/.eslintrc.cjs',
     'docker-compose.local-sandbox.yml',
     'docs/assets/github-social-preview.png',
     'docs/examples/verified-dashboard.md',
@@ -324,6 +327,10 @@ test('repository includes contribution templates and a reproducible example', as
   assert.match(workflow, /npm run audit:dependencies/);
   assert.match(workflow, /npm run test:integration/);
   assert.match(workflow, /name:\s*Smoke[\s\S]*playwright install --with-deps chromium[\s\S]*npm run test:smoke/);
+  assert.match(
+    workflow,
+    /name:\s*External Preview Monitor[\s\S]*continue-on-error:\s*true[\s\S]*npm run test:smoke:external/
+  );
   assert.match(workflow, /docker compose --env-file \.env\.example config --quiet/);
   await access(repositoryFile('scripts/check-npm-audit.mjs'));
 
@@ -345,11 +352,33 @@ test('repository includes contribution templates and a reproducible example', as
   assert.match(localSandboxCompose, /NODE_ENV:\s*development/);
 });
 
+test('Docker builds exclude host dependencies outputs and secrets', async () => {
+  const dockerignore = await readFile(repositoryFile('.dockerignore'), 'utf8');
+
+  for (const pattern of [
+    /^\.git\/?$/m,
+    /^\*\*\/node_modules\/?$/m,
+    /^\*\*\/dist\/?$/m,
+    /^\*\*\/\.turbo\/?$/m,
+    /^\*\*\/\.env\*$/m,
+    /^!\*\*\/\.env\.example$/m,
+    /^test-results\/?$/m,
+    /^playwright-report\/?$/m
+  ]) {
+    assert.match(dockerignore, pattern);
+  }
+});
+
 test('smoke Worker shares the ArtifactStore used by the API', async () => {
   const smokeCompose = await readFile(
     repositoryFile('docker-compose.smoke.yml'),
     'utf8'
   );
+  const smokeRunner = await readFile(
+    repositoryFile('tests/smoke/run-smoke.ts'),
+    'utf8'
+  );
+  const rootPackage = await readJson('package.json');
 
   assert.match(
     smokeCompose,
@@ -359,6 +388,12 @@ test('smoke Worker shares the ArtifactStore used by the API', async () => {
     smokeCompose,
     /web:[\s\S]*build:[\s\S]*args:[\s\S]*VITE_API_URL:\s*["']{2}/
   );
+  assert.match(smokeRunner, /listen\(\{ host: '127\.0\.0\.1', port: 0/);
+  assert.match(smokeRunner, /--suite/);
+  assert.doesNotMatch(smokeRunner, /SMOKE_API_URL[^\n]*43001/);
+  assert.doesNotMatch(smokeRunner, /SMOKE_WEB_URL[^\n]*4173/);
+  assert.match(rootPackage.scripts['test:smoke:external'], /--suite external/);
+  await access(repositoryFile('tests/smoke/sandpack-external.spec.ts'));
 });
 
 test('community preview assets are published and reproducible', async () => {
