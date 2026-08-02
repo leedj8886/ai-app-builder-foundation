@@ -199,7 +199,7 @@ const createDemoProject = async (prompt: string, agentModelId?: string) => {
 }
 
 export function AppBuilderPage() {
-  const { language, t } = useI18n()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const { chatId } = useParams<{ chatId: string }>()
   const [workspace, setWorkspace] = useState(createInitialWorkspaceState)
@@ -239,7 +239,7 @@ export function AppBuilderPage() {
       title: t(`template.${template.id}.title` as TranslationKey),
       prompt: t(`template.${template.id}.prompt` as TranslationKey),
     })),
-    [language],
+    [t],
   )
 
   const visibleTemplates = useMemo(

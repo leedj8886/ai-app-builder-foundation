@@ -69,20 +69,20 @@ gh repo edit leedj8886/ai-app-builder-foundation \
   --add-topic sandbox
 ```
 
-## 3. 建立规范默认分支
+## 3. 维护规范默认分支
 
-当前发布候选位于 `agent/v0-clone`，旧 `master` 不包含最新四个以上提交。以已验证的
-发布候选创建 `main`，不要从旧 `master` 合并回去：
+`main` 已建立并设置为默认分支，所有发布准备和后续开发都以 `main` 为准。`master`
+仅保留为迁移前的历史分支；不要把它合并回 `main`，也不要在其上继续开发：
 
 ```bash
-git switch agent/v0-clone
-git branch -f main HEAD
+git switch main
+git pull --ff-only origin main
 git push -u origin main
 gh repo edit leedj8886/ai-app-builder-foundation --default-branch main
 ```
 
-确认 GitHub 默认分支、README 和 CI 正常后，再决定是否删除旧远端分支。删除分支是
-独立的清理动作，不纳入本 Runbook 的自动步骤。
+只有在确认本地 worktree、自动化和外部链接都不再引用 `master` 后，才能单独评估删除
+旧远端分支；删除不纳入本 Runbook 的自动步骤。
 
 ## 4. 上传 Social Preview
 
@@ -97,7 +97,7 @@ GitHub CLI 不提供稳定的 Social Preview 上传命令。使用仓库网页�
 
 `.github/workflows/ci.yml` 提供两个必需检查：
 
-- `Quality`：readiness、类型检查、Server/Web 单元测试、生产构建和 Compose 配置。
+- `Quality`：readiness、lint、类型检查、Server/Web 单元测试、生产构建和 Compose 配置。
 - `Integration`：Server、ArtifactStore 与 Sandbox 的 Testcontainers 集成套件。
 
 等待 `main` 首次 CI 全绿后，在 `Settings → Rules → Rulesets` 为 `main` 建立规则：

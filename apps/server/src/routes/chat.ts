@@ -1,7 +1,7 @@
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { z } from 'zod';
-import { v4 as uuidv4 } from 'uuid';
 import {
   buildChatTimelineTurn,
   decodeTimelineCursor,
@@ -239,7 +239,7 @@ router.post('/:id/messages', async (req: AuthRequest, res, next) => {
 
     // Add user message
     chat.messages.push({
-      id: uuidv4(),
+      id: randomUUID(),
       role: 'user',
       content,
       createdAt: new Date()

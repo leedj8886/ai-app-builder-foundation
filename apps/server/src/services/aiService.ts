@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { IMessage, ICodeBlock } from '../models/Chat';
 import {
   createDeepSeekClient,
@@ -128,7 +128,7 @@ const extractCodeBlocks = (content: string): ICodeBlock[] => {
     const code = match[3].trim();
 
     codeBlocks.push({
-      id: uuidv4(),
+      id: randomUUID(),
       language,
       code,
       fileName: fileName.trim(),

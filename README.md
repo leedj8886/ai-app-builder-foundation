@@ -1,5 +1,8 @@
 # AI App Builder Foundation
 
+[![CI](https://github.com/leedj8886/ai-app-builder-foundation/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/leedj8886/ai-app-builder-foundation/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 ![AI App Builder Foundation — Auditable agents, verified builds, your infrastructure](docs/assets/github-social-preview.png)
 
 帮助开发团队搭建自己的 AI App Builder：一个开源、可自托管的平台底座，内置可审计 Agent、真实构建验证、项目快照和定向错误恢复。
@@ -182,7 +185,9 @@ AGENT_DEFAULT_MODEL_ID=deepseek-flash
 - 构建通过不代表生成代码已通过业务、安全或合规审计。
 - 尚未提供公开在线 Demo 和一键云部署。
 - 当前包名仍属预发布身份，稳定版前可能调整。
-- 完整 Docker Smoke 尚需在 npm registry 网络稳定时重新运行；生产依赖审计项仍需在公开部署前处置或完成风险评估。
+- 完整 Docker Smoke 仍受容器内 npm registry `ECONNRESET` 阻塞；API Smoke 和旧样式
+  数据种子集成测试已通过。生产依赖只剩 React Router RSC Mode 公告，当前客户端路由
+  架构不启用该执行路径，处置记录见[生产依赖审计说明](docs/security/audit-v0.1.0-preview.1.md)。
 
 ## Workspace、Branch 与 Artifact
 

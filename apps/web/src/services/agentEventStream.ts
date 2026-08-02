@@ -315,7 +315,7 @@ export const streamAgentEvents = async ({
   let reconnects = 0
   const maximumReconnects = normalizeReconnectAttempts(maxReconnectAttempts)
 
-  while (true) {
+  for (;;) {
     throwIfAborted(signal)
     try {
       const headers: Record<string, string> = {

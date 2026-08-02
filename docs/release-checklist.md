@@ -6,10 +6,11 @@
 - [x] README 定位、快速开始、限制和文档链接准确
 - [x] `.env.example` 不含真实密钥
 - [x] GitHub description、topics 和 1280×640 social preview 资产已准备
-- [ ] 使用仓库管理员账号应用 GitHub 元数据并上传 social preview
+- [x] 使用仓库管理员账号应用 GitHub 元数据
+- [ ] 在 GitHub 网页确认 social preview 已上传且分享卡片没有裁切
 - [x] 包名采用可检索的语义名称，所有 workspace 使用同一预发布版本
 - [x] 产品和文档对外品牌统一为 AI App Builder Foundation
-- [ ] GitHub 仓库重命名为 `ai-app-builder-foundation`
+- [x] GitHub 仓库重命名为 `ai-app-builder-foundation`
 - [ ] 正式商标及域名检查已确认
 
 ## 自动验证
@@ -18,11 +19,13 @@
 - [x] `npm run test --workspace @ai-app-builder-foundation/server`
 - [x] `npm run test --workspace @ai-app-builder-foundation/web`
 - [x] `npm run build`
+- [x] `npm run lint`
 - [x] `docker compose --env-file .env.example config --quiet`
 - [x] GitHub Actions `Quality` 与 `Integration` workflow 已定义
-- [ ] 重命名后的 `main` 首次 CI 全绿并启用 required checks
-- [ ] `npm audit --omit=dev` 无未处置的 high/moderate 项（当前：3 high、8 moderate）
-- [ ] `npm run test:smoke`（本轮 web 镜像 `npm ci` 因 registry `ECONNRESET` 未完成）
+- [ ] 最新 `main` CI 全绿并启用 required checks
+- [x] 生产依赖已升级；剩余 React Router RSC Mode 公告已记录临时风险接受与退出条件
+- [ ] `npm run test:smoke`（API Smoke 与数据种子集成测试通过；Docker 镜像 `npm ci`
+  仍受 registry `ECONNRESET` 阻塞，Browser Smoke 未完成）
 
 ## 全新环境验证
 

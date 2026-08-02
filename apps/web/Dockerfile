@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -6,9 +7,19 @@ WORKDIR /app
 COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
 
-# Install dependencies
-RUN npm ci \
-    && npm install --no-save "@rollup/rollup-linux-$(node -p 'process.arch')-musl@4.60.0"
+# Install dependencies with a persistent package cache and bounded registry retries.
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci \
+      --prefer-offline \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=10000 \
+      --fetch-retry-maxtimeout=120000 \
+    && npm install --no-save \
+      --prefer-offline \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=10000 \
+      --fetch-retry-maxtimeout=120000 \
+      "@rollup/rollup-linux-$(node -p 'process.arch')-musl@4.60.0"
 
 # Copy source code
 COPY apps/web ./apps/web
