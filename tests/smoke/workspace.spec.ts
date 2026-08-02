@@ -86,10 +86,36 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(editComposer.getByRole('textbox')).toHaveValue('Draft preserved while collapsed');
   await expect(page.getByTestId('snapshot-preview')).toBeVisible();
 
+  const expandButtonBox = await page.getByRole('button', { name: 'Expand sidebar' }).boundingBox();
+  const topNavBrandBox = await page.getByTestId('top-nav-brand').boundingBox();
+  const workspaceHeaderBox = await page.getByTestId('workspace-header').boundingBox();
+  expect(expandButtonBox).not.toBeNull();
+  expect(topNavBrandBox).not.toBeNull();
+  expect(workspaceHeaderBox).not.toBeNull();
+  expect(expandButtonBox!.y + expandButtonBox!.height)
+    .toBeLessThanOrEqual(workspaceHeaderBox!.y);
+  expect(topNavBrandBox!.x).toBeGreaterThanOrEqual(expandButtonBox!.x + expandButtonBox!.width);
+  expect(topNavBrandBox!.x).toBeLessThanOrEqual(64);
+
+  await page.getByTestId('sidebar-edge-trigger').hover();
+  const sidebarPreview = page.getByTestId('workspace-sidebar-preview');
+  await expect(sidebarPreview).toBeVisible();
+  await expect(page.getByTestId('sidebar-expand-button')).toBeHidden();
+  await expect(sidebarPreview.getByTestId('recent-chats')).toContainText(prompt);
+  await page.mouse.move(500, 120);
+  await expect(sidebarPreview).toBeHidden();
+  await expect(page.getByTestId('sidebar-expand-button')).toBeVisible();
+
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
   await expect(page.getByTestId('recent-chats')).toContainText(prompt);
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveCount(0);
+
+  await page.getByTestId('workspace-sidebar').getByRole('button', { name: 'Collapse sidebar' }).click();
+  await page.getByTestId('sidebar-edge-trigger').hover();
+  await page.getByTestId('workspace-sidebar-preview').getByRole('button', { name: 'Pin sidebar open' }).click();
+  await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
+  await expect(page.getByTestId('workspace-sidebar-preview')).toHaveCount(0);
   await editComposer.getByRole('textbox').fill('');
 
   const generatedPreview = page.frameLocator(

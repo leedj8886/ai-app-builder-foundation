@@ -668,7 +668,10 @@ export function AppBuilderPage() {
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-neutral-950 antialiased">
-      <TopNav />
+      <TopNav
+        workspaceActive={workspace.screen !== 'home'}
+        sidebarCollapsed={workspace.screen !== 'home' && workspaceSidebarCollapsed}
+      />
 
       {routeError ? (
         <main className="mx-auto flex min-h-[calc(100vh-48px)] max-w-xl items-center px-6 text-center">
@@ -917,13 +920,27 @@ export function AppBuilderPage() {
   )
 }
 
-function TopNav() {
+function TopNav({
+  workspaceActive,
+  sidebarCollapsed,
+}: {
+  workspaceActive: boolean
+  sidebarCollapsed: boolean
+}) {
   const { t } = useI18n()
 
   return (
-    <header className="sticky top-0 z-30 border-b border-neutral-200 bg-[#fafafa]/95 backdrop-blur">
-      <div className="mx-auto flex h-12 max-w-[1440px] items-center justify-between px-3 sm:px-4">
-        <button className="flex h-8 items-center gap-2 rounded-md text-left" aria-label={t('nav.home')}>
+    <header className="sticky top-0 z-50 border-b border-neutral-200 bg-[#fafafa]/95 backdrop-blur">
+      <div className={`flex h-12 items-center justify-between px-3 sm:px-4 ${
+        workspaceActive ? 'w-full' : 'mx-auto max-w-[1440px]'
+      } ${
+        sidebarCollapsed ? 'lg:pl-14' : ''
+      }`}>
+        <button
+          className="flex h-8 items-center gap-2 rounded-md text-left"
+          aria-label={t('nav.home')}
+          data-testid="top-nav-brand"
+        >
           <BrandMark compact />
         </button>
 
@@ -1077,6 +1094,10 @@ function WorkspaceScreen({
 }) {
   const { t } = useI18n()
 
+  const pinSidebarOpen = () => {
+    onExpandSidebar()
+  }
+
   return (
     <main
       className={`grid h-[calc(100vh-48px)] min-h-0 grid-cols-1 overflow-hidden bg-white ${
@@ -1084,54 +1105,52 @@ function WorkspaceScreen({
       }`}
     >
       {!sidebarCollapsed ? (
-        <aside
-          className="hidden border-r border-neutral-200 bg-[#fafafa] lg:flex lg:flex-col"
-          data-testid="workspace-sidebar"
-        >
-          <div className="flex items-center gap-2 p-3">
-            <button
-              className="flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-neutral-950 text-sm font-medium text-white hover:bg-neutral-800"
-              onClick={onBackHome}
-            >
-              <Sparkles className="h-4 w-4" />
-              {t('common.newChat')}
-            </button>
-            <button
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100"
-              aria-label={t('workspace.collapseSidebar')}
-              onClick={onCollapseSidebar}
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          </div>
-          <RecentChats
-            state={chatHistory}
-            activeChatId={activeChatId}
-            onRetry={onRetryChatHistory}
-          />
-          <div className="flex-1" />
-          <div className="space-y-1 border-t border-neutral-200 p-2">
-            <button
-              className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100"
-              onClick={onManageModel}
-            >
-              <Settings2 className="h-4 w-4" />
-              {t('workspace.modelSettings')}
-            </button>
-          </div>
-        </aside>
+        <WorkspaceSidebar
+          mode="pinned"
+          chatHistory={chatHistory}
+          activeChatId={activeChatId}
+          onBackHome={onBackHome}
+          onSidebarAction={onCollapseSidebar}
+          onManageModel={onManageModel}
+          onRetryChatHistory={onRetryChatHistory}
+        />
       ) : (
-        <button
-          className="fixed left-2 top-14 z-40 hidden h-9 w-9 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 shadow-md hover:bg-neutral-50 lg:inline-flex"
-          aria-label={t('workspace.expandSidebar')}
-          onClick={onExpandSidebar}
-        >
-          <PanelLeftOpen className="h-4 w-4" />
-        </button>
+        <div className="pointer-events-none fixed inset-y-0 left-0 z-[60] hidden w-[272px] lg:block">
+          <div className="peer group pointer-events-none absolute bottom-0 left-0 top-12 w-[272px]">
+            <button
+              type="button"
+              className="pointer-events-auto absolute bottom-0 left-0 top-0 w-2 bg-transparent focus-visible:bg-neutral-300/70 focus-visible:outline-none"
+              aria-label={t('workspace.previewSidebar')}
+              aria-controls="workspace-sidebar-preview"
+              data-testid="sidebar-edge-trigger"
+              onClick={pinSidebarOpen}
+            />
+
+            <WorkspaceSidebar
+              mode="preview"
+              chatHistory={chatHistory}
+              activeChatId={activeChatId}
+              onBackHome={onBackHome}
+              onSidebarAction={pinSidebarOpen}
+              onManageModel={onManageModel}
+              onRetryChatHistory={onRetryChatHistory}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="pointer-events-auto absolute left-2 top-1.5 inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 transition-opacity hover:bg-neutral-100 hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 peer-focus-within:pointer-events-none peer-focus-within:invisible peer-focus-within:opacity-0 peer-hover:pointer-events-none peer-hover:invisible peer-hover:opacity-0"
+            aria-label={t('workspace.expandSidebar')}
+            data-testid="sidebar-expand-button"
+            onClick={pinSidebarOpen}
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
       <section className="flex min-h-0 min-w-0 flex-col">
-        <div className="flex h-13 min-h-13 items-center border-b border-neutral-200 px-3 py-2 sm:px-4">
+        <div className="flex h-13 min-h-13 items-center border-b border-neutral-200 px-3 py-2 sm:px-4" data-testid="workspace-header">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{selectedTemplate.title}</p>
             <p className="truncate text-xs text-neutral-500">{prompt}</p>
@@ -1245,6 +1264,76 @@ function WorkspaceScreen({
         </div>
       </section>
     </main>
+  )
+}
+
+function WorkspaceSidebar({
+  mode,
+  chatHistory,
+  activeChatId,
+  onBackHome,
+  onSidebarAction,
+  onManageModel,
+  onRetryChatHistory,
+}: {
+  mode: 'pinned' | 'preview'
+  chatHistory: ChatHistoryState
+  activeChatId?: string
+  onBackHome: () => void
+  onSidebarAction: () => void
+  onManageModel: () => void
+  onRetryChatHistory: () => void
+}) {
+  const { t } = useI18n()
+  const preview = mode === 'preview'
+
+  return (
+    <aside
+      id={preview ? 'workspace-sidebar-preview' : undefined}
+      className={preview
+        ? 'pointer-events-auto invisible absolute inset-y-0 left-0 z-40 flex w-[272px] -translate-x-full flex-col border-r border-neutral-200 bg-[#fafafa] shadow-xl transition-[transform,visibility] duration-200 ease-out group-focus-within:visible group-focus-within:translate-x-0 group-hover:visible group-hover:translate-x-0 motion-reduce:transition-none'
+        : 'hidden border-r border-neutral-200 bg-[#fafafa] lg:flex lg:flex-col'}
+      data-testid={preview ? 'workspace-sidebar-preview' : 'workspace-sidebar'}
+    >
+      <div className="flex items-center gap-2 p-3">
+        <button
+          type="button"
+          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-neutral-950 text-sm font-medium text-white hover:bg-neutral-800"
+          onClick={onBackHome}
+        >
+          <Sparkles className="h-4 w-4" />
+          {t('common.newChat')}
+        </button>
+        <button
+          type="button"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950"
+          aria-label={preview ? t('workspace.pinSidebar') : t('workspace.collapseSidebar')}
+          onClick={onSidebarAction}
+        >
+          {preview ? (
+            <PanelLeftOpen className="h-4 w-4" />
+          ) : (
+            <PanelLeftClose className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+      <RecentChats
+        state={chatHistory}
+        activeChatId={activeChatId}
+        onRetry={onRetryChatHistory}
+      />
+      <div className="flex-1" />
+      <div className="space-y-1 border-t border-neutral-200 p-2">
+        <button
+          type="button"
+          className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-neutral-600 hover:bg-neutral-100"
+          onClick={onManageModel}
+        >
+          <Settings2 className="h-4 w-4" />
+          {t('workspace.modelSettings')}
+        </button>
+      </div>
+    </aside>
   )
 }
 
