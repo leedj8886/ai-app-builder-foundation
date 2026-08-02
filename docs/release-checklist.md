@@ -22,7 +22,7 @@
 - [x] `npm run lint`
 - [x] `docker compose --env-file .env.example config --quiet`
 - [x] GitHub Actions `Quality` 与 `Integration` workflow 已定义
-- [ ] 最新 `main` CI 全绿并启用 required checks
+- [x] 最新 `main` CI 全绿并启用 required checks
 - [x] 生产依赖已升级；剩余 React Router RSC Mode 公告已记录临时风险接受与退出条件
 - [ ] `npm run test:smoke`（API Smoke 与数据种子集成测试通过；Docker 镜像 `npm ci`
   仍受 registry `ECONNRESET` 阻塞，Browser Smoke 未完成）
