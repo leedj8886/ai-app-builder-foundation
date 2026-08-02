@@ -94,8 +94,8 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   expect(workspaceHeaderBox).not.toBeNull();
   expect(expandButtonBox!.y + expandButtonBox!.height)
     .toBeLessThanOrEqual(workspaceHeaderBox!.y);
-  expect(topNavBrandBox!.x).toBeGreaterThanOrEqual(expandButtonBox!.x + expandButtonBox!.width);
-  expect(topNavBrandBox!.x).toBeLessThanOrEqual(64);
+  expect(topNavBrandBox!.x).toBeLessThanOrEqual(16);
+  expect(expandButtonBox!.x).toBeGreaterThanOrEqual(topNavBrandBox!.x + topNavBrandBox!.width);
 
   await page.getByTestId('sidebar-edge-trigger').hover();
   const sidebarPreview = page.getByTestId('workspace-sidebar-preview');

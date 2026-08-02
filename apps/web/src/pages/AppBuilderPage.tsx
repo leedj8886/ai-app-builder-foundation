@@ -219,6 +219,7 @@ export function AppBuilderPage() {
   const [designMode, setDesignMode] = useState(true)
   const [copied, setCopied] = useState(false)
   const [workspaceSidebarCollapsed, setWorkspaceSidebarCollapsed] = useState(false)
+  const [workspaceSidebarPreviewVisible, setWorkspaceSidebarPreviewVisible] = useState(false)
   const [timeline, setTimeline] = useState(createTimelineState)
   const [chatHistory, setChatHistory] = useState(createChatHistoryState)
   const [projectId, setProjectId] = useState('')
@@ -564,6 +565,8 @@ export function AppBuilderPage() {
     submissionIdRef.current += 1
     submissionInFlightRef.current = false
     setSubmissionPending(false)
+    setWorkspaceSidebarCollapsed(false)
+    setWorkspaceSidebarPreviewVisible(false)
     monitorControllerRef.current?.abort()
     monitorControllerRef.current = null
     navigate('/')
@@ -671,6 +674,11 @@ export function AppBuilderPage() {
       <TopNav
         workspaceActive={workspace.screen !== 'home'}
         sidebarCollapsed={workspace.screen !== 'home' && workspaceSidebarCollapsed}
+        sidebarPreviewVisible={workspaceSidebarPreviewVisible}
+        onExpandSidebar={() => {
+          setWorkspaceSidebarPreviewVisible(false)
+          setWorkspaceSidebarCollapsed(false)
+        }}
       />
 
       {routeError ? (
@@ -900,7 +908,11 @@ export function AppBuilderPage() {
           onRetryValidation={(runId) => void handleRetryValidation(runId)}
           sidebarCollapsed={workspaceSidebarCollapsed}
           onCollapseSidebar={() => setWorkspaceSidebarCollapsed(true)}
-          onExpandSidebar={() => setWorkspaceSidebarCollapsed(false)}
+          onExpandSidebar={() => {
+            setWorkspaceSidebarPreviewVisible(false)
+            setWorkspaceSidebarCollapsed(false)
+          }}
+          onSidebarPreviewVisibilityChange={setWorkspaceSidebarPreviewVisible}
           chatHistory={chatHistory}
           activeChatId={chatId}
           onRetryChatHistory={() => void loadChatHistoryList()}
@@ -923,9 +935,13 @@ export function AppBuilderPage() {
 function TopNav({
   workspaceActive,
   sidebarCollapsed,
+  sidebarPreviewVisible,
+  onExpandSidebar,
 }: {
   workspaceActive: boolean
   sidebarCollapsed: boolean
+  sidebarPreviewVisible: boolean
+  onExpandSidebar: () => void
 }) {
   const { t } = useI18n()
 
@@ -933,16 +949,27 @@ function TopNav({
     <header className="sticky top-0 z-50 border-b border-neutral-200 bg-[#fafafa]/95 backdrop-blur">
       <div className={`flex h-12 items-center justify-between px-3 sm:px-4 ${
         workspaceActive ? 'w-full' : 'mx-auto max-w-[1440px]'
-      } ${
-        sidebarCollapsed ? 'lg:pl-14' : ''
       }`}>
-        <button
-          className="flex h-8 items-center gap-2 rounded-md text-left"
-          aria-label={t('nav.home')}
-          data-testid="top-nav-brand"
-        >
-          <BrandMark compact />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="flex h-8 items-center gap-2 rounded-md text-left"
+            aria-label={t('nav.home')}
+            data-testid="top-nav-brand"
+          >
+            <BrandMark compact />
+          </button>
+          {sidebarCollapsed && !sidebarPreviewVisible ? (
+            <button
+              type="button"
+              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 lg:inline-flex"
+              aria-label={t('workspace.expandSidebar')}
+              data-testid="sidebar-expand-button"
+              onClick={onExpandSidebar}
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
 
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
@@ -1052,6 +1079,7 @@ function WorkspaceScreen({
   sidebarCollapsed,
   onCollapseSidebar,
   onExpandSidebar,
+  onSidebarPreviewVisibilityChange,
   chatHistory,
   activeChatId,
   onRetryChatHistory,
@@ -1088,6 +1116,7 @@ function WorkspaceScreen({
   sidebarCollapsed: boolean
   onCollapseSidebar: () => void
   onExpandSidebar: () => void
+  onSidebarPreviewVisibilityChange: (visible: boolean) => void
   chatHistory: ChatHistoryState
   activeChatId?: string
   onRetryChatHistory: () => void
@@ -1116,7 +1145,17 @@ function WorkspaceScreen({
         />
       ) : (
         <div className="pointer-events-none fixed inset-y-0 left-0 z-[60] hidden w-[272px] lg:block">
-          <div className="peer group pointer-events-none absolute bottom-0 left-0 top-12 w-[272px]">
+          <div
+            className="group pointer-events-none absolute bottom-0 left-0 top-12 w-[272px]"
+            onMouseEnter={() => onSidebarPreviewVisibilityChange(true)}
+            onMouseLeave={() => onSidebarPreviewVisibilityChange(false)}
+            onFocusCapture={() => onSidebarPreviewVisibilityChange(true)}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                onSidebarPreviewVisibilityChange(false)
+              }
+            }}
+          >
             <button
               type="button"
               className="pointer-events-auto absolute bottom-0 left-0 top-0 w-2 bg-transparent focus-visible:bg-neutral-300/70 focus-visible:outline-none"
@@ -1136,16 +1175,6 @@ function WorkspaceScreen({
               onRetryChatHistory={onRetryChatHistory}
             />
           </div>
-
-          <button
-            type="button"
-            className="pointer-events-auto absolute left-2 top-1.5 inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 transition-opacity hover:bg-neutral-100 hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 peer-focus-within:pointer-events-none peer-focus-within:invisible peer-focus-within:opacity-0 peer-hover:pointer-events-none peer-hover:invisible peer-hover:opacity-0"
-            aria-label={t('workspace.expandSidebar')}
-            data-testid="sidebar-expand-button"
-            onClick={pinSidebarOpen}
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </button>
         </div>
       )}
 
