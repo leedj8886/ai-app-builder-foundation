@@ -50,6 +50,16 @@ test('formats same-day and older updated times', () => {
   )
 })
 
+test('uses the caller-provided yesterday label', () => {
+  const now = new Date(2026, 6, 25, 12)
+  const yesterday = new Date(2026, 6, 24, 11).toISOString()
+
+  assert.equal(
+    formatChatUpdatedAt(yesterday, now, 'en-US', 'Yesterday'),
+    'Yesterday',
+  )
+})
+
 test('marks and labels the active Chat', () => {
   assert.equal(isActiveChat('abc', 'abc'), true)
   assert.equal(isActiveChat('abc', undefined), false)

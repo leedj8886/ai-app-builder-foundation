@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CheckCircle2, RefreshCw } from 'lucide-react'
+import { useI18n } from '@/lib/i18n'
 
 interface VerifiedBuildPreviewProps {
   snapshotId: string
@@ -12,6 +13,7 @@ export function VerifiedBuildPreview({
   url,
   isGenerating,
 }: VerifiedBuildPreviewProps) {
+  const { t } = useI18n()
   const [reloadKey, setReloadKey] = useState(0)
 
   return (
@@ -23,11 +25,11 @@ export function VerifiedBuildPreview({
           <span className="h-3 w-3 rounded-full bg-emerald-400" />
           <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Verified build
+            {t('preview.verified')}
           </span>
           {isGenerating ? (
             <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800">
-              Generating a new version
+              {t('preview.generating')}
             </span>
           ) : null}
         </div>
@@ -37,12 +39,12 @@ export function VerifiedBuildPreview({
           onClick={() => setReloadKey((value) => value + 1)}
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Reload preview
+          {t('preview.reload')}
         </button>
       </div>
       <iframe
         key={`${snapshotId}:${reloadKey}`}
-        title="Verified build preview"
+        title={t('preview.verifiedTitle')}
         src={url}
         className="block h-[620px] w-full border-0 bg-white"
         sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"

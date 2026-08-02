@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { ChevronDown, MessageSquare, MoreHorizontal } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
-  getChatAccessibleName,
   isActiveChat,
   selectRecentChats,
   type ChatHistoryState,
 } from '@/lib/chatHistory'
 import { buildChatPath } from '@/lib/chatWorkspace'
+import { useI18n } from '@/lib/i18n'
 
 interface RecentChatsProps {
   state: ChatHistoryState
@@ -20,6 +20,7 @@ export function RecentChats({
   activeChatId,
   onRetry,
 }: RecentChatsProps) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
   const chats = selectRecentChats(state.chats)
   const initiallyLoading = state.status === 'loading' && chats.length === 0
@@ -32,7 +33,7 @@ export function RecentChats({
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span>最近聊天</span>
+        <span>{t('history.recent')}</span>
         <ChevronDown
           className={`h-3.5 w-3.5 transition-transform ${
             expanded ? '' : '-rotate-90'
@@ -57,7 +58,7 @@ export function RecentChats({
               <Link
                 key={chat._id}
                 to={buildChatPath(chat._id)}
-                aria-label={getChatAccessibleName(chat)}
+                aria-label={t('history.open', { title: chat.title })}
                 aria-current={active ? 'page' : undefined}
                 className={`group flex h-9 items-center gap-2 rounded-md px-2 text-sm transition-colors ${
                   active
@@ -76,19 +77,19 @@ export function RecentChats({
 
           {state.status === 'ready' && chats.length === 0 ? (
             <p className="px-2 py-2 text-xs leading-5 text-neutral-500">
-              生成后的对话会显示在这里。
+              {t('history.recentEmpty')}
             </p>
           ) : null}
 
           {state.status === 'error' ? (
             <div className="px-2 py-2 text-xs text-neutral-500" role="status">
-              <span>{state.error ?? '对话加载失败'}</span>
+              <span>{state.error ?? t('history.loadFailed')}</span>
               <button
                 type="button"
                 className="ml-2 font-medium text-neutral-900 underline underline-offset-2"
                 onClick={onRetry}
               >
-                重试
+                {t('common.retry')}
               </button>
             </div>
           ) : null}
@@ -99,7 +100,7 @@ export function RecentChats({
               className="flex h-9 items-center gap-2 rounded-md px-2 text-sm text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950"
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
-              More
+              {t('history.more')}
             </Link>
           ) : null}
         </div>

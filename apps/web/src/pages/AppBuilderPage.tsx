@@ -44,6 +44,7 @@ import { VerifiedBuildPreview } from '@/components/VerifiedBuildPreview'
 import { ModelManagerDialog } from '@/components/ModelManagerDialog'
 import { ModelPicker } from '@/components/ModelPicker'
 import { BrandMark } from '@/components/BrandMark'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import {
   AttachmentChips,
   FileAttachmentButton,
@@ -64,6 +65,7 @@ import {
 } from '@/lib/chatWorkspace'
 import { getSnapshotPreviewState } from '@/lib/snapshotPreview'
 import type { PendingAttachment } from '@/lib/fileAttachments'
+import { useI18n, type TranslationKey } from '@/lib/i18n'
 import {
   createChatHistoryState,
   failChatHistory,
@@ -116,23 +118,21 @@ const SnapshotPreview = lazy(async () => {
 
 const categoryFilters: Array<{
   id: 'all' | Template['category']
-  label: string
   icon: typeof Grid2X2
 }> = [
-  { id: 'apps', label: 'Apps and Games', icon: Gamepad2 },
-  { id: 'landing', label: 'Landing Pages', icon: Monitor },
-  { id: 'components', label: 'Components', icon: Grid2X2 },
-  { id: 'dashboard', label: 'Dashboards', icon: LineChart },
+  { id: 'apps', icon: Gamepad2 },
+  { id: 'landing', icon: Monitor },
+  { id: 'components', icon: Grid2X2 },
+  { id: 'dashboard', icon: LineChart },
 ]
 
 const panelTabs: Array<{
   id: Panel
-  label: string
   icon: typeof Eye
 }> = [
-  { id: 'preview', label: 'Preview', icon: Eye },
-  { id: 'code', label: 'Code', icon: Code2 },
-  { id: 'design', label: 'Design', icon: SlidersHorizontal },
+  { id: 'preview', icon: Eye },
+  { id: 'code', icon: Code2 },
+  { id: 'design', icon: SlidersHorizontal },
 ]
 
 const promptIcons = {
@@ -199,6 +199,7 @@ const createDemoProject = async (prompt: string, agentModelId?: string) => {
 }
 
 export function AppBuilderPage() {
+  const { language, t } = useI18n()
   const navigate = useNavigate()
   const { chatId } = useParams<{ chatId: string }>()
   const [workspace, setWorkspace] = useState(createInitialWorkspaceState)
@@ -231,14 +232,23 @@ export function AppBuilderPage() {
   const timelineRequestRef = useRef(0)
   const chatHistoryRequestRef = useRef(0)
 
+  const localizedTemplates = useMemo(
+    () => templates.map((template) => ({
+      ...template,
+      title: t(`template.${template.id}.title` as TranslationKey),
+      prompt: t(`template.${template.id}.prompt` as TranslationKey),
+    })),
+    [language],
+  )
+
   const visibleTemplates = useMemo(
-    () => templates.filter((template) => category === 'all' || template.category === category),
-    [category],
+    () => localizedTemplates.filter((template) => category === 'all' || template.category === category),
+    [category, localizedTemplates],
   )
 
   const selectedTemplate = useMemo(
-    () => templates.find((template) => template.id === workspace.selectedTemplateId) ?? templates[0],
-    [workspace.selectedTemplateId],
+    () => localizedTemplates.find((template) => template.id === workspace.selectedTemplateId) ?? localizedTemplates[0],
+    [localizedTemplates, workspace.selectedTemplateId],
   )
 
   const selectedModel = useMemo(
@@ -304,10 +314,10 @@ export function AppBuilderPage() {
     } catch {
       if (requestId !== chatHistoryRequestRef.current) return
       setChatHistory((state) =>
-        failChatHistory(state, '无法加载最近聊天'),
+        failChatHistory(state, t('history.loadFailed')),
       )
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     let active = true
@@ -601,7 +611,7 @@ export function AppBuilderPage() {
     event?.preventDefault()
     const prompt = draftPrompt.trim()
       || (homeAttachments.length
-        ? 'Use the attached files as the primary context for this application.'
+        ? t('home.attachedPrompt')
         : selectedTemplate.prompt)
     void submitPromptToAgent(prompt, homeAttachments)
   }
@@ -627,14 +637,17 @@ export function AppBuilderPage() {
   }
 
   const handleTemplateSelect = (templateId: string) => {
-    const next = selectTemplate(workspace, templateId)
-    setWorkspace(next)
-    setDraftPrompt(next.prompt)
+    const template = localizedTemplates.find((item) => item.id === templateId)
+    if (!template) return
+    setWorkspace((state) => ({
+      ...selectTemplate(state, templateId),
+      prompt: template.prompt,
+    }))
+    setDraftPrompt(template.prompt)
   }
 
   const handleSuggestion = (label: string) => {
-    const prompt = `Build a ${label.toLowerCase()} with polished interactions, responsive states, and production-ready code.`
-    setDraftPrompt(prompt)
+    setDraftPrompt(t('suggestion.prompt', { label }))
   }
 
   const handleCopy = async () => {
@@ -660,13 +673,13 @@ export function AppBuilderPage() {
       {routeError ? (
         <main className="mx-auto flex min-h-[calc(100vh-48px)] max-w-xl items-center px-6 text-center">
           <div className="w-full rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-950">
-            <p className="font-medium">Unable to load this conversation</p>
+            <p className="font-medium">{t('route.loadFailed')}</p>
             <p className="mt-2" data-testid="chat-route-error">{routeError}</p>
             <button
               className="mt-4 rounded-md bg-neutral-950 px-3 py-2 text-white"
               onClick={handleBackHome}
             >
-              Start a new chat
+              {t('common.newChat')}
             </button>
           </div>
         </main>
@@ -674,7 +687,7 @@ export function AppBuilderPage() {
         <main className="mx-auto w-full max-w-[1240px] px-3 pb-16 pt-20 sm:px-6 lg:pt-32">
           <section className="mx-auto flex max-w-[720px] flex-col items-center text-center">
             <h1 className="text-[28px] font-semibold leading-tight sm:text-[30px]">
-              您想创建什么?
+              {t('home.title')}
             </h1>
 
             <form
@@ -690,7 +703,7 @@ export function AppBuilderPage() {
                     handlePromptSubmit()
                   }
                 }}
-                placeholder="描述你想构建的应用..."
+                placeholder={t('home.placeholder')}
                 className="h-20 w-full resize-none rounded-t-lg bg-transparent px-4 py-4 text-sm leading-6 text-neutral-800 outline-none placeholder:text-neutral-400 sm:h-[74px]"
               />
               {homeAttachments.length > 0 ? (
@@ -715,7 +728,7 @@ export function AppBuilderPage() {
                   <FileAttachmentButton
                     attachments={homeAttachments}
                     disabled={submissionPending}
-                    label="Upload context"
+                    label={t('home.uploadContext')}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
                     onChange={setHomeAttachments}
                   >
@@ -724,7 +737,7 @@ export function AppBuilderPage() {
                   <button
                     type="button"
                     className="h-8 w-8 rounded-md bg-neutral-950 text-white hover:bg-neutral-800"
-                    aria-label="Voice prompt"
+                    aria-label={t('home.voicePrompt')}
                   >
                     <Mic className="mx-auto h-4 w-4" />
                   </button>
@@ -732,7 +745,7 @@ export function AppBuilderPage() {
                     <button
                       type="submit"
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-neutral-950 text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
-                      aria-label="Build prompt"
+                      aria-label={t('home.buildPrompt')}
                       disabled={workspace.generation.status === 'running'}
                     >
                       {workspace.generation.status === 'running' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
@@ -743,11 +756,18 @@ export function AppBuilderPage() {
             </form>
 
             <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {suggestionPrompts.map((label) => {
-                const Icon = promptIcons[label]
+              {suggestionPrompts.map((suggestion) => {
+                const Icon = promptIcons[suggestion]
+                const suggestionKey = ({
+                  'Contact Form': 'suggestion.contactForm',
+                  'Image Editor': 'suggestion.imageEditor',
+                  'Mini Game': 'suggestion.miniGame',
+                  'Finance Calculator': 'suggestion.financeCalculator',
+                } as const)[suggestion]
+                const label = t(suggestionKey)
                 return (
                   <button
-                    key={label}
+                    key={suggestion}
                     className="inline-flex h-8 items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 text-sm text-neutral-600 shadow-sm hover:border-neutral-300 hover:bg-neutral-50"
                     onClick={() => handleSuggestion(label)}
                   >
@@ -758,8 +778,8 @@ export function AppBuilderPage() {
               })}
               <button
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm hover:border-neutral-300 hover:bg-neutral-50"
-                aria-label="Refresh suggestions"
-                onClick={() => setDraftPrompt('Create a clean AI analytics workspace with charts, files, and deploy controls.')}
+                aria-label={t('home.refreshSuggestions')}
+                onClick={() => setDraftPrompt(t('home.refreshPrompt'))}
               >
                 <RefreshCw className="h-4 w-4" />
               </button>
@@ -768,7 +788,7 @@ export function AppBuilderPage() {
 
           <section className="mt-24 sm:mt-32">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-2xl font-semibold">Start with a template</h2>
+              <h2 className="text-2xl font-semibold">{t('home.templateHeading')}</h2>
               <div className="hidden flex-wrap items-center gap-2 sm:flex">
                 {categoryFilters.map((filter) => {
                   const Icon = filter.icon
@@ -784,7 +804,7 @@ export function AppBuilderPage() {
                       onClick={() => setCategory(active ? 'all' : filter.id)}
                     >
                       <Icon className="h-4 w-4" />
-                      {filter.label}
+                      {t(`category.${filter.id}` as TranslationKey)}
                     </button>
                   )
                 })}
@@ -792,7 +812,7 @@ export function AppBuilderPage() {
                   className="inline-flex h-8 items-center gap-2 rounded-full px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-100"
                   onClick={() => setCategory('all')}
                 >
-                  Browse all
+                  {t('home.browseAll')}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
@@ -807,10 +827,12 @@ export function AppBuilderPage() {
                   selected={workspace.selectedTemplateId === template.id}
                   onSelect={() => handleTemplateSelect(template.id)}
                   onBuild={() => {
-                    const next = selectTemplate(workspace, template.id)
-                    setWorkspace(next)
-                    setDraftPrompt(next.prompt)
-                    void submitPromptToAgent(next.prompt, homeAttachments)
+                    setWorkspace((state) => ({
+                      ...selectTemplate(state, template.id),
+                      prompt: template.prompt,
+                    }))
+                    setDraftPrompt(template.prompt)
+                    void submitPromptToAgent(template.prompt, homeAttachments)
                   }}
                 />
               ))}
@@ -851,10 +873,10 @@ export function AppBuilderPage() {
           onEditDraftChange={setEditDraft}
           onEditAttachmentsChange={setEditAttachments}
           onSubmitEdit={() => void submitPromptToAgent(
-            editDraft.trim() || 'Use the attached files as context for this update.',
+            editDraft.trim() || t('home.updateAttachedPrompt'),
             editAttachments,
           )}
-          modelLabel={selectedModel?.label ?? 'Configured model'}
+          modelLabel={selectedModel?.label ?? t('home.configuredModel')}
           onManageModel={() => setModelManagerOpen(true)}
           timeline={timeline}
           onToggleTimelineTurn={(runId) =>
@@ -896,22 +918,26 @@ export function AppBuilderPage() {
 }
 
 function TopNav() {
+  const { t } = useI18n()
+
   return (
     <header className="sticky top-0 z-30 border-b border-neutral-200 bg-[#fafafa]/95 backdrop-blur">
       <div className="mx-auto flex h-12 max-w-[1440px] items-center justify-between px-3 sm:px-4">
-        <button className="flex h-8 items-center gap-2 rounded-md text-left" aria-label="AI App Builder Foundation home">
+        <button className="flex h-8 items-center gap-2 rounded-md text-left" aria-label={t('nav.home')}>
           <BrandMark compact />
         </button>
 
-        <div className="hidden items-center gap-2 md:flex">
-          <button className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-sm hover:bg-neutral-50">
-            登录
-          </button>
-          <button className="h-8 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800">
-            注册
-          </button>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <div className="hidden items-center gap-2 md:flex">
+            <button className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-sm hover:bg-neutral-50">
+              {t('nav.login')}
+            </button>
+            <button className="h-8 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800">
+              {t('nav.register')}
+            </button>
+          </div>
         </div>
-
       </div>
     </header>
   )
@@ -930,6 +956,8 @@ function TemplateCard({
   onSelect: () => void
   onBuild: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <article className="group">
       <button
@@ -967,7 +995,7 @@ function TemplateCard({
           className="h-8 rounded-md bg-neutral-950 px-3 text-xs font-medium text-white opacity-0 transition hover:bg-neutral-800 group-hover:opacity-100"
           onClick={onBuild}
         >
-          Use template
+          {t('home.useTemplate')}
         </button>
       </div>
     </article>
@@ -1047,6 +1075,8 @@ function WorkspaceScreen({
   activeChatId?: string
   onRetryChatHistory: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <main
       className={`grid h-[calc(100vh-48px)] min-h-0 grid-cols-1 overflow-hidden bg-white ${
@@ -1064,11 +1094,11 @@ function WorkspaceScreen({
               onClick={onBackHome}
             >
               <Sparkles className="h-4 w-4" />
-              New chat
+              {t('common.newChat')}
             </button>
             <button
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100"
-              aria-label="Collapse sidebar"
+              aria-label={t('workspace.collapseSidebar')}
               onClick={onCollapseSidebar}
             >
               <PanelLeftClose className="h-4 w-4" />
@@ -1086,14 +1116,14 @@ function WorkspaceScreen({
               onClick={onManageModel}
             >
               <Settings2 className="h-4 w-4" />
-              Model settings
+              {t('workspace.modelSettings')}
             </button>
           </div>
         </aside>
       ) : (
         <button
           className="fixed left-2 top-14 z-40 hidden h-9 w-9 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 shadow-md hover:bg-neutral-50 lg:inline-flex"
-          aria-label="Expand sidebar"
+          aria-label={t('workspace.expandSidebar')}
           onClick={onExpandSidebar}
         >
           <PanelLeftOpen className="h-4 w-4" />
@@ -1138,8 +1168,8 @@ function WorkspaceScreen({
               canSubmit={Boolean(editDraft.trim()) || editAttachments.length > 0}
               placeholder={
                 state.snapshot
-                  ? '提出后续问题…'
-                  : '补充要求并重新生成…'
+                  ? t('workspace.followUp')
+                  : t('workspace.regenerate')
               }
               modelLabel={modelLabel}
               onChange={onEditDraftChange}
@@ -1165,7 +1195,7 @@ function WorkspaceScreen({
                       onClick={() => onSwitchPanel(tab.id)}
                     >
                       <Icon className="h-4 w-4" />
-                      {tab.label}
+                      {t(`workspace.${tab.id}` as TranslationKey)}
                     </button>
                   )
                 })}
@@ -1178,14 +1208,14 @@ function WorkspaceScreen({
                   onClick={onToggleDesignMode}
                 >
                   <Palette className="h-4 w-4" />
-                  Design Mode
+                  {t('workspace.designMode')}
                 </button>
                 <button
                   className="inline-flex h-8 items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-700 hover:bg-neutral-50"
                   onClick={onCopy}
                 >
                   <Copy className="h-4 w-4" />
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied ? t('common.copied') : t('common.copy')}
                 </button>
               </div>
             </div>
@@ -1225,6 +1255,8 @@ function PreviewPanel({
   snapshot: WorkspaceState['snapshot']
   generationStatus: WorkspaceState['generation']['status']
 }) {
+  const { t } = useI18n()
+
   if (snapshot?.preview?.kind === 'verified-build') {
     return (
       <div className="mx-auto max-w-5xl">
@@ -1244,9 +1276,9 @@ function PreviewPanel({
       <div className="mx-auto flex min-h-[420px] max-w-5xl items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center">
         <div>
           <Eye className="mx-auto h-8 w-8 text-neutral-400" />
-          <h2 className="mt-4 text-base font-semibold">Preview is waiting for a snapshot</h2>
+          <h2 className="mt-4 text-base font-semibold">{t('workspace.previewWaiting')}</h2>
           <p className="mt-2 max-w-md text-sm leading-6 text-neutral-500">
-            Submit a prompt and the successfully generated React application will run here.
+            {t('workspace.previewWaitingBody')}
           </p>
         </div>
       </div>
@@ -1256,7 +1288,7 @@ function PreviewPanel({
   if (previewState.kind === 'error') {
     return (
       <div className="mx-auto max-w-5xl rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-950">
-        <p className="font-medium">Preview is unavailable</p>
+        <p className="font-medium">{t('workspace.previewUnavailable')}</p>
         <p className="mt-2">{previewState.message}</p>
       </div>
     )
@@ -1267,7 +1299,7 @@ function PreviewPanel({
       <Suspense
         fallback={(
           <div className="flex min-h-[620px] items-center justify-center rounded-lg border border-neutral-200 bg-white text-sm text-neutral-500">
-            Loading isolated preview…
+            {t('workspace.previewLoading')}
           </div>
         )}
       >
@@ -1301,6 +1333,8 @@ function CodePanel({
   onDownload: () => void
   onSelectFile: (filePath: string) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 text-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
@@ -1311,11 +1345,11 @@ function CodePanel({
         <div className="flex gap-2">
           <button className="inline-flex h-8 items-center gap-2 rounded-md bg-white/10 px-3 text-sm hover:bg-white/15" onClick={onCopy}>
             <Copy className="h-4 w-4" />
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('common.copied') : t('common.copy')}
           </button>
           <button className="inline-flex h-8 items-center gap-2 rounded-md bg-white px-3 text-sm font-medium text-neutral-950" onClick={onDownload}>
             <Download className="h-4 w-4" />
-            Download
+            {t('common.download')}
           </button>
         </div>
       </div>
@@ -1347,38 +1381,40 @@ function CodePanel({
 }
 
 function DesignPanel({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  const { t } = useI18n()
+
   return (
     <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[0.8fr_1.2fr]">
       <section className="rounded-lg border border-neutral-200 bg-white p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Design system</p>
-            <p className="text-xs text-neutral-500">Tune reusable project tokens.</p>
+            <p className="text-sm font-medium">{t('workspace.designSystem')}</p>
+            <p className="text-xs text-neutral-500">{t('workspace.designSystemBody')}</p>
           </div>
           <button
             className={`h-7 w-12 rounded-full p-1 transition ${enabled ? 'bg-neutral-950' : 'bg-neutral-200'}`}
             onClick={onToggle}
-            aria-label="Toggle design mode"
+            aria-label={t('workspace.toggleDesignMode')}
           >
             <span className={`block h-5 w-5 rounded-full bg-white transition ${enabled ? 'translate-x-5' : ''}`} />
           </button>
         </div>
 
         <div className="mt-5 space-y-5">
-          <TokenSlider label="Radius" value="8px" width="70%" />
-          <TokenSlider label="Density" value="Comfortable" width="48%" />
-          <TokenSlider label="Contrast" value="AA" width="82%" />
+          <TokenSlider label={t('workspace.radius')} value="8px" width="70%" />
+          <TokenSlider label={t('workspace.density')} value={t('workspace.comfortable')} width="48%" />
+          <TokenSlider label={t('workspace.contrast')} value="AA" width="82%" />
         </div>
       </section>
 
       <section className="rounded-lg border border-neutral-200 bg-white p-4">
-        <p className="text-sm font-medium">Theme palette</p>
+        <p className="text-sm font-medium">{t('workspace.themePalette')}</p>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            ['Neutral', 'bg-neutral-950'],
-            ['Canvas', 'bg-[#fafafa]'],
-            ['Accent', 'bg-orange-500'],
-            ['Success', 'bg-emerald-500'],
+            [t('workspace.neutral'), 'bg-neutral-950'],
+            [t('workspace.canvas'), 'bg-[#fafafa]'],
+            [t('workspace.accent'), 'bg-orange-500'],
+            [t('workspace.success'), 'bg-emerald-500'],
           ].map(([label, color]) => (
             <button key={label} className="rounded-lg border border-neutral-200 p-2 text-left hover:bg-neutral-50">
               <span className={`block h-16 rounded-md ${color}`} />
@@ -1388,9 +1424,14 @@ function DesignPanel({ enabled, onToggle }: { enabled: boolean; onToggle: () => 
         </div>
 
         <div className="mt-5 rounded-lg border border-neutral-200 bg-[#fafafa] p-4">
-          <p className="text-sm font-medium">Component states</p>
+          <p className="text-sm font-medium">{t('workspace.componentStates')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {['Default', 'Hover', 'Focused', 'Disabled'].map((state) => (
+            {[
+              t('workspace.default'),
+              t('workspace.hover'),
+              t('workspace.focused'),
+              t('workspace.disabled'),
+            ].map((state) => (
               <button key={state} className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-sm">
                 {state}
               </button>

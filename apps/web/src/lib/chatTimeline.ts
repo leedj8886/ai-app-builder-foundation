@@ -84,21 +84,31 @@ export interface ValidationEventPayload {
 
 export const validationEventLabel = (
   payload: ValidationEventPayload,
+  language: 'zh-CN' | 'en-US' = 'zh-CN',
 ): string => {
   if (
     payload.status === 'failed'
     && payload.category === 'STYLING_CONFIGURATION_ERROR'
     && payload.stylingIssues?.[0]
   ) {
-    const issueLabel = {
+    const issueLabel = (language === 'zh-CN' ? {
       MISSING_CONFIGURATION: '缺少样式配置',
       MISSING_ENTRY_IMPORT: '样式入口未导入',
       UNEXPANDED_DIRECTIVE: 'Tailwind 指令未展开',
       MISSING_BUILD_OUTPUT: '样式产物未生成',
       MISSING_DEPENDENCY: '缺少样式依赖',
       METADATA_CONFLICT: '样式配置冲突',
-    }[payload.stylingIssues[0].code]
-    return `样式构建未生效 · ${issueLabel}`
+    } : {
+      MISSING_CONFIGURATION: 'missing styling configuration',
+      MISSING_ENTRY_IMPORT: 'missing stylesheet entry import',
+      UNEXPANDED_DIRECTIVE: 'unexpanded Tailwind directive',
+      MISSING_BUILD_OUTPUT: 'missing styling build output',
+      MISSING_DEPENDENCY: 'missing styling dependency',
+      METADATA_CONFLICT: 'styling configuration conflict',
+    })[payload.stylingIssues[0].code]
+    return language === 'zh-CN'
+      ? `样式构建未生效 · ${issueLabel}`
+      : `Styling build did not take effect · ${issueLabel}`
   }
   if (
     payload.phase === 'dependencies'
@@ -106,24 +116,41 @@ export const validationEventLabel = (
     && payload.category === 'INFRA_ERROR'
   ) {
     const seconds = Math.max(1, Math.round((payload.retryDelayMs ?? 0) / 1_000))
-    return `依赖服务暂时不可用，${seconds} 秒后重试（${payload.attempt}/2）`
+    return language === 'zh-CN'
+      ? `依赖服务暂时不可用，${seconds} 秒后重试（${payload.attempt}/2）`
+      : `Dependency service unavailable; retrying in ${seconds}s (${payload.attempt}/2)`
   }
   if (payload.phase === 'dependencies' && payload.status === 'passed') {
-    return payload.cache === 'hit' ? '依赖缓存命中' : '依赖安装完成'
+    if (language === 'zh-CN') {
+      return payload.cache === 'hit' ? '依赖缓存命中' : '依赖安装完成'
+    }
+    return payload.cache === 'hit' ? 'Dependency cache hit' : 'Dependencies installed'
   }
-  const phaseLabel = {
+  const phaseLabel = (language === 'zh-CN' ? {
     structure: '项目结构检查',
     dependencies: '依赖准备',
     'type-check': 'TypeScript 检查',
     build: '生产构建',
-  }[payload.phase]
-  const statusLabel = {
+  } : {
+    structure: 'Project structure check',
+    dependencies: 'Dependency preparation',
+    'type-check': 'TypeScript check',
+    build: 'Production build',
+  })[payload.phase]
+  const statusLabel = (language === 'zh-CN' ? {
     passed: '通过',
     failed: '失败',
     retrying: '重试中',
     skipped: '已跳过',
-  }[payload.status]
-  return `${phaseLabel}${statusLabel}`
+  } : {
+    passed: 'passed',
+    failed: 'failed',
+    retrying: 'retrying',
+    skipped: 'skipped',
+  })[payload.status]
+  return language === 'zh-CN'
+    ? `${phaseLabel}${statusLabel}`
+    : `${phaseLabel} ${statusLabel}`
 }
 
 export const canRetryValidation = (turn: ChatTimelineTurn): boolean =>
@@ -133,38 +160,58 @@ export const canRetryValidation = (turn: ChatTimelineTurn): boolean =>
 
 export const formatPlanningDuration = (
   durationMs?: number,
+  language: 'zh-CN' | 'en-US' = 'zh-CN',
 ): string | undefined => durationMs === undefined
   ? undefined
-  : `规划用时 ${Math.max(1, Math.round(durationMs / 1000))} 秒`
+  : language === 'zh-CN'
+    ? `规划用时 ${Math.max(1, Math.round(durationMs / 1000))} 秒`
+    : `Planned in ${Math.max(1, Math.round(durationMs / 1000))}s`
 
-const formatDuration = (durationMs?: number): string | undefined =>
+const formatDuration = (
+  durationMs?: number,
+  language: 'zh-CN' | 'en-US' = 'zh-CN',
+): string | undefined =>
   durationMs === undefined
     ? undefined
-    : `${Math.max(1, Math.round(durationMs / 1000))} 秒`
+    : language === 'zh-CN'
+      ? `${Math.max(1, Math.round(durationMs / 1000))} 秒`
+      : `${Math.max(1, Math.round(durationMs / 1000))}s`
 
 export const formatCollapsedTurnLabel = (
   turn: ChatTimelineTurn,
+  language: 'zh-CN' | 'en-US' = 'zh-CN',
 ): string => {
   if (turn.agent.status === 'failed') {
-    return `生成失败 · ${turn.agent.error?.message ?? '运行未完成'}`
+    return language === 'zh-CN'
+      ? `生成失败 · ${turn.agent.error?.message ?? '运行未完成'}`
+      : `Generation failed · ${turn.agent.error?.message ?? 'Run did not complete'}`
   }
   if (turn.agent.status === 'cancelled') {
-    return '已取消 · 保留已完成的工作步骤'
+    return language === 'zh-CN'
+      ? '已取消 · 保留已完成的工作步骤'
+      : 'Cancelled · completed steps preserved'
   }
   if (turn.agent.status === 'completed_with_conflict') {
-    return `已保存 · 分支已变化 · ${
-      turn.agent.summary ?? turn.snapshot?.summary ?? '替代版本'
-    }`
+    const summary = turn.agent.summary ?? turn.snapshot?.summary
+      ?? (language === 'zh-CN' ? '替代版本' : 'Alternative version')
+    return language === 'zh-CN'
+      ? `已保存 · 分支已变化 · ${summary}`
+      : `Saved · branch changed · ${summary}`
   }
 
-  const summary = turn.agent.summary ?? turn.agent.plan?.summary ?? '生成完成'
+  const summary = turn.agent.summary ?? turn.agent.plan?.summary
+    ?? (language === 'zh-CN' ? '生成完成' : 'Generation completed')
   const changedFiles = turn.snapshot?.changedFiles.length ?? 0
-  const duration = formatDuration(turn.agent.durationMs)
+  const duration = formatDuration(turn.agent.durationMs, language)
 
   return [
-    '已完成',
+    language === 'zh-CN' ? '已完成' : 'Completed',
     summary,
-    ...(changedFiles > 0 ? [`修改 ${changedFiles} 个文件`] : []),
+    ...(changedFiles > 0
+      ? [language === 'zh-CN'
+          ? `修改 ${changedFiles} 个文件`
+          : `${changedFiles} files changed`]
+      : []),
     ...(duration ? [duration] : []),
   ].join(' · ')
 }

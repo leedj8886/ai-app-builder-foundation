@@ -31,6 +31,7 @@ import type {
   ChatTimelineTurn,
 } from '@/services/api'
 import { formatAttachmentSize } from '@/lib/fileAttachments'
+import { useI18n, type TranslationKey } from '@/lib/i18n'
 
 interface ConversationTimelineProps {
   state: ChatTimelineState
@@ -53,22 +54,27 @@ const terminalStatuses = new Set([
 
 const statusLabel = (
   status: ChatTimelineTurn['agent']['status'],
+  t: (key: TranslationKey) => string,
 ): string => ({
-  waiting_for_capacity: '等待分支资源',
-  queued: '等待 Worker',
-  running: 'Agent 已开始工作',
-  planning: '正在分析需求',
-  generating: '正在生成',
-  validating: '正在验证',
-  repairing: '正在修复',
-  persisting: '正在保存 Snapshot',
-  completed: '已完成',
-  completed_with_conflict: '已保存，分支已变化',
-  failed: '生成失败',
-  cancelled: '已取消',
+  waiting_for_capacity: t('timeline.waitingCapacity'),
+  queued: t('timeline.queued'),
+  running: t('timeline.running'),
+  planning: t('timeline.planning'),
+  generating: t('timeline.generating'),
+  validating: t('timeline.validating'),
+  repairing: t('timeline.repairing'),
+  persisting: t('timeline.persisting'),
+  completed: t('timeline.completed'),
+  completed_with_conflict: t('timeline.conflict'),
+  failed: t('timeline.failed'),
+  cancelled: t('timeline.cancelled'),
 })[status]
 
-const eventLabel = (event: ChatTimelineEvent): string => {
+const eventLabel = (
+  event: ChatTimelineEvent,
+  t: (key: TranslationKey) => string,
+  language: 'zh-CN' | 'en-US',
+): string => {
   if (
     event.type === 'validation.step'
     && typeof event.payload?.phase === 'string'
@@ -83,42 +89,44 @@ const eventLabel = (event: ChatTimelineEvent): string => {
       retryDelayMs?: number
       cache?: 'hit' | 'miss' | 'not-applicable'
       stylingIssues?: import('@/services/api').StylingIssue[]
-    })
+    }, language)
   }
   const phase = typeof event.payload?.phase === 'string'
     ? event.payload.phase
     : undefined
   if (phase) {
     return ({
-      planning: '正在分析需求',
-      generating: '正在生成应用文件',
-      validating: '正在验证生成项目',
-      repairing: '正在根据诊断修复',
-      persisting: '正在保存 Snapshot',
+      planning: t('timeline.planning'),
+      generating: t('timeline.generatingFiles'),
+      validating: t('timeline.validating'),
+      repairing: t('timeline.repairing'),
+      persisting: t('timeline.persisting'),
     } as Record<string, string>)[phase] ?? event.message
   }
 
   return ({
-    'run.created': 'Run 已进入队列',
-    'run.started': 'Agent 已开始工作',
-    'agent.plan': '实施计划已生成',
-    'validation.started': '正在验证生成项目',
-    'validation.failed': '验证未通过',
-    'validation.passed': '验证通过',
-    'repair.started': '正在根据诊断修复',
-    'run.completed': 'Snapshot 已生成',
-    'run.failed': '生成失败',
-    'run.cancelled': '运行已取消',
+    'run.created': t('timeline.runQueued'),
+    'run.started': t('timeline.running'),
+    'agent.plan': t('timeline.planReady'),
+    'validation.started': t('timeline.validating'),
+    'validation.failed': t('timeline.validationFailed'),
+    'validation.passed': t('timeline.validationPassed'),
+    'repair.started': t('timeline.repairing'),
+    'run.completed': t('timeline.snapshotReady'),
+    'run.failed': t('timeline.failed'),
+    'run.cancelled': t('timeline.cancelled'),
   } as Record<string, string>)[event.type] ?? event.message
 }
 
-const formatTime = (value: string): string =>
-  new Intl.DateTimeFormat('zh-CN', {
+const formatTime = (value: string, locale: string): string =>
+  new Intl.DateTimeFormat(locale, {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value))
 
 function UserMessage({ turn }: { turn: ChatTimelineTurn }) {
+  const { locale } = useI18n()
+
   return (
     <div className="flex justify-end">
       <div className="max-w-[88%]">
@@ -142,7 +150,7 @@ function UserMessage({ turn }: { turn: ChatTimelineTurn }) {
           ) : null}
         </div>
         <p className="mt-1 text-right text-[11px] text-neutral-400">
-          {formatTime(turn.userMessage.createdAt)}
+          {formatTime(turn.userMessage.createdAt, locale)}
         </p>
       </div>
     </div>
@@ -177,13 +185,14 @@ function ActivityRow({
 }
 
 function ImplementationPlan({ turn }: { turn: ChatTimelineTurn }) {
+  const { t } = useI18n()
   const plan = turn.agent.plan
   if (!plan) return null
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-3">
       <p className="text-xs font-medium text-neutral-800">
-        实施计划 · {plan.steps.length} 步
+        {t('timeline.planSteps', { count: plan.steps.length })}
       </p>
       <ol className="mt-2 space-y-2">
         {plan.steps.map((step, index) => (
@@ -202,7 +211,7 @@ function ImplementationPlan({ turn }: { turn: ChatTimelineTurn }) {
       </ol>
       {plan.assumptions.length > 0 ? (
         <div className="mt-2 border-t border-neutral-100 pt-2 text-[11px] leading-5 text-neutral-500">
-          假设：{plan.assumptions.join('；')}
+          {t('timeline.assumptions', { value: plan.assumptions.join('；') })}
         </div>
       ) : null}
     </div>
@@ -210,7 +219,8 @@ function ImplementationPlan({ turn }: { turn: ChatTimelineTurn }) {
 }
 
 function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
-  const planningDuration = formatPlanningDuration(turn.agent.planningDurationMs)
+  const { language, t } = useI18n()
+  const planningDuration = formatPlanningDuration(turn.agent.planningDurationMs, language)
   const visibleEvents = turn.agent.events.filter(
     (event) => event.type !== 'agent.plan',
   )
@@ -218,7 +228,9 @@ function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
   return (
     <div className="space-y-3">
       <ActivityRow icon={<Sparkles className="h-3.5 w-3.5" />}>
-        模型：{turn.agent.modelProvider ? `${turn.agent.modelProvider} · ` : ''}{turn.agent.model}
+        {t('timeline.model', {
+          value: `${turn.agent.modelProvider ? `${turn.agent.modelProvider} · ` : ''}${turn.agent.model}`,
+        })}
       </ActivityRow>
 
       {planningDuration ? (
@@ -275,7 +287,7 @@ function AgentActivity({ turn }: { turn: ChatTimelineTurn }) {
                         : 'neutral'
                 }
               >
-                {eventLabel(event)}
+                {eventLabel(event, t, language)}
                 {path ? ` · ${path}` : ''}
               </ActivityRow>
             )
@@ -302,6 +314,7 @@ function SnapshotResult({
   turn: ChatTimelineTurn
   onSelectSnapshot: (snapshotId: string) => void
 }) {
+  const { t } = useI18n()
   if (!turn.snapshot) return null
   const shortId = turn.snapshot.id.slice(-6)
 
@@ -315,10 +328,10 @@ function SnapshotResult({
           Snapshot {shortId}
         </span>
         <span className="block text-[11px] text-neutral-500">
-          {turn.snapshot.changedFiles.length} 个文件已修改
+          {t('timeline.changedFiles', { count: turn.snapshot.changedFiles.length })}
         </span>
       </span>
-      <span className="text-xs text-neutral-400">查看</span>
+      <span className="text-xs text-neutral-400">{t('common.view')}</span>
     </button>
   )
 }
@@ -332,6 +345,7 @@ function TurnSummary({
   expanded: boolean
   onToggle: () => void
 }) {
+  const { language } = useI18n()
   return (
     <button
       className="flex w-full items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-left hover:bg-neutral-50"
@@ -348,7 +362,7 @@ function TurnSummary({
         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
       )}
       <span className="min-w-0 flex-1 truncate text-xs font-medium text-neutral-700">
-        {formatCollapsedTurnLabel(turn)}
+        {formatCollapsedTurnLabel(turn, language)}
       </span>
       {expanded
         ? <ChevronUp className="h-4 w-4 shrink-0 text-neutral-400" />
@@ -376,6 +390,7 @@ function AgentTurn({
   retryingRunId?: string
   onRetryValidation: (runId: string) => void
 }) {
+  const { t } = useI18n()
   const terminal = terminalStatuses.has(turn.agent.status)
   const isActive = activeRunId === turn.runId && !terminal
   const showDetails = !terminal || expanded
@@ -387,7 +402,7 @@ function AgentTurn({
       ) : (
         <div className="flex items-center gap-2 text-xs font-medium text-neutral-600">
           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          <span>{statusLabel(turn.agent.status)}</span>
+          <span>{statusLabel(turn.agent.status, t)}</span>
         </div>
       )}
 
@@ -405,7 +420,7 @@ function AgentTurn({
               disabled={retryingRunId === turn.runId}
               onClick={() => onRetryValidation(turn.runId)}
             >
-              {retryingRunId === turn.runId ? '正在重新验证…' : '重新验证'}
+              {retryingRunId === turn.runId ? t('timeline.revalidating') : t('timeline.revalidate')}
             </button>
           ) : null}
 
@@ -427,7 +442,7 @@ function AgentTurn({
               onClick={() => onCancelRun(turn.runId)}
             >
               <Square className="h-3 w-3 fill-current" />
-              Stop run
+              {t('timeline.stop')}
             </button>
           ) : null}
         </div>
@@ -447,6 +462,7 @@ export function ConversationTimeline({
   retryingRunId,
   onRetryValidation,
 }: ConversationTimelineProps) {
+  const { t } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
@@ -498,7 +514,7 @@ export function ConversationTimeline({
               disabled={state.loadingOlder}
               onClick={handleLoadOlder}
             >
-              {state.loadingOlder ? '正在加载…' : '加载更早对话'}
+              {state.loadingOlder ? t('common.loading') : t('timeline.loadOlder')}
             </button>
           </div>
         ) : null}
@@ -506,7 +522,7 @@ export function ConversationTimeline({
         {state.loading && state.turns.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-neutral-500">
             <Loader2 className="h-4 w-4 animate-spin" />
-            正在加载对话…
+            {t('timeline.loadingConversation')}
           </div>
         ) : state.error && state.turns.length === 0 ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-800">
@@ -515,12 +531,12 @@ export function ConversationTimeline({
               className="mt-3 rounded-md bg-neutral-950 px-3 py-1.5 text-xs text-white"
               onClick={onRetry}
             >
-              重新加载对话
+              {t('timeline.reloadConversation')}
             </button>
           </div>
         ) : state.turns.length === 0 ? (
           <p className="py-16 text-center text-sm text-neutral-400">
-            发送消息开始构建
+            {t('timeline.startBuilding')}
           </p>
         ) : (
           <ol className="space-y-7">
@@ -537,7 +553,7 @@ export function ConversationTimeline({
                     data-testid={`validation-retry-${turn.runId}`}
                   >
                     <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>重新验证上一次生成结果</span>
+                    <span>{t('timeline.retryPrevious')}</span>
                   </div>
                 )}
                 <AgentTurn

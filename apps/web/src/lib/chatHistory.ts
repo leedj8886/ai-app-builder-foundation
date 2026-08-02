@@ -48,6 +48,7 @@ export const formatChatUpdatedAt = (
   value: string,
   now = new Date(),
   locale = 'zh-CN',
+  yesterdayLabel = '昨天',
 ): string => {
   const updatedAt = new Date(value)
   if (Number.isNaN(updatedAt.getTime())) return ''
@@ -62,7 +63,7 @@ export const formatChatUpdatedAt = (
 
   const yesterday = new Date(now)
   yesterday.setDate(now.getDate() - 1)
-  if (localDateKey(updatedAt) === localDateKey(yesterday)) return '昨天'
+  if (localDateKey(updatedAt) === localDateKey(yesterday)) return yesterdayLabel
 
   return new Intl.DateTimeFormat(locale, {
     month: 'long',

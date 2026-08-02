@@ -6,6 +6,7 @@ import {
   formatAttachmentSize,
   type PendingAttachment,
 } from '@/lib/fileAttachments'
+import { useI18n } from '@/lib/i18n'
 
 export function FileAttachmentButton({
   attachments,
@@ -22,6 +23,7 @@ export function FileAttachmentButton({
   children: ReactNode
   onChange: (attachments: PendingAttachment[]) => void
 }) {
+  const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string>()
 
@@ -31,7 +33,7 @@ export function FileAttachmentButton({
       onChange(await addAttachmentFiles(attachments, Array.from(files)))
       setError(undefined)
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '无法读取附件')
+      setError(nextError instanceof Error ? nextError.message : t('attachments.readFailed'))
     } finally {
       if (inputRef.current) inputRef.current.value = ''
     }
@@ -78,10 +80,11 @@ export function AttachmentChips({
   disabled?: boolean
   onChange: (attachments: PendingAttachment[]) => void
 }) {
+  const { t } = useI18n()
   if (attachments.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-2" aria-label="Selected attachments">
+    <div className="flex flex-wrap gap-2" aria-label={t('attachments.selected')}>
       {attachments.map((attachment) => (
         <span
           key={attachment.id}
@@ -96,7 +99,7 @@ export function AttachmentChips({
           </span>
           <button
             type="button"
-            aria-label={`Remove ${attachment.name}`}
+            aria-label={t('attachments.remove', { name: attachment.name })}
             disabled={disabled}
             className="ml-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => onChange(

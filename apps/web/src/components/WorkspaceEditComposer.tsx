@@ -17,6 +17,7 @@ import {
   FileAttachmentButton,
 } from './FileAttachments'
 import type { PendingAttachment } from '@/lib/fileAttachments'
+import { useI18n } from '@/lib/i18n'
 
 export function WorkspaceEditComposer({
   value,
@@ -41,6 +42,7 @@ export function WorkspaceEditComposer({
   attachments: PendingAttachment[]
   onAttachmentsChange: (attachments: PendingAttachment[]) => void
 }) {
+  const { t } = useI18n()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -82,7 +84,7 @@ export function WorkspaceEditComposer({
           <FileAttachmentButton
             attachments={attachments}
             disabled={disabled}
-            label="Add attachment"
+            label={t('attachments.add')}
             className="mb-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40"
             onChange={onAttachmentsChange}
           >
@@ -92,8 +94,8 @@ export function WorkspaceEditComposer({
             ref={textareaRef}
             rows={1}
             className="max-h-24 min-h-8 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-1.5 text-sm leading-5 text-neutral-800 outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed disabled:text-neutral-400"
-            aria-label="Edit prompt"
-            placeholder={disabled ? '正在生成…' : placeholder}
+            aria-label={t('composer.editPrompt')}
+            placeholder={disabled ? t('composer.generating') : placeholder}
             value={value}
             disabled={disabled}
             onChange={(event) => onChange(event.target.value)}
@@ -102,7 +104,7 @@ export function WorkspaceEditComposer({
           <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
           <button
             type="button"
-            aria-label={`Generation model: ${modelLabel}`}
+            aria-label={t('composer.generationModel', { model: modelLabel })}
             title={modelLabel}
             disabled={disabled}
             className="hidden h-7 max-w-40 items-center gap-1.5 rounded-md px-2 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
@@ -114,7 +116,7 @@ export function WorkspaceEditComposer({
           </button>
           <button
             type="button"
-            aria-label="Prompt options"
+            aria-label={t('composer.promptOptions')}
             disabled={disabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -122,7 +124,7 @@ export function WorkspaceEditComposer({
           </button>
           <button
             type="button"
-            aria-label="Add visual context"
+            aria-label={t('composer.visualContext')}
             disabled={disabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -130,7 +132,7 @@ export function WorkspaceEditComposer({
           </button>
           <button
             type="button"
-            aria-label="More input options"
+            aria-label={t('composer.moreOptions')}
             disabled={disabled}
             className="inline-flex h-6 w-5 items-center justify-center rounded text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -138,7 +140,7 @@ export function WorkspaceEditComposer({
           </button>
           <button
             type="submit"
-            aria-label={disabled ? '正在生成' : '发送消息'}
+            aria-label={disabled ? t('composer.generating') : t('composer.send')}
             disabled={!canSubmit || disabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-950 text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-950 disabled:text-white"
           >

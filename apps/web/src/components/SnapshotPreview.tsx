@@ -6,6 +6,7 @@ import {
 } from '@codesandbox/sandpack-react'
 import { RefreshCw } from 'lucide-react'
 import type { SnapshotPreviewModel } from '@/lib/snapshotPreview'
+import { useI18n } from '@/lib/i18n'
 
 interface SnapshotPreviewProps {
   snapshotId: string
@@ -20,6 +21,7 @@ export function SnapshotPreview({
   isGenerating,
   verification,
 }: SnapshotPreviewProps) {
+  const { t } = useI18n()
   const [reloadKey, setReloadKey] = useState(0)
 
   return (
@@ -31,13 +33,13 @@ export function SnapshotPreview({
           <span className="h-3 w-3 rounded-full bg-emerald-400" />
           {isGenerating ? (
             <span className="ml-2 rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800">
-              Generating a new version
+              {t('preview.generating')}
             </span>
           ) : null}
           <span className="ml-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
             {verification === 'simulated'
-              ? 'Simulated source preview'
-              : 'Source preview · not build output'}
+              ? t('preview.simulated')
+              : t('preview.source')}
           </span>
         </div>
         <button
@@ -46,7 +48,7 @@ export function SnapshotPreview({
           onClick={() => setReloadKey((value) => value + 1)}
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Reload preview
+          {t('preview.reload')}
         </button>
       </div>
 

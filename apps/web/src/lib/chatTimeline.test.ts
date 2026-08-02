@@ -149,6 +149,29 @@ test('labels planning duration without implying hidden reasoning', () => {
   assert.equal(formatPlanningDuration(2_100)?.includes('思考'), false)
 })
 
+test('formats timeline summaries in English when requested', () => {
+  const completed = turn('completed-en', 'completed')
+  completed.agent.durationMs = 2_100
+  completed.agent.summary = 'Updated dashboard'
+  completed.snapshot = {
+    id: 'snapshot-en',
+    summary: 'Updated dashboard',
+    changedFiles: ['src/App.tsx'],
+  }
+
+  assert.equal(formatPlanningDuration(2_100, 'en-US'), 'Planned in 2s')
+  assert.equal(
+    formatCollapsedTurnLabel(completed, 'en-US'),
+    'Completed · Updated dashboard · 1 files changed · 2s',
+  )
+  assert.equal(validationEventLabel({
+    phase: 'dependencies',
+    status: 'passed',
+    attempt: 1,
+    cache: 'hit',
+  }, 'en-US'), 'Dependency cache hit')
+})
+
 test('only terminal turns can be manually toggled', () => {
   assert.equal(canToggleTurn(turn('active', 'generating')), false)
   assert.equal(canToggleTurn(turn('completed', 'completed')), true)

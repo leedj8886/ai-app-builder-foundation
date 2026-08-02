@@ -6,6 +6,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import type { ModelDefinition } from '@/services/api'
+import { useI18n } from '@/lib/i18n'
 
 export function ModelPicker({
   models,
@@ -20,6 +21,7 @@ export function ModelPicker({
   onSelect: (modelId: string) => void
   onManage: () => void
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const selected = models.find((model) => model.id === selectedModelId)
 
@@ -34,7 +36,7 @@ export function ModelPicker({
         onClick={() => setOpen((current) => !current)}
       >
         <Sparkles className="h-4 w-4 shrink-0 text-orange-500" />
-        <span className="truncate">{selected?.label ?? 'Loading models…'}</span>
+        <span className="truncate">{selected?.label ?? t('models.loading')}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0" />
       </button>
 
@@ -42,7 +44,7 @@ export function ModelPicker({
         <div
           className="absolute left-0 top-10 z-30 w-72 rounded-lg border border-neutral-200 bg-white p-1 text-left text-sm shadow-xl"
           role="listbox"
-          aria-label="Generation model"
+          aria-label={t('models.generationModel')}
         >
           {models.map((model) => (
             <button
@@ -77,7 +79,7 @@ export function ModelPicker({
             }}
           >
             <Settings2 className="h-4 w-4" />
-            Manage application model
+            {t('models.manage')}
           </button>
         </div>
       ) : null}

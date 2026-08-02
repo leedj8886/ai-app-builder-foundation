@@ -1,5 +1,6 @@
 import { CheckCircle2, KeyRound, X } from 'lucide-react'
 import type { ModelDefinition } from '@/services/api'
+import { useI18n } from '@/lib/i18n'
 
 export function ModelManagerDialog({
   open,
@@ -20,6 +21,7 @@ export function ModelManagerDialog({
   onSelect: (modelId: string) => void
   onClose: () => void
 }) {
+  const { t } = useI18n()
   if (!open) return null
 
   return (
@@ -32,14 +34,14 @@ export function ModelManagerDialog({
       >
         <header className="flex items-start justify-between border-b border-neutral-200 px-5 py-4">
           <div>
-            <h2 id="model-manager-title" className="font-semibold">Application model</h2>
+            <h2 id="model-manager-title" className="font-semibold">{t('models.title')}</h2>
             <p className="mt-1 text-sm text-neutral-500">
               {applicationBound
-                ? 'The selected model becomes this application’s default. Each Run records the resolved provider model.'
-                : 'Choose the model that will be assigned when the application is created.'}
+                ? t('models.boundBody')
+                : t('models.unboundBody')}
             </p>
           </div>
-          <button type="button" aria-label="Close model manager" className="rounded-md p-1 text-neutral-500 hover:bg-neutral-100" onClick={onClose}>
+          <button type="button" aria-label={t('models.close')} className="rounded-md p-1 text-neutral-500 hover:bg-neutral-100" onClick={onClose}>
             <X className="h-5 w-5" />
           </button>
         </header>
@@ -66,7 +68,7 @@ export function ModelManagerDialog({
                   {model.description ? <p className="mt-2 text-sm text-neutral-600">{model.description}</p> : null}
                   <p className="mt-2 inline-flex items-center gap-1 text-xs text-neutral-500">
                     <KeyRound className="h-3.5 w-3.5" />
-                    Credential managed by the Worker environment
+                    {t('models.credential')}
                   </p>
                 </div>
                 {selected ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : null}
@@ -74,13 +76,13 @@ export function ModelManagerDialog({
             )
           })}
           {models.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500">No models are configured.</p>
+            <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500">{t('models.empty')}</p>
           ) : null}
           {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
         </div>
 
         <footer className="border-t border-neutral-200 px-5 py-3 text-xs text-neutral-500">
-          Provider endpoints and API keys are managed by the deployment configuration and are never sent to the browser.
+          {t('models.security')}
         </footer>
       </section>
     </div>
