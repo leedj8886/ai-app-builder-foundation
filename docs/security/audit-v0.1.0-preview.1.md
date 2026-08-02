@@ -1,13 +1,15 @@
-# v0.1.0-preview.1 生产依赖审计处置
+# v0.1.0-preview.1 依赖审计处置
 
-本记录只覆盖 `npm audit --omit=dev` 的生产依赖结果，不代表对生成代码、部署环境或
-模型 Provider 的完整安全审计。
+本记录覆盖根工作区的全量 `npm audit` 结果，不代表对生成代码、部署环境或模型
+Provider 的完整安全审计。
 
 ## 已修复
 
 预发布候选已升级 Express、Mongoose、Morgan、PostCSS、Form Data、
 Path-to-RegExp 等生产依赖，并使用 Node.js `crypto.randomUUID()` 替换旧 `uuid`
-依赖。除下述 React Router 公告外，生产依赖审计项已清零。
+依赖。开发与构建工具同步升级到 Playwright 1.62.1、Turbo 2.10.8、Vite 6.4.3 和
+Testcontainers 12.0.4，Node.js 最低版本提升至 22.19。除下述 React Router 公告外，
+全量依赖审计项已清零。
 
 ## 临时接受：React Router RSC Mode CSRF
 
@@ -23,7 +25,9 @@ Path-to-RegExp 等生产依赖，并使用 Node.js `crypto.randomUUID()` 替换�
 ## 约束与退出条件
 
 - Dependabot 持续跟踪 React Router 安全版本。
-- 每次预发布与稳定版候选重新运行 `npm audit --omit=dev`。
+- CI 运行 `npm run audit:dependencies`；脚本只允许公告 `GHSA-qwww-vcr4-c8h2` 及其
+  `react-router-dom` 传递记录，任何新增公告都会失败。
+- 每次预发布与稳定版候选重新检查例外的可达性，不能用 `npm audit fix --force`
+  降级 React Router 来绕过门禁。
 - 一旦引入 React Router SSR、RSC、Framework Mode、loader 或 action，本接受立即失效。
-- `react-router-dom` 发布兼容 Node 20 的修复版本，或项目统一升级到满足 React Router v8
-  要求的 Node 版本后，移除此接受并升级依赖。
+- `react-router-dom` 发布不受该公告影响的客户端路由版本后，移除此接受并升级依赖。

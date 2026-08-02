@@ -39,6 +39,9 @@ services:
       - artifact_store:/var/lib/open-v0/artifacts
 
   web:
+    build:
+      args:
+        VITE_API_URL: ""
     ports: !override
       - "${SMOKE_WEB_PORT:-4173}:80"
     healthcheck:

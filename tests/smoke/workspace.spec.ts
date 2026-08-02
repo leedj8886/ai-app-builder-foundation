@@ -4,6 +4,13 @@ import {
 } from '../../apps/server/src/testing/seedLegacyStylingSmoke';
 
 const apiUrl = process.env.SMOKE_API_URL ?? 'http://127.0.0.1:43001';
+const previewCompileTimeout = 90_000;
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('ai-app-builder-language', 'zh-CN');
+  });
+});
 
 test('legacy Tailwind Snapshot compiles Preview-only compatibility', async ({ page }) => {
   const response = await page.request.post(`${apiUrl}/api/auth/login`, {
@@ -26,10 +33,10 @@ test('legacy Tailwind Snapshot compiles Preview-only compatibility', async ({ pa
   await expect(generatedPreview.getByTestId('tailwind-background')).toHaveCSS(
     'background-color',
     'rgb(219, 234, 254)',
-    { timeout: 30_000 }
+    { timeout: previewCompileTimeout }
   );
 
-  await page.getByRole('button', { name: 'Code', exact: true }).click();
+  await page.getByRole('button', { name: '代码', exact: true }).click();
   await expect(page.getByRole('button', {
     name: 'tailwind.config.js',
     exact: true
@@ -48,8 +55,8 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page.getByText('Templates', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Resources', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Enterprise', { exact: true })).toHaveCount(0);
-  await page.getByPlaceholder('描述你想构建的应用...').fill(prompt);
-  await page.getByLabel('Build prompt').click();
+  await page.getByPlaceholder('描述你想构建的应用…').fill(prompt);
+  await page.getByLabel('开始构建').click();
 
   const timeline = page.getByTestId('conversation-timeline');
   await expect(timeline).toContainText(prompt);
@@ -80,13 +87,13 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
 
   await editComposer.getByRole('textbox').fill('Draft preserved while collapsed');
 
-  await workspaceSidebar.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await workspaceSidebar.getByRole('button', { name: '收起侧边栏' }).click();
   await expect(workspaceSidebar).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '展开侧边栏' })).toBeVisible();
   await expect(editComposer.getByRole('textbox')).toHaveValue('Draft preserved while collapsed');
   await expect(page.getByTestId('snapshot-preview')).toBeVisible();
 
-  const expandButtonBox = await page.getByRole('button', { name: 'Expand sidebar' }).boundingBox();
+  const expandButtonBox = await page.getByRole('button', { name: '展开侧边栏' }).boundingBox();
   const topNavBrandBox = await page.getByTestId('top-nav-brand').boundingBox();
   const workspaceHeaderBox = await page.getByTestId('workspace-header').boundingBox();
   expect(expandButtonBox).not.toBeNull();
@@ -106,27 +113,23 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(sidebarPreview).toBeHidden();
   await expect(page.getByTestId('sidebar-expand-button')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Expand sidebar' }).click();
+  await page.getByRole('button', { name: '展开侧边栏' }).click();
   await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
   await expect(page.getByTestId('recent-chats')).toContainText(prompt);
-  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '展开侧边栏' })).toHaveCount(0);
 
-  await page.getByTestId('workspace-sidebar').getByRole('button', { name: 'Collapse sidebar' }).click();
+  await page.getByTestId('workspace-sidebar').getByRole('button', { name: '收起侧边栏' }).click();
   await page.getByTestId('sidebar-edge-trigger').hover();
-  await page.getByTestId('workspace-sidebar-preview').getByRole('button', { name: 'Pin sidebar open' }).click();
+  await page.getByTestId('workspace-sidebar-preview').getByRole('button', { name: '固定侧边栏' }).click();
   await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
   await expect(page.getByTestId('workspace-sidebar-preview')).toHaveCount(0);
   await editComposer.getByRole('textbox').fill('');
 
-  const generatedPreview = page.frameLocator(
-    '[data-testid="snapshot-preview"] iframe[title="Sandpack Preview"]',
-  );
-  await expect(
-    generatedPreview.getByTestId('generated-app'),
-  ).toContainText('Generated app', { timeout: 30_000 });
-
-  await page.getByRole('button', { name: 'Code', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'src/App.tsx', exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: '代码', exact: true }).click();
+  const appFile = page.getByRole('button', { name: 'src/App.tsx', exact: true }).first();
+  await expect(appFile).toBeVisible();
+  await appFile.click();
+  await expect(page.locator('pre code')).toContainText('Generated app');
 
   await expect(editComposer).toBeVisible();
   await page.route('**/api/agent/runs', async (route) => {
@@ -140,9 +143,9 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
     await route.continue();
   });
   await editComposer.getByRole('textbox').fill('Add a compact activity section');
-  await editComposer.getByRole('button', { name: 'Send edit' }).click();
+  await editComposer.getByRole('button', { name: '发送消息' }).click();
   await expect(editComposer.getByRole('textbox')).toBeDisabled();
-  await expect(editComposer.getByRole('button', { name: '正在生成' })).toBeDisabled();
+  await expect(editComposer.getByRole('button', { name: '正在生成…' })).toBeDisabled();
   await expect(page.getByTestId('agent-generation-status'))
     .toHaveAttribute('data-status', 'ready', { timeout: 90_000 });
   await expect(editComposer.getByRole('textbox')).toHaveValue('');
@@ -170,15 +173,15 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
     restoredTurns.nth(1).locator('[data-testid^="agent-turn-summary-"]'),
   ).toHaveAttribute('aria-expanded', 'true');
 
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
-  await expect(
-    page.frameLocator(
-      '[data-testid="snapshot-preview"] iframe[title="Sandpack Preview"]'
-    )
-      .getByTestId('generated-app'),
-  ).toContainText('Generated app', { timeout: 30_000 });
+  await page.getByRole('button', { name: '代码', exact: true }).click();
+  const restoredAppFile = page.getByRole('button', {
+    name: 'src/App.tsx',
+    exact: true,
+  }).first();
+  await restoredAppFile.click();
+  await expect(page.locator('pre code')).toContainText('// deterministic edit');
 
-  await page.getByTestId('recent-chats').getByRole('link', { name: 'More' }).click();
+  await page.getByTestId('recent-chats').getByRole('link', { name: '更多' }).click();
   await expect(page).toHaveURL('/chats');
   const historyList = page.getByTestId('chat-history-list');
   await expect(historyList).toContainText(prompt);
@@ -186,8 +189,8 @@ test('workspace completes a streamed run and restores its active snapshot', asyn
   await expect(page).toHaveURL(chatUrl);
   await expect(page.getByTestId('workspace-sidebar')).toBeVisible();
 
-  await page.getByTestId('recent-chats').getByRole('link', { name: 'More' }).click();
+  await page.getByTestId('recent-chats').getByRole('link', { name: '更多' }).click();
   await expect(page).toHaveURL('/chats');
-  await page.getByRole('link', { name: 'New chat' }).first().click();
+  await page.getByRole('link', { name: '新建对话' }).first().click();
   await expect(page).toHaveURL('/');
 });

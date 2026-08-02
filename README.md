@@ -111,6 +111,8 @@ docker compose down --volumes
 
 ## 手动开发
 
+本地开发需要 Node.js 22.19 或更高版本。
+
 ```bash
 npm install
 cp apps/server/.env.example apps/server/.env
@@ -185,9 +187,9 @@ AGENT_DEFAULT_MODEL_ID=deepseek-flash
 - 构建通过不代表生成代码已通过业务、安全或合规审计。
 - 尚未提供公开在线 Demo 和一键云部署。
 - 当前包名仍属预发布身份，稳定版前可能调整。
-- 完整 Docker Smoke 仍受容器内 npm registry `ECONNRESET` 阻塞；API Smoke 和旧样式
-  数据种子集成测试已通过。生产依赖只剩 React Router RSC Mode 公告，当前客户端路由
-  架构不启用该执行路径，处置记录见[生产依赖审计说明](docs/security/audit-v0.1.0-preview.1.md)。
+- 完整 Docker Smoke 已覆盖 API、旧样式数据、浏览器生成与快照恢复，并纳入 CI。
+  全量依赖审计只剩 React Router RSC Mode 公告，当前客户端路由架构不启用该执行路径；
+  精确例外与退出条件见[依赖审计说明](docs/security/audit-v0.1.0-preview.1.md)。
 
 ## Workspace、Branch 与 Artifact
 

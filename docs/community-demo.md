@@ -9,7 +9,7 @@
 
 ## 重新录制
 
-前置条件：Docker Compose v2、Node.js 20、Chrome、系统可用的 `ffmpeg`，以及 Playwright 的视频工具。
+前置条件：Docker Compose v2、Node.js 22.19+、Chrome、系统可用的 `ffmpeg`，以及 Playwright 的视频工具。
 
 ```bash
 npm ci
