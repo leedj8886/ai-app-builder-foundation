@@ -973,14 +973,6 @@ function TopNav({
 
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
-          <div className="hidden items-center gap-2 md:flex">
-            <button className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-sm hover:bg-neutral-50">
-              {t('nav.login')}
-            </button>
-            <button className="h-8 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800">
-              {t('nav.register')}
-            </button>
-          </div>
         </div>
       </div>
     </header>
