@@ -17,7 +17,10 @@ export function VerifiedBuildPreview({
   const [reloadKey, setReloadKey] = useState(0)
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+    <div
+      className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm"
+      data-testid="verified-build-preview"
+    >
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-red-400" />

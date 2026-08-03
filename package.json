@@ -38,6 +38,7 @@
     "test:readiness": "node --import tsx --test tests/repository/open-source-readiness.test.ts",
     "audit:dependencies": "node scripts/check-npm-audit.mjs",
     "demo:record": "tsx scripts/record-community-demo.ts",
+    "demo:record:recovery": "tsx scripts/record-recovery-demo.ts",
     "daytona:init": "sh scripts/init-daytona-env.sh",
     "clean": "turbo run clean"
   },

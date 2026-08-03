@@ -16,11 +16,16 @@
 [模型管理](docs/model-management.md) ·
 [参与贡献](CONTRIBUTING.md) ·
 [获取支持](SUPPORT.md) ·
-[Preview Release 草稿](docs/releases/v0.1.0-preview.1.md)
+[Preview Release 草稿](docs/releases/v0.1.0-preview.1.md) ·
+[社区发布包](docs/releases/v0.1.0-preview.1-launch-kit.md)
 
 [![AI App Builder Foundation：经过构建验证的 Agent Run](docs/assets/community-preview/hero.png)](docs/assets/community-preview/demo.mp4)
 
 *24 秒真实产品导览：选择模型 → 可审计 Run → 代码与 Preview → 明确的导出边界。演示使用[确定性模型 fixture](docs/community-demo.md)，不调用真实 Provider。*
+
+[![真实 DeepSeek 受控故障恢复：验证失败、定向修复与通过后的代码](docs/assets/community-preview/recovery-hero.png)](docs/assets/community-preview/recovery-demo.mp4)
+
+*30 秒失败恢复实录：受控注入一个 TypeScript 类型错误，由真实 `deepseek-v4-flash` 根据验证诊断修复，随后通过 TypeScript 检查与生产构建并生成快照。画面全程披露故障注入；它不是模型自然失败或安全审计证明。*
 
 ## 为什么做这个项目
 

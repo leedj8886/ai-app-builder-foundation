@@ -281,7 +281,9 @@ test('repository includes contribution templates and a reproducible example', as
     'docs/examples/verified-dashboard.md',
     'docs/github-repository-setup.md',
     'docs/release-checklist.md',
-    'docs/releases/v0.1.0-preview.1.md'
+    'docs/releases/v0.1.0-preview.1.md',
+    'docs/releases/v0.1.0-preview.1-launch-kit.md',
+    'docs/releases/v0.1.0-preview.1-recovery-demo.md'
   ];
 
   await Promise.all(
@@ -316,6 +318,17 @@ test('repository includes contribution templates and a reproducible example', as
     previewRelease,
     /v0-by-kimi|open-v0|\/v0\/chats|无官方关系/
   );
+
+  const launchKit = await readFile(
+    repositoryFile('docs/releases/v0.1.0-preview.1-launch-kit.md'),
+    'utf8'
+  );
+  assert.match(launchKit, /Show HN/);
+  assert.match(launchKit, /Reddit/);
+  assert.match(launchKit, /V2EX/);
+  assert.match(launchKit, /## X/);
+  assert.match(launchKit, /Developer Preview/);
+  assert.match(launchKit, /确定性模型 fixture/);
 
   const workflow = await readFile(
     repositoryFile('.github/workflows/ci.yml'),
@@ -399,21 +412,35 @@ test('smoke Worker shares the ArtifactStore used by the API', async () => {
 test('community preview assets are published and reproducible', async () => {
   const hero = await stat(repositoryFile('docs/assets/community-preview/hero.png'));
   const demo = await stat(repositoryFile('docs/assets/community-preview/demo.mp4'));
+  const recoveryHero = await stat(repositoryFile(
+    'docs/assets/community-preview/recovery-hero.png'
+  ));
+  const recoveryDemo = await stat(repositoryFile(
+    'docs/assets/community-preview/recovery-demo.mp4'
+  ));
   const readme = await readFile(repositoryFile('README.md'), 'utf8');
   const guide = await readFile(repositoryFile('docs/community-demo.md'), 'utf8');
 
   assert.ok(hero.size > 50_000 && hero.size < 1_000_000);
   assert.ok(demo.size > 200_000 && demo.size < 5_000_000);
+  assert.ok(recoveryHero.size > 50_000 && recoveryHero.size < 1_000_000);
+  assert.ok(recoveryDemo.size > 200_000 && recoveryDemo.size < 5_000_000);
   assert.match(readme, /docs\/assets\/community-preview\/hero\.png/);
   assert.match(readme, /docs\/assets\/community-preview\/demo\.mp4/);
+  assert.match(readme, /docs\/assets\/community-preview\/recovery-hero\.png/);
+  assert.match(readme, /docs\/assets\/community-preview\/recovery-demo\.mp4/);
   assert.match(readme, /确定性模型 fixture/);
   assert.match(guide, /docker-compose\.community-demo\.yml/);
   assert.match(guide, /npm run demo:record/);
 
   await Promise.all([
     access(repositoryFile('docker-compose.community-demo.yml')),
+    access(repositoryFile('docker-compose.recovery-demo.yml')),
     access(repositoryFile('playwright.community-demo.config.ts')),
-    access(repositoryFile('tests/community-demo/community-demo.spec.ts'))
+    access(repositoryFile('playwright.recovery-demo.config.ts')),
+    access(repositoryFile('tests/community-demo/community-demo.spec.ts')),
+    access(repositoryFile('tests/recovery-demo/recovery-demo.spec.ts')),
+    access(repositoryFile('scripts/record-recovery-demo.ts'))
   ]);
 });
 

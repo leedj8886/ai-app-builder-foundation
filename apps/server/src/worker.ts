@@ -21,6 +21,7 @@ import { createSandboxProjectValidator } from './agent/sandboxValidator';
 import { getArtifactService } from './artifacts/runtime';
 import { getSandboxConfig } from './sandbox/config';
 import type { ModelClient } from './agent/types';
+import { withControlledRecoveryDemoFault } from './agent/recoveryDemoModelClient';
 import {
   startSandboxReconcilerLoop,
   type SandboxReconcilerLoop
@@ -44,12 +45,20 @@ const startWorker = async () => {
   getSandboxConfig();
   const connection = createRedisConnection();
   const modelCatalog = getModelCatalog();
-  const modelClients = new Map<string, ReturnType<typeof createProductionModelClient>>();
+  const controlledRecoveryDemo =
+    process.env.AGENT_RECOVERY_DEMO_INJECT_TYPE_ERROR === 'true';
+  if (controlledRecoveryDemo) {
+    console.warn(
+      'Controlled recovery demo fault injection is enabled for this Worker'
+    );
+  }
+  const modelClients = new Map<string, ModelClient>();
   const modelClientFor = (modelId: string) => {
     const existing = modelClients.get(modelId);
     if (existing) return existing;
-    const client = createProductionModelClient(
-      resolveModelClientConfig(modelCatalog, modelId)
+    const client = withControlledRecoveryDemoFault(
+      createProductionModelClient(resolveModelClientConfig(modelCatalog, modelId)),
+      controlledRecoveryDemo
     );
     modelClients.set(modelId, client);
     return client;

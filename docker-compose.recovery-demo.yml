@@ -1,0 +1,61 @@
+services:
+  mongodb:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  redis:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  server:
+    ports: !override
+      - "${RECOVERY_DEMO_API_PORT:-43003}:3001"
+    environment:
+      CLIENT_URL: http://127.0.0.1:${RECOVERY_DEMO_WEB_PORT:-4175}
+      PREVIEW_PUBLIC_ORIGIN: http://127.0.0.1:${RECOVERY_DEMO_API_PORT:-43003}
+      JWT_SECRET: recovery-demo-local-secret
+      AGENT_QUEUE_NAME: recovery-demo-runs
+      AGENT_DEFAULT_MODEL_ID: deepseek-flash
+      AGENT_MODELS_JSON: ""
+      DEEPSEEK_MODEL: deepseek-v4-flash
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  worker:
+    environment:
+      JWT_SECRET: recovery-demo-local-secret
+      AGENT_QUEUE_NAME: recovery-demo-runs
+      AGENT_DEFAULT_MODEL_ID: deepseek-flash
+      AGENT_MODELS_JSON: ""
+      DEEPSEEK_MODEL: deepseek-v4-flash
+      AGENT_MAX_REPAIR_ATTEMPTS: "2"
+      AGENT_RECOVERY_DEMO_INJECT_TYPE_ERROR: "true"
+    volumes: !override
+      - agent_validation_cache_recovery_demo:/var/cache/v0-agent
+      - artifact_store:/var/lib/open-v0/artifacts
+
+  web:
+    build:
+      args:
+        VITE_API_URL: ""
+    ports: !override
+      - "${RECOVERY_DEMO_WEB_PORT:-4175}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+volumes:
+  agent_validation_cache_recovery_demo:

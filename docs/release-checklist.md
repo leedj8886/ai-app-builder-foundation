@@ -7,7 +7,7 @@
 - [x] `.env.example` 不含真实密钥
 - [x] GitHub description、topics 和 1280×640 social preview 资产已准备
 - [x] 使用仓库管理员账号应用 GitHub 元数据
-- [ ] 在 GitHub 网页确认 social preview 已上传且分享卡片没有裁切
+- [x] GitHub social preview 已上传；公开 Open Graph 图片与仓库 1280×640 资产逐字节一致
 - [x] 包名采用可检索的语义名称，所有 workspace 使用同一预发布版本
 - [x] 产品和文档对外品牌统一为 AI App Builder Foundation
 - [x] GitHub 仓库重命名为 `ai-app-builder-foundation`
@@ -30,19 +30,20 @@
 
 ## 全新环境验证
 
+- [x] 至少一台独立电脑只使用公开文档从零启动，配置 API Key 后完成真实页面生成
 - [ ] 五名未参与开发的测试者只使用公开文档
 - [ ] 至少四名测试者在十分钟内启动
 - [ ] 每名成功测试者完成一次生成和一次修改
-- [ ] 示例 Dashboard 到达经过验证的 Snapshot
+- [x] 示例 Dashboard 到达经过验证的 Snapshot
 - [ ] 安装失败可以通过公开故障排查解决
 
 ## 发布物料
 
 - [x] README 首图与 24 秒真实产品导览已生成
-- [ ] 20–30 秒失败恢复演示对应真实 Release
-- [ ] 架构图与当前实现一致
+- [x] 30 秒受控故障注入 + 真实 DeepSeek 失败恢复演示已生成（发布前再核对目标提交）
+- [x] 架构图与当前实现一致
 - [x] `v0.1.0-preview.1` Release 草稿明确新增能力、限制和稳定版门槛
-- [ ] Show HN、Reddit、V2EX 和 X 文案按社区分别撰写
+- [x] Show HN、Reddit、V2EX 和 X 文案按社区分别撰写，并记录事实表述边界
 
 ## 发布后
 
