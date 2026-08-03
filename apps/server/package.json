@@ -15,6 +15,7 @@
     "start:migrate:workspace-branches": "node dist/migrate.js",
     "reconcile:artifacts": "tsx src/reconcileArtifacts.ts",
     "start:reconcile:artifacts": "node dist/reconcileArtifacts.js",
+    "lint": "eslint src --ext ts --report-unused-disable-directives --max-warnings 0",
     "test": "node ../../scripts/run-node-tests.mjs src .test.ts",
     "test:integration": "node ../../scripts/run-node-tests.mjs src/integration .integration.ts --test-concurrency=1 && node ../../scripts/run-node-tests.mjs src/artifacts .integration.ts --test-concurrency=1 && node ../../scripts/run-node-tests.mjs src/sandbox .integration.ts --test-concurrency=1",
     "type-check": "tsc --noEmit"
@@ -38,6 +39,8 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.2",
+    "@typescript-eslint/parser": "^7.0.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
@@ -45,6 +48,7 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.11.24",
     "@types/supertest": "^7.2.1",
+    "eslint": "^8.56.0",
     "supertest": "^7.2.2",
     "testcontainers": "12.0.4",
     "tsx": "^4.7.1",

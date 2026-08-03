@@ -95,16 +95,20 @@ GitHub CLI 不提供稳定的 Social Preview 上传命令。使用仓库网页�
 
 ## 5. CI 与分支保护
 
-`.github/workflows/ci.yml` 提供两个必需检查：
+`.github/workflows/ci.yml` 提供三个必需检查：
 
 - `Quality`：readiness、lint、类型检查、Server/Web 单元测试、生产构建和 Compose 配置。
 - `Integration`：Server、ArtifactStore 与 Sandbox 的 Testcontainers 集成套件。
+- `Smoke`：使用动态本机端口验证 Docker API、Worker、浏览器生成和快照恢复链路。
+
+`External Preview Monitor` 定时检查历史 Snapshot 的 Sandpack fallback；它依赖外部
+CodeSandbox 与 jsDelivr，因此保持非阻塞。
 
 等待 `main` 首次 CI 全绿后，在 `Settings → Rules → Rulesets` 为 `main` 建立规则：
 
 - 禁止强制推送和删除。
 - Pull Request 合并前要求状态检查通过。
-- Required checks 选择 `Quality` 和 `Integration`。
+- Required checks 选择 `Quality`、`Integration` 和 `Smoke`。
 - 要求解决全部 review conversations。
 
 项目当前由单维护者推进时，可以暂不要求审批人数，避免所有者被自己的审批规则阻塞。

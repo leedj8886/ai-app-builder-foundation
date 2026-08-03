@@ -403,7 +403,7 @@ export const runAgentGenerationWithValidation = async (
   let repairAttempts = 0;
   const seenDiagnostics = new Set<string>();
 
-  while (true) {
+  for (;;) {
     await input.onEvent({
       type: 'validation.started',
       message: 'Validating generated project',

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/smoke',
-  testMatch: 'workspace.spec.ts',
+  testMatch: ['workspace.spec.ts', 'sandpack-external.spec.ts'],
   timeout: 180_000,
   fullyParallel: false,
   workers: 1,

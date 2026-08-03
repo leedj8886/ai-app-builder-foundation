@@ -72,7 +72,6 @@ export const runCommand = (
     stderr = appendBounded(stderr, chunk, input.maxOutputChars);
   });
 
-  let timer: ReturnType<typeof setTimeout>;
   const cleanup = () => {
     clearTimeout(timer);
     input.signal?.removeEventListener('abort', onAbort);
@@ -140,7 +139,7 @@ export const runCommand = (
     finish(code ?? (signal ? 1 : 0));
   });
 
-  timer = setTimeout(() => {
+  const timer = setTimeout(() => {
     timedOut = true;
     terminate();
   }, input.timeoutMs);
