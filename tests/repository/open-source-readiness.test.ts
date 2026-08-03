@@ -311,7 +311,9 @@ test('repository includes contribution templates and a reproducible example', as
   );
   assert.match(previewRelease, /AI App Builder Foundation v0\.1\.0-preview\.1 — Build-Verified Foundation/);
   assert.match(previewRelease, /Developer Preview/);
-  assert.match(previewRelease, /尚未创建 GitHub Release/);
+  assert.match(previewRelease, /用于早期社区验证/);
+  assert.match(previewRelease, /不是稳定版本/);
+  assert.match(previewRelease, /不提供生产兼容性承诺/);
   assert.match(previewRelease, /ai-app-builder-foundation@0\.1\.0-preview\.1/);
   assert.match(previewRelease, /private: true/);
   assert.doesNotMatch(
