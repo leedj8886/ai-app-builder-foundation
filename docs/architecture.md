@@ -149,3 +149,17 @@ LocalProcessProvider 只用于手动开发和本机 PoC。生产环境检测到 
 - `apps/web/src/components/ConversationTimeline.tsx`：执行轨迹呈现。
 
 扩展模型 Provider 时，应保持模型接口、错误脱敏和结构化结果约束，不将厂商 SDK 传播到 Orchestrator。
+
+## 持久化全栈项目方向
+
+生成项目的持久化数据库和长期 Runtime 属于独立的数据面，不复用 Builder 控制面
+的 MongoDB 或凭据。首个候选 Profile 为 NestJS、Prisma 和 PostgreSQL；模型只能
+编辑业务 Module、前端源码、Prisma Schema 和迁移文件，Bootstrap、认证骨架、
+PrismaService、Secret 注入和部署脚本由平台维护。
+
+Database、Migration、Secret、Deployment、Runtime Log 和 Analytics 能力通过
+项目自有 Tool 协议接入，外部云厂商和 BaaS 只作为边缘 Adapter，不得把 SDK、
+专有类型或 MCP 协议传播到 Orchestrator、Run 状态机和 Snapshot 核心。基础访问
+分析由 Hosting Ingress 自动采集，不要求生成应用安装 Analytics SDK。完整约束、
+资源模型、流程和验收标准见
+[持久化全栈项目支持参考设计](fullstack-persistence-reference-design.md)。

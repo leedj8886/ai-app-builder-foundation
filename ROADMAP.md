@@ -27,6 +27,9 @@
 3. 可复现的可靠性与成本评测
 4. 一键自托管和部署参考
 5. 内部组件库、模板和策略扩展点
+6. 按[持久化全栈项目支持参考设计](docs/fullstack-persistence-reference-design.md)
+   验证 NestJS + Prisma + PostgreSQL Profile、Provider-neutral 资源 Tool、持久
+   Preview Runtime 和 Ingress 自动访问分析
 
 ## 暂缓
 
