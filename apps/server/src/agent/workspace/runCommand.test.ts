@@ -3,8 +3,22 @@ import assert from 'node:assert/strict';
 import { mkdtemp, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { runCommand } from './runCommand';
+import { pickValidationEnvironment, runCommand } from './runCommand';
 import { runCancelledError } from '../runCancellation';
+
+test('pickValidationEnvironment allows safe npm transport settings only', () => {
+  assert.deepEqual(
+    pickValidationEnvironment({
+      NPM_CONFIG_REGISTRY: 'https://registry.example.test',
+      NPM_CONFIG_PREFER_OFFLINE: 'true',
+      NPM_TOKEN: 'secret'
+    }),
+    {
+      NPM_CONFIG_REGISTRY: 'https://registry.example.test',
+      NPM_CONFIG_PREFER_OFFLINE: 'true'
+    }
+  );
+});
 
 test('runCommand captures output and non-zero exit codes without a shell', async () => {
   const result = await runCommand({

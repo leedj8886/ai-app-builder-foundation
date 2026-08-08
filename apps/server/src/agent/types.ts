@@ -65,7 +65,9 @@ export const projectFileLanguages = [
   'css',
   'json',
   'html',
-  'md'
+  'md',
+  'prisma',
+  'sql'
 ] as const;
 
 export type ProjectFileLanguage = (typeof projectFileLanguages)[number];
@@ -86,11 +88,32 @@ export interface ProjectSnapshotPackageJson {
 export const validationPhases = [
   'structure',
   'dependencies',
+  'prisma',
+  'migration',
+  'api-test',
   'type-check',
-  'build'
+  'build',
+  'runtime-smoke'
 ] as const;
 
 export type ValidationPhase = (typeof validationPhases)[number];
+
+export const validationStageIds = [
+  'structure',
+  'install',
+  'prisma-validate',
+  'prisma-generate',
+  'migration-history',
+  'migration-replay',
+  'type-check',
+  'nest-type-check',
+  'api-test',
+  'build',
+  'web-api-build',
+  'runtime-smoke'
+] as const;
+
+export type ValidationStageId = (typeof validationStageIds)[number];
 
 export const validationErrorCategories = [
   'CODE_ERROR',
@@ -103,7 +126,7 @@ export type ValidationErrorCategory =
   (typeof validationErrorCategories)[number];
 
 export interface ValidationCheckResult {
-  name: 'structure' | 'install' | 'type-check' | 'build';
+  name: ValidationStageId;
   phase?: ValidationPhase;
   status?: 'passed' | 'failed' | 'retrying' | 'skipped';
   category?: ValidationErrorCategory;
@@ -178,9 +201,14 @@ export interface AgentContext {
   project: {
     name: string;
     description?: string;
-    framework: 'react';
-    styling: 'tailwind';
-    uiLibrary: string;
+    profile?: import('./profiles/types').ProfileRef;
+    capabilities?: string[];
+    editablePaths?: string[];
+    platformManagedPaths?: string[];
+    generationInstructions?: string;
+    framework?: 'react';
+    styling?: 'tailwind';
+    uiLibrary?: string;
   };
   messages: AgentContextMessage[];
   attachments?: AgentContextAttachment[];

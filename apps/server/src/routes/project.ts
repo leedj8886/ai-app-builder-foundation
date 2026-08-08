@@ -23,13 +23,20 @@ import {
 import { ProjectBranch } from '../models/ProjectBranch';
 import { ArtifactManifest } from '../models/ArtifactManifest';
 import { getArtifactService } from '../artifacts/runtime';
-import type { ProjectArtifactBundleV1 } from '../artifacts/types';
+import {
+  projectArtifactProfileRef,
+  type ProjectArtifactBundle
+} from '../artifacts/types';
 import { verifiedPreviewDescriptor } from '../preview/descriptor';
 import {
   getModelCatalog,
   modelIdSchema,
   requireModelDefinition
 } from '../services/modelCatalog';
+import {
+  assertProjectProfileMatch,
+  normalizeProjectProfileRef
+} from '../agent/profiles/registry';
 
 const router = Router();
 
@@ -55,11 +62,17 @@ const readSnapshotBundle = (
 
 const snapshotDetail = async (
   snapshot: InstanceType<typeof ProjectSnapshot>,
-  loadedBundle?: ProjectArtifactBundleV1
+  loadedBundle?: ProjectArtifactBundle
 ) => {
   const bundle = loadedBundle ?? await readSnapshotBundle(snapshot);
+  assertProjectProfileMatch(
+    snapshot.profile,
+    projectArtifactProfileRef(bundle),
+    'Snapshot and Artifact use different Profiles'
+  );
   return {
     ...snapshot.toObject(),
+    profile: normalizeProjectProfileRef(snapshot.profile),
     files: bundle.files,
     packageJson: bundle.packageJson,
     preview: verifiedPreviewDescriptor(snapshot)
@@ -291,9 +304,13 @@ router.get('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => 
 // Create new project
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
-    const { name, description, settings } = z.object({
+    const { name, description, settings, profile } = z.object({
       name: z.string().min(1),
       description: z.string().optional(),
+      profile: z.object({
+        id: z.string().trim().min(1),
+        version: z.number().int().positive()
+      }).strict().optional(),
       settings: z.object({
         framework: z.enum(['react', 'vue', 'svelte']).optional(),
         styling: z.enum(['tailwind', 'css-modules', 'styled-components']).optional(),
@@ -305,6 +322,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
     const modelCatalog = getModelCatalog();
     const modelId = settings?.agentModelId || modelCatalog.defaultModelId;
     requireModelDefinition(modelCatalog, modelId);
+    const profileRef = normalizeProjectProfileRef(profile);
 
     const { workspace } = await ensureDefaultWorkspaceForUser(req.user!._id);
     const project = new Project({
@@ -312,6 +330,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
       userId: req.userId,
       name,
       description,
+      profile: profileRef,
       settings: {
         framework: settings?.framework || 'react',
         styling: settings?.styling || 'tailwind',

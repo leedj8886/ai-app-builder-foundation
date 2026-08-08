@@ -11,6 +11,7 @@ import { loadAgentContext } from './contextBuilder';
 import { mergeProjectPackageJson } from './dependencies';
 import { emitAgentEvent } from './eventBus';
 import { applyFileOperations } from './fileOperations';
+import { applyProfileFileOperations } from './profiles/filePolicy';
 import { diagnosticFingerprint } from './validation/classify';
 import { resolveProjectBaseFiles } from './projectTemplate';
 import { assertAgentRunTransition } from './stateMachine';
@@ -28,8 +29,18 @@ import { ProjectValidator, ValidateProjectInput } from './validator';
 import { commitBranchHead } from '../branches/branchService';
 import { ProjectBranch } from '../models/ProjectBranch';
 import { getArtifactService } from '../artifacts/runtime';
-import { ArtifactError, type ArtifactProjectFile } from '../artifacts/types';
+import {
+  ArtifactError,
+  projectArtifactProfileRef,
+  type ArtifactProjectFile
+} from '../artifacts/types';
 import { ArtifactManifest } from '../models/ArtifactManifest';
+import {
+  assertProjectProfileMatch,
+  normalizeProjectProfileRef,
+  resolveProjectProfile
+} from './profiles/registry';
+import type { ProfileRef } from './profiles/types';
 
 interface WorkerEvent {
   type: AgentEventType;
@@ -41,6 +52,7 @@ interface RunAgentGenerationInput {
   context: AgentContext;
   baseFiles: ProjectFile[];
   basePackageJson?: ProjectSnapshotPackageJson;
+  profile?: ProfileRef;
   generatedByRunId?: Types.ObjectId;
   modelClient: ModelClient;
   onEvent(event: WorkerEvent): void | Promise<void>;
@@ -85,7 +97,10 @@ const domainFiles = (files: ArtifactProjectFile[]): ProjectFile[] => files.map(f
   })
 }));
 
-const assertArtifactMatch = async <T extends { artifactId: string }>(
+const assertArtifactMatch = async <T extends {
+  artifactId: string;
+  profile?: ProfileRef;
+}>(
   record: T | null,
   artifactId: string,
   scope: {
@@ -93,6 +108,7 @@ const assertArtifactMatch = async <T extends { artifactId: string }>(
     projectId: Types.ObjectId;
     branchId: Types.ObjectId;
     userId: Types.ObjectId;
+    profile: ProfileRef;
   },
   kind: 'project_snapshot' | 'validation_candidate'
 ): Promise<T> => {
@@ -127,6 +143,11 @@ const assertArtifactMatch = async <T extends { artifactId: string }>(
       'Domain record does not reference an owned artifact manifest'
     );
   }
+  assertProjectProfileMatch(
+    scope.profile,
+    owned.profile,
+    'Domain record and AgentRun use different Profiles'
+  );
   return owned;
 };
 
@@ -148,17 +169,25 @@ export const createRunSnapshot = async (
   if (!run.workspaceId || !run.branchId) {
     throw new Error('AgentRun is missing artifact ownership');
   }
+  const profile = normalizeProjectProfileRef(run.profile);
   const artifact = await getArtifactService().writeBundle({
     workspaceId: run.workspaceId,
     projectId: run.projectId,
     createdByRunId: run._id,
     kind: 'project_snapshot',
     idempotencyKey: `snapshot:${run._id.toString()}`,
-    bundle: {
-      version: 1,
-      files: artifactFiles(input.files),
-      packageJson: input.packageJson
-    }
+    bundle: run.profile
+      ? {
+          version: 2,
+          profile,
+          files: artifactFiles(input.files),
+          packageJson: input.packageJson
+        }
+      : {
+          version: 1,
+          files: artifactFiles(input.files),
+          packageJson: input.packageJson
+        }
   });
   let snapshot;
   try {
@@ -171,6 +200,7 @@ export const createRunSnapshot = async (
           userId: run.userId,
           projectId: run.projectId,
           sourceRunId: run._id,
+          profile,
           parentSnapshotId: input.parentSnapshotId,
           artifactId: artifact.artifactId,
           ...(input.validation.previewArtifactId && {
@@ -190,7 +220,8 @@ export const createRunSnapshot = async (
     workspaceId: run.workspaceId,
     projectId: run.projectId,
     branchId: run.branchId,
-    userId: run.userId
+    userId: run.userId,
+    profile
   }, 'project_snapshot');
   if (input.validation.previewArtifactId) {
     const previewManifest = await ArtifactManifest.exists({
@@ -222,17 +253,25 @@ export const createRunCandidate = async (
   if (!run.workspaceId || !run.branchId) {
     throw new Error('AgentRun is missing artifact ownership');
   }
+  const profile = normalizeProjectProfileRef(run.profile);
   const artifact = await getArtifactService().writeBundle({
     workspaceId: run.workspaceId,
     projectId: run.projectId,
     createdByRunId: run._id,
     kind: 'validation_candidate',
     idempotencyKey: `candidate:${run._id.toString()}`,
-    bundle: {
-      version: 1,
-      files: artifactFiles(input.files),
-      packageJson: input.packageJson
-    }
+    bundle: run.profile
+      ? {
+          version: 2,
+          profile,
+          files: artifactFiles(input.files),
+          packageJson: input.packageJson
+        }
+      : {
+          version: 1,
+          files: artifactFiles(input.files),
+          packageJson: input.packageJson
+        }
   });
   let candidate;
   try {
@@ -245,6 +284,7 @@ export const createRunCandidate = async (
           userId: run.userId,
           projectId: run.projectId,
           sourceRunId: run._id,
+          profile,
           artifactId: artifact.artifactId,
           summary: input.summary,
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1_000)
@@ -260,7 +300,8 @@ export const createRunCandidate = async (
     workspaceId: run.workspaceId,
     projectId: run.projectId,
     branchId: run.branchId,
-    userId: run.userId
+    userId: run.userId,
+    profile
   }, 'validation_candidate');
 };
 
@@ -315,6 +356,9 @@ const hasEffectiveFileChanges = (
 export const runAgentGeneration = async (
   input: RunAgentGenerationInput
 ): Promise<RunAgentGenerationResult> => {
+  const profile = resolveProjectProfile(
+    normalizeProjectProfileRef(input.profile)
+  );
   await input.onEvent({
     type: 'agent.step',
     message: 'Planning project changes',
@@ -331,7 +375,7 @@ export const runAgentGeneration = async (
 
   await input.onEvent({
     type: 'agent.step',
-    message: 'Generating React TypeScript files',
+    message: 'Generating Project Profile files',
     payload: { phase: 'generating' }
   });
   const generated = await input.modelClient.generateFiles({
@@ -349,9 +393,11 @@ export const runAgentGeneration = async (
   }
   const packageJson = mergeProjectPackageJson(
     input.basePackageJson,
-    generated.value
+    generated.value,
+    input.profile
   );
-  let files = applyFileOperations(
+  let files = applyProfileFileOperations(
+    profile,
     input.baseFiles,
     generated.value.operations,
     input.generatedByRunId
@@ -519,13 +565,21 @@ export const runAgentGenerationWithValidation = async (
       )(repairInput)
       : await input.modelClient.repairFiles(repairInput);
     const currentPackageJson = packageJson;
-    packageJson = mergeProjectPackageJson(packageJson, repaired.value);
+    packageJson = mergeProjectPackageJson(
+      packageJson,
+      repaired.value,
+      input.profile
+    );
     const dependencyChanged =
       JSON.stringify(packageJson) !== JSON.stringify(currentPackageJson);
     const filesBeforeRepair = new Map(
       files.map(file => [file.path, file.content])
     );
-    files = applyFileOperations(
+    const profile = resolveProjectProfile(
+      normalizeProjectProfileRef(input.profile)
+    );
+    files = applyProfileFileOperations(
+      profile,
       files,
       repaired.value.operations,
       input.generatedByRunId
@@ -601,7 +655,11 @@ const publicAgentError = (
     'ARTIFACT_LIMIT_EXCEEDED',
     'ARTIFACT_INVALID_PATH',
     'ARTIFACT_INVALID_BUNDLE',
-    'ARTIFACT_IDEMPOTENCY_CONFLICT'
+    'ARTIFACT_IDEMPOTENCY_CONFLICT',
+    'PROFILE_PATH_DENIED',
+    'PROFILE_PLATFORM_FILE_MODIFIED',
+    'PROFILE_SCRIPT_MODIFIED',
+    'PROFILE_UNSUPPORTED_FILE_TYPE'
   ]);
   const code = typeof candidate.code === 'string' && knownCodes.has(candidate.code)
     ? candidate.code
@@ -824,17 +882,31 @@ export const processAgentRun = async (
           kind: 'project_snapshot'
         })
       : null;
+    if (baseSnapshot && baseBundle) {
+      assertProjectProfileMatch(
+        run.profile,
+        baseSnapshot.profile,
+        'AgentRun and base Snapshot use different Profiles'
+      );
+      assertProjectProfileMatch(
+        baseSnapshot.profile,
+        projectArtifactProfileRef(baseBundle),
+        'Base Snapshot and Artifact use different Profiles'
+      );
+    }
     const basePackageJson = baseBundle?.packageJson;
     const baseFiles = resolveProjectBaseFiles(
       baseBundle
         ? domainFiles(baseBundle.files)
-        : undefined
+        : undefined,
+      run.profile
     );
 
     const generation = await runAgentGenerationWithValidation({
       context,
       baseFiles,
       basePackageJson,
+      profile: normalizeProjectProfileRef(run.profile),
       generatedByRunId: run._id,
       modelClient,
       validator,
@@ -846,7 +918,8 @@ export const processAgentRun = async (
         branchId: run.branchId!,
         requestedByUserId: run.userId,
         runId: run._id,
-        attempt: 0
+        attempt: 0,
+        profile: run.profile
       },
       maxRepairAttempts: run.maxRepairAttempts,
       onEvent: async event => {
@@ -1048,6 +1121,16 @@ export const processValidationCandidate = async (
       projectId: run.projectId,
       kind: 'validation_candidate'
     });
+    assertProjectProfileMatch(
+      run.profile,
+      candidate.profile,
+      'Validation retry and Candidate use different Profiles'
+    );
+    assertProjectProfileMatch(
+      candidate.profile,
+      projectArtifactProfileRef(candidateBundle),
+      'Validation Candidate and Artifact use different Profiles'
+    );
     const candidateFiles = domainFiles(candidateBundle.files);
     await transitionRun(run, 'queued', 'running', { startedAt: new Date() });
     await emitAgentEvent({
@@ -1068,7 +1151,8 @@ export const processValidationCandidate = async (
         branchId: run.branchId!,
         requestedByUserId: run.userId,
         runId: run._id,
-        attempt: 0
+        attempt: 0,
+        profile: run.profile
       },
       onProgress: async progress => {
         await emitAgentEvent({

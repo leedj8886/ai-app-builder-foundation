@@ -1,4 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import type { ProfileRef } from '../agent/profiles/types';
+import { defaultedProjectProfileRefField } from '../agent/profiles/schema';
 
 export interface IProject extends Document {
   workspaceId?: mongoose.Types.ObjectId;
@@ -8,6 +10,7 @@ export interface IProject extends Document {
   chatIds: mongoose.Types.ObjectId[];
   activeSnapshotId?: mongoose.Types.ObjectId;
   activeSnapshotRevision: number;
+  profile: ProfileRef;
   sandboxLimits: {
     maxConcurrentBuilds: number;
     maxRunningPreviews: number;
@@ -55,6 +58,7 @@ const ProjectSchema = new Schema<IProject>({
     required: true,
     default: 0
   },
+  profile: defaultedProjectProfileRefField,
   sandboxLimits: {
     maxConcurrentBuilds: {
       type: Number,

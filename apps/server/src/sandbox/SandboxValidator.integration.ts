@@ -18,8 +18,14 @@ import { ensureDefaultWorkspaceForUser } from '../workspaces/defaultWorkspace';
 import { createSandboxRuntime } from './runtime';
 import type { SandboxCommandResult } from './types';
 import { runCancelledError } from '../agent/runCancellation';
+import {
+  FULLSTACK_NEST_PRISMA_PROFILE_REF,
+  fullstackNestPrismaProfile
+} from '../agent/profiles/fullstackNestPrismaProfile';
 
 let environment: IntegrationEnvironment;
+const databaseUrl = 'postgresql://validation:secret@localhost/primary';
+const shadowDatabaseUrl = 'postgresql://validation:secret@localhost/shadow';
 
 before(async () => {
   environment = await createIntegrationEnvironment();
@@ -43,7 +49,8 @@ const commandResult = (
   outputTruncated: false
 });
 
-const fixture = async () => {
+const fixture = async (onDatabaseCreate?: () => void) => {
+  let databaseDestroyCount = 0;
   const user = await User.create({
     email: `sandbox-validator-${crypto.randomUUID()}@example.test`,
     password: 'password',
@@ -83,7 +90,23 @@ const fixture = async () => {
     provider: runtime.provider,
     image: runtime.image,
     resources: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
-    verification: runtime.verification
+    verification: runtime.verification,
+    validationDatabase: {
+      create: async () => {
+        onDatabaseCreate?.();
+        return {
+          id: 'validation-database',
+          expiresAt: new Date(Date.now() + 60_000),
+          connection: {
+            databaseUrl,
+            shadowDatabaseUrl
+          },
+          destroy: async () => {
+            databaseDestroyCount += 1;
+          }
+        };
+      }
+    }
   });
   const scope = {
     workspaceId: workspace._id,
@@ -108,7 +131,8 @@ const fixture = async () => {
     ],
     runtime,
     scope,
-    validator
+    validator,
+    databaseDestroyCount: () => databaseDestroyCount
   };
 };
 
@@ -167,6 +191,114 @@ test('Sandbox validator hydrates an Artifact and runs the complete command seque
     createdByRunId: scope.runId,
     kind: 'preview_build'
   }), null);
+});
+
+test('Sandbox validator follows the full-stack Profile command sequence', async () => {
+  const {
+    runtime,
+    scope,
+    validator,
+    databaseDestroyCount
+  } = await fixture();
+  const packageJson = fullstackNestPrismaProfile.mergePackageJson({
+    generated: { dependencies: {}, devDependencies: {} }
+  });
+  const files = [
+    ...fullstackNestPrismaProfile.createTemplate(),
+    {
+      path: 'package.json' as const,
+      language: 'json' as const,
+      content: `${JSON.stringify(packageJson, null, 2)}\n`
+    }
+  ];
+  const fullstackScope = {
+    ...scope,
+    profile: FULLSTACK_NEST_PRISMA_PROFILE_REF
+  };
+  runtime.fakeState!.enqueueCommandResult(commandResult(0));
+  runtime.fakeState!.enqueueCommandResult({
+    ...commandResult(0),
+    stdout: `connected to ${databaseUrl}`
+  });
+
+  const result = await validator.validate({
+    runId: `${scope.runId.toString()}-fullstack`,
+    files,
+    sandboxScope: fullstackScope
+  });
+
+  assert.equal(result.status, 'passed', JSON.stringify(result));
+  assert.equal(result.previewArtifactId, undefined);
+  assert.equal(JSON.stringify(result).includes(databaseUrl), false);
+  assert.equal(result.checks[2]?.stdout, 'connected to [REDACTED]');
+  assert.equal(databaseDestroyCount(), 1);
+  assert.deepEqual(result.checks.map(check => check.name), [
+    'structure',
+    'install',
+    'prisma-validate',
+    'prisma-generate',
+    'migration-history',
+    'migration-replay',
+    'nest-type-check',
+    'api-test',
+    'web-api-build',
+    'runtime-smoke'
+  ]);
+  assert.deepEqual(
+    runtime.fakeState!.resources()[0]?.commands.map(command => command.args),
+    [
+      ['ci'],
+      ['run', 'prisma:validate'],
+      ['run', 'prisma:generate'],
+      ['run', 'migration:check'],
+      ['run', 'migration:replay'],
+      ['run', 'type-check'],
+      ['run', 'test:api'],
+      ['run', 'build'],
+      ['run', 'runtime:smoke']
+    ]
+  );
+  const commands = runtime.fakeState!.resources()[0]!.commands;
+  assert.deepEqual(commands[0]?.env, { CI: 'true' });
+  assert.equal(commands[1]?.env.DATABASE_URL, databaseUrl);
+  assert.equal(commands[4]?.env.SHADOW_DATABASE_URL, shadowDatabaseUrl);
+  assert.equal(commands[5]?.env.DATABASE_URL, undefined);
+});
+
+test('Sandbox validator destroys a full-stack database when validation is cancelled', async () => {
+  const controller = new AbortController();
+  const {
+    runtime,
+    scope,
+    validator,
+    databaseDestroyCount
+  } = await fixture(() => controller.abort(runCancelledError()));
+  const packageJson = fullstackNestPrismaProfile.mergePackageJson({
+    generated: { dependencies: {}, devDependencies: {} }
+  });
+  const validation = validator.validate({
+    runId: `${scope.runId.toString()}-fullstack-cancelled`,
+    files: [
+      ...fullstackNestPrismaProfile.createTemplate(),
+      {
+        path: 'package.json',
+        language: 'json',
+        content: `${JSON.stringify(packageJson, null, 2)}\n`
+      }
+    ],
+    sandboxScope: {
+      ...scope,
+      profile: FULLSTACK_NEST_PRISMA_PROFILE_REF
+    },
+    signal: controller.signal
+  });
+
+  await assert.rejects(
+    validation,
+    (error) => (error as { code?: string }).code === 'RUN_CANCELLED'
+  );
+  assert.equal(databaseDestroyCount(), 1);
+  assert.equal(runtime.fakeState!.resources()[0]?.status, 'missing');
 });
 
 test('Sandbox validator aborts an active command and terminates its Lease', async () => {

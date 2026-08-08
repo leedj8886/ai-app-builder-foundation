@@ -1,10 +1,13 @@
 import mongoose, { Schema, Types } from 'mongoose';
+import type { ProfileRef } from '../agent/profiles/types';
+import { projectProfileRefField } from '../agent/profiles/schema';
 export interface IValidationCandidate {
   workspaceId: Types.ObjectId;
   branchId: Types.ObjectId;
   userId: Types.ObjectId;
   projectId: Types.ObjectId;
   sourceRunId: Types.ObjectId;
+  profile?: ProfileRef;
   artifactId: string;
   summary: string;
   expiresAt: Date;
@@ -22,6 +25,7 @@ const ValidationCandidateSchema = new Schema<IValidationCandidate>(
       ref: 'AgentRun',
       required: true
     },
+    profile: projectProfileRefField,
     artifactId: { type: String, required: true, trim: true },
     summary: { type: String, required: true },
     expiresAt: { type: Date, required: true }

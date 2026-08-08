@@ -99,7 +99,51 @@ test('OpenAI model client parses structured file generation', async () => {
   const result = await client.generateFiles({ context, plan });
 
   assert.equal(result.value.operations[0].path, 'src/App.tsx');
-  assert.match(requests[0].messages[0].content, /js, cjs, or mjs/);
+  assert.match(requests[0].messages[0].content, /Profile-supported extensions/);
+});
+
+test('OpenAI model client scopes full-stack prompts to Profile-owned paths', async () => {
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  const client = createOpenAIModelClient({
+    model: 'test-model',
+    createCompletion: async request => {
+      requests.push(request);
+      return {
+        choices: [{ message: { content: JSON.stringify({
+          summary: 'Add Todo CRUD',
+          steps: [{
+            title: 'Add Todo module',
+            intent: 'Create API and persistence',
+            filesLikelyTouched: ['apps/api/src/modules/todo/todo.module.ts']
+          }],
+          assumptions: []
+        }) } }]
+      };
+    }
+  });
+  const fullstackContext: AgentContext = {
+    ...context,
+    project: {
+      name: 'Todos',
+      profile: { id: 'fullstack-nestjs-prisma-postgres', version: 1 },
+      capabilities: ['NestJS REST API', 'Prisma PostgreSQL'],
+      editablePaths: [
+        'apps/api/src/modules/**',
+        'apps/web/src/**',
+        'prisma/schema.prisma',
+        'prisma/migrations/*/**'
+      ],
+      platformManagedPaths: ['apps/api/src/main.ts'],
+      generationInstructions: 'Use the provided PrismaService and append migrations.'
+    }
+  };
+
+  await client.generatePlan({ context: fullstackContext });
+  const instruction = requests[0].messages[0].content;
+  assert.match(instruction, /fullstack-nestjs-prisma-postgres\/v1/);
+  assert.match(instruction, /apps\/api\/src\/modules\/\*\*/);
+  assert.match(instruction, /PrismaService/);
+  assert.match(instruction, /Never modify platform-managed files/);
 });
 
 test('OpenAI model client reports invalid model output after one retry', async () => {

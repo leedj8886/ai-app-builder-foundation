@@ -7,7 +7,10 @@ import type {
   SandboxOwnership
 } from '../sandbox/types';
 import { classifyValidationFailure } from './validation/classify';
-import { validateProjectStructure } from './validation/structure';
+import {
+  resolveValidationStages,
+  type ValidationStageDefinition
+} from './validation/stages';
 import { adaptersFor } from './styling/registry';
 import {
   abortReason,
@@ -19,13 +22,24 @@ import type {
   ProjectSnapshotPackageJson,
   ValidationCheckResult,
   ValidationErrorCategory,
-  ValidationPhase,
   ValidationResult
 } from './types';
 import type {
   ProjectValidator,
   ValidateProjectInput
 } from './validator';
+import {
+  normalizeProjectProfileRef,
+  resolveProjectProfile
+} from './profiles/registry';
+import type {
+  ValidationDatabase,
+  ValidationDatabaseLease
+} from './validation/database';
+import {
+  redactValidationSecrets,
+  validationDatabaseEnvironment
+} from './validation/database';
 
 interface CreateSandboxProjectValidatorOptions {
   service: SandboxService;
@@ -34,19 +48,8 @@ interface CreateSandboxProjectValidatorOptions {
   image: string;
   resources: ResourceProfile;
   verification: 'verified' | 'simulated';
+  validationDatabase?: ValidationDatabase;
 }
-
-const commandMetadata: Record<
-  'install' | 'type-check' | 'build',
-  {
-    name: ValidationCheckResult['name'];
-    phase: ValidationPhase;
-  }
-> = {
-  install: { name: 'install', phase: 'dependencies' },
-  'type-check': { name: 'type-check', phase: 'type-check' },
-  build: { name: 'build', phase: 'build' }
-};
 
 const packageJsonFrom = (
   files: ProjectFile[]
@@ -95,24 +98,19 @@ const errorMessage = (error: unknown): string =>
 const infrastructureResult = (
   checks: ValidationCheckResult[],
   verification: ValidationResult['verification'],
-  phase: ValidationPhase,
-  error: unknown
+  stage: Pick<ValidationStageDefinition, 'id' | 'phase'>,
+  error: unknown,
+  databaseLease?: ValidationDatabaseLease
 ): ValidationResult => {
-  const metadata = phase === 'structure'
-    ? { name: 'structure' as const, phase }
-    : phase === 'dependencies'
-      ? commandMetadata.install
-      : phase === 'type-check'
-        ? commandMetadata['type-check']
-        : commandMetadata.build;
   checks.push({
-    ...metadata,
+    name: stage.id,
+    phase: stage.phase,
     status: 'failed',
     category: 'INFRA_ERROR',
     stdout: '',
-    stderr: errorMessage(error),
+    stderr: redactValidationSecrets(errorMessage(error), databaseLease),
     durationMs: 0,
-    cache: metadata.name === 'install' ? 'miss' : 'not-applicable',
+    cache: stage.id === 'install' ? 'miss' : 'not-applicable',
     attempt: 0
   });
   return {
@@ -129,9 +127,17 @@ export const createSandboxProjectValidator = (
 ): ProjectValidator => ({
   validate: async (input): Promise<ValidationResult> => {
     throwIfAborted(input.signal);
+    const profile = resolveProjectProfile(normalizeProjectProfileRef(
+      input.profile ?? input.sandboxScope?.profile
+    ));
+    const stages = resolveValidationStages(profile.validationPipeline());
+    const structureStage = stages.find(stage => stage.kind === 'structure');
+    if (!structureStage) {
+      throw new Error('Project Profile validation pipeline requires a structure stage');
+    }
     const checks: ValidationCheckResult[] = [];
     const structureStartedAt = Date.now();
-    const structure = validateProjectStructure(input.files);
+    const structure = profile.validateStructure(input.files);
     checks.push({
       name: 'structure',
       phase: 'structure',
@@ -203,13 +209,14 @@ export const createSandboxProjectValidator = (
       return infrastructureResult(
         checks,
         options.verification,
-        'structure',
+        structureStage,
         new Error('Sandbox validation ownership scope is required')
       );
     }
 
     let lease: SandboxLeaseDocument | undefined;
-    let currentPhase: ValidationPhase = 'dependencies';
+    let databaseLease: ValidationDatabaseLease | undefined;
+    let currentStage = stages.find(stage => stage.kind !== 'structure') ?? structureStage;
     let result: ValidationResult | undefined;
     let cancellationError: unknown;
     const ownership = ownershipFor(scope);
@@ -223,11 +230,18 @@ export const createSandboxProjectValidator = (
         kind: 'validation_candidate',
         idempotencyKey:
           `sandbox-validation:${scope.runId.toString()}:${scope.attempt}`,
-        bundle: {
-          version: 1,
-          files: artifactFiles(input.files),
-          packageJson: packageJsonFrom(input.files)
-        }
+        bundle: scope.profile
+          ? {
+              version: 2,
+              profile: normalizeProjectProfileRef(scope.profile),
+              files: artifactFiles(input.files),
+              packageJson: packageJsonFrom(input.files)
+            }
+          : {
+              version: 1,
+              files: artifactFiles(input.files),
+              packageJson: packageJsonFrom(input.files)
+            }
       });
       lease = await options.service.createBuildSandbox({
         workspaceId: scope.workspaceId,
@@ -245,53 +259,75 @@ export const createSandboxProjectValidator = (
         resources: options.resources
       });
 
-      for (const commandName of [
-        'install',
-        'type-check',
-        'build'
-      ] as const) {
+      for (const stage of stages.filter(candidate => candidate.kind !== 'structure')) {
         throwIfAborted(input.signal);
-        const metadata = commandMetadata[commandName];
-        currentPhase = metadata.phase;
+        if (!stage.sandboxCommand) {
+          throw new Error(`Validation stage ${stage.id} has no Sandbox command`);
+        }
+        currentStage = stage;
+        if (stage.database && !databaseLease) {
+          if (!options.validationDatabase) {
+            throw new Error('Server Profile validation database is unavailable');
+          }
+          databaseLease = await options.validationDatabase.create({
+            runId: input.runId,
+            signal: input.signal
+          });
+        }
+        const databaseEnvironment = databaseLease && stage.database
+          ? validationDatabaseEnvironment(databaseLease)
+          : undefined;
         const commandResult = await options.service.runBuildCommand({
           leaseId: lease._id,
           expectedOwnership: ownership,
-          command: commandName,
+          command: stage.sandboxCommand,
+          environment: databaseEnvironment && stage.database === 'primary'
+            ? { DATABASE_URL: databaseEnvironment.DATABASE_URL }
+            : databaseEnvironment,
           signal: input.signal
         });
+        const stdout = redactValidationSecrets(
+          commandResult.stdout,
+          databaseLease
+        );
+        const stderr = redactValidationSecrets(
+          commandResult.stderr,
+          databaseLease
+        );
         const category: ValidationErrorCategory | undefined =
           commandResult.exitCode === 0
             ? undefined
             : classifyValidationFailure({
-              phase: metadata.phase,
+              phase: stage.phase,
               exitCode: commandResult.exitCode ?? undefined,
-              stdout: commandResult.stdout,
-              stderr: commandResult.stderr
+              stdout,
+              stderr
             });
         const check: ValidationCheckResult = {
-          ...metadata,
+          name: stage.id,
+          phase: stage.phase,
           status: commandResult.exitCode === 0 ? 'passed' : 'failed',
           ...(category && { category }),
-          command: commandName === 'install'
+          command: stage.id === 'install'
             ? 'npm install'
-            : `npm run ${commandName}`,
+            : `npm ${stage.localArgs?.join(' ') ?? stage.id}`,
           exitCode: commandResult.exitCode ?? undefined,
-          stdout: commandResult.stdout,
-          stderr: commandResult.stderr,
+          stdout,
+          stderr,
           durationMs: commandResult.durationMs,
-          cache: commandName === 'install' ? 'miss' : 'not-applicable',
+          cache: stage.id === 'install' ? 'miss' : 'not-applicable',
           attempt: 0
         };
         checks.push(check);
         await input.onProgress?.({
-          phase: metadata.phase,
+          phase: stage.phase,
           status: check.status!,
           category,
           attempt: 0,
           cache: check.cache,
           message: commandResult.exitCode === 0
-            ? `${metadata.name} passed`
-            : commandResult.stderr || `${metadata.name} failed`
+            ? `${stage.id} passed`
+            : stderr || `${stage.id} failed`
         });
         if (category) {
           result = {
@@ -305,9 +341,13 @@ export const createSandboxProjectValidator = (
         }
       }
       let previewArtifactId: string | undefined;
-      if (!result && options.verification === 'verified') {
+      if (
+        !result &&
+        options.verification === 'verified' &&
+        profile.runtimeDescriptor().kind === 'static-artifact'
+      ) {
         throwIfAborted(input.signal);
-        currentPhase = 'build';
+        currentStage = stages.find(stage => stage.phase === 'build') ?? currentStage;
         const previewBundle = await options.service.exportBuildOutput({
           leaseId: lease._id,
           expectedOwnership: ownership
@@ -336,16 +376,17 @@ export const createSandboxProjectValidator = (
         result = infrastructureResult(
           checks,
           options.verification,
-          currentPhase,
-          error
+          currentStage,
+          error,
+          databaseLease
         );
         await input.onProgress?.({
-          phase: currentPhase,
+          phase: currentStage.phase,
           status: 'failed',
           category: 'INFRA_ERROR',
           attempt: 0,
-          cache: currentPhase === 'dependencies' ? 'miss' : 'not-applicable',
-          message: errorMessage(error)
+          cache: currentStage.id === 'install' ? 'miss' : 'not-applicable',
+          message: redactValidationSecrets(errorMessage(error), databaseLease)
         });
       }
     }
@@ -361,16 +402,40 @@ export const createSandboxProjectValidator = (
           result = infrastructureResult(
             checks,
             options.verification,
-            currentPhase,
-            error
+            currentStage,
+            error,
+            databaseLease
           );
           await input.onProgress?.({
-            phase: currentPhase,
+            phase: currentStage.phase,
             status: 'failed',
             category: 'INFRA_ERROR',
             attempt: 0,
-            cache: currentPhase === 'dependencies' ? 'miss' : 'not-applicable',
+            cache: currentStage.id === 'install' ? 'miss' : 'not-applicable',
             message: `Sandbox cleanup failed: ${errorMessage(error)}`
+          });
+        }
+      }
+    }
+
+    if (databaseLease) {
+      try {
+        await databaseLease.destroy();
+      } catch {
+        if (!cancellationError) {
+          result = infrastructureResult(
+            checks,
+            options.verification,
+            currentStage,
+            new Error('Validation database cleanup failed')
+          );
+          await input.onProgress?.({
+            phase: currentStage.phase,
+            status: 'failed',
+            category: 'INFRA_ERROR',
+            attempt: 0,
+            cache: 'not-applicable',
+            message: 'Validation database cleanup failed'
           });
         }
       }

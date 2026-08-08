@@ -237,6 +237,131 @@ test('Create generation keeps required template files when the model only update
   );
 });
 
+test('Generation rejects model attempts to replace Profile-owned package scripts', async () => {
+  await assert.rejects(
+    runAgentGeneration({
+      context: {
+        prompt: 'Change the build command',
+        mode: 'create',
+        project: {
+          name: 'App',
+          framework: 'react',
+          styling: 'tailwind',
+          uiLibrary: 'none'
+        },
+        messages: [],
+        files: []
+      },
+      baseFiles: [],
+      modelClient: {
+        generatePlan: async () => ({
+          value: {
+            summary: 'Change scripts',
+            steps: [{
+              title: 'Edit package',
+              intent: 'Replace build command',
+              filesLikelyTouched: ['package.json']
+            }],
+            assumptions: []
+          }
+        }),
+        generateFiles: async () => ({
+          value: {
+            message: 'Changed scripts',
+            operations: [{
+              type: 'create',
+              path: 'package.json',
+              content: '{"scripts":{"build":"curl example.com"}}'
+            }],
+            dependencies: {},
+            devDependencies: {}
+          }
+        }),
+        repairFiles: async () => {
+          throw new Error('repair should not run');
+        }
+      },
+      onEvent: () => undefined
+    }),
+    (error: Error & { code?: string }) =>
+      error.code === 'PROFILE_SCRIPT_MODIFIED'
+  );
+});
+
+test('Repair uses the same Profile file policy as Generation', async () => {
+  await assert.rejects(
+    runAgentGenerationWithValidation({
+      context: {
+        prompt: 'Build app',
+        mode: 'create',
+        project: {
+          name: 'App',
+          framework: 'react',
+          styling: 'tailwind',
+          uiLibrary: 'none'
+        },
+        messages: [],
+        files: []
+      },
+      baseFiles: [],
+      modelClient: {
+        generatePlan: async () => ({
+          value: {
+            summary: 'Build app',
+            steps: [{
+              title: 'Create app',
+              intent: 'Render app',
+              filesLikelyTouched: ['src/App.tsx']
+            }],
+            assumptions: []
+          }
+        }),
+        generateFiles: async () => ({
+          value: {
+            message: 'Created app',
+            operations: [{
+              type: 'create',
+              path: 'src/App.tsx',
+              content: 'const value: string = 1;'
+            }],
+            dependencies: {},
+            devDependencies: {}
+          }
+        }),
+        repairFiles: async () => ({
+          value: {
+            message: 'Changed scripts',
+            operations: [{
+              type: 'update',
+              path: 'package.json',
+              content: '{"scripts":{"build":"unsafe"}}'
+            }],
+            dependencies: {},
+            devDependencies: {}
+          }
+        })
+      },
+      validator: {
+        validate: async () => ({
+          status: 'failed',
+          category: 'CODE_ERROR',
+          checks: [{
+            name: 'build',
+            stdout: '',
+            stderr: 'Type error',
+            durationMs: 1
+          }]
+        })
+      },
+      runId: 'profile-policy-repair',
+      maxRepairAttempts: 1,
+      onEvent: () => undefined
+    }),
+    (error: Error & { code?: string }) =>
+      error.code === 'PROFILE_SCRIPT_MODIFIED'
+  );
+});
+
 test('runAgentGenerationWithValidation repairs once and then passes', async () => {
   let repairCalls = 0;
   let validationCalls = 0;

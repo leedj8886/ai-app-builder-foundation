@@ -5,6 +5,7 @@ import {
   ProjectFile,
   ProjectFileLanguage
 } from './types';
+import { ProfileError } from './profiles/errors';
 
 const supportedExtensions: Record<string, ProjectFileLanguage> = {
   '.ts': 'ts',
@@ -15,7 +16,9 @@ const supportedExtensions: Record<string, ProjectFileLanguage> = {
   '.css': 'css',
   '.json': 'json',
   '.html': 'html',
-  '.md': 'md'
+  '.md': 'md',
+  '.prisma': 'prisma',
+  '.sql': 'sql'
 };
 
 const requiredTemplateFiles = new Set([
@@ -31,24 +34,45 @@ export const inferProjectFileLanguage = (filePath: string): ProjectFileLanguage 
   const language = supportedExtensions[extension];
 
   if (!language) {
-    throw new Error(`Unsupported file extension: ${filePath}`);
+    throw new ProfileError(
+      'PROFILE_UNSUPPORTED_FILE_TYPE',
+      `Unsupported file extension: ${filePath}`
+    );
   }
 
   return language;
 };
 
-const normalizeProjectPath = (rawPath: string): string => {
-  if (path.posix.isAbsolute(rawPath) || path.win32.isAbsolute(rawPath)) {
+export const normalizeProjectPath = (rawPath: string): string => {
+  const trimmedPath = rawPath.trim();
+  if (
+    trimmedPath.includes('\0') ||
+    path.posix.isAbsolute(trimmedPath) ||
+    path.win32.isAbsolute(trimmedPath)
+  ) {
     throw new Error(`Project file path must be a relative path: ${rawPath}`);
   }
 
-  const normalized = path.posix.normalize(rawPath.replace(/\\/g, '/'));
+  const portablePath = trimmedPath.replace(/\\/g, '/');
+  if (portablePath.split('/').includes('..')) {
+    throw new Error(`Project file path cannot escape the project root: ${rawPath}`);
+  }
+  const normalized = path.posix.normalize(portablePath);
 
   if (normalized === '.' || normalized.startsWith('../') || normalized === '..') {
     throw new Error(`Project file path cannot escape the project root: ${rawPath}`);
   }
 
   return normalized;
+};
+
+export const isSupportedProjectPath = (rawPath: string): boolean => {
+  try {
+    inferProjectFileLanguage(normalizeProjectPath(rawPath));
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const assertTextContent = (filePath: string, content: string): void => {

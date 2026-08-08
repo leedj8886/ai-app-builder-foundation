@@ -5,6 +5,10 @@ import { createProjectTemplateFiles } from './projectTemplate';
 import { ProjectFile } from './types';
 import { createProjectValidator } from './validator';
 import { CommandResult, RunCommandInput } from './workspace/runCommand';
+import {
+  FULLSTACK_NEST_PRISMA_PROFILE_REF,
+  fullstackNestPrismaProfile
+} from './profiles/fullstackNestPrismaProfile';
 
 const success = (stdout = ''): CommandResult => ({
   exitCode: 0,
@@ -53,6 +57,18 @@ const cacheMiss = {
       nodeModulesPath: '/tmp/cache/node_modules'
     };
   }
+};
+
+const validationDatabase = {
+  create: async () => ({
+    id: 'validation-database',
+    expiresAt: new Date(Date.now() + 60_000),
+    connection: {
+      databaseUrl: 'postgresql://validation:secret@localhost/primary',
+      shadowDatabaseUrl: 'postgresql://validation:secret@localhost/shadow'
+    },
+    destroy: async () => {}
+  })
 };
 
 test('project validator runs structure install type-check and build phases', async () => {
@@ -323,4 +339,165 @@ test('project validator runs both code checks and reports code failure', async (
   assert.equal(result.category, 'CODE_ERROR');
   assert.equal(result.checks.at(-2)?.exitCode, 2);
   assert.equal(result.checks.at(-1)?.exitCode, 0);
+});
+
+test('project validator runs the full-stack Profile pipeline in order', async () => {
+  const commands: RunCommandInput[] = [];
+  const packageJson = fullstackNestPrismaProfile.mergePackageJson({
+    generated: { dependencies: {}, devDependencies: {} }
+  });
+  const validator = createProjectValidator({
+    workspaceRoot: '/tmp/unused',
+    validation,
+    validationDatabase,
+    dependencyCache: cacheMiss,
+    createWorkspace: async () => ({
+      path: '/tmp/workspace',
+      cleanup: async () => {}
+    }),
+    commandRunner: async input => {
+      commands.push(input);
+      return success();
+    }
+  });
+
+  const result = await validator.validate({
+    runId: 'run-fullstack',
+    profile: FULLSTACK_NEST_PRISMA_PROFILE_REF,
+    files: [
+      ...fullstackNestPrismaProfile.createTemplate(),
+      {
+        path: 'package.json',
+        language: 'json',
+        content: `${JSON.stringify(packageJson, null, 2)}\n`
+      }
+    ]
+  });
+
+  assert.equal(result.status, 'passed');
+  assert.deepEqual(result.checks.map(check => check.name), [
+    'structure',
+    'install',
+    'prisma-validate',
+    'prisma-generate',
+    'migration-history',
+    'migration-replay',
+    'nest-type-check',
+    'api-test',
+    'web-api-build',
+    'runtime-smoke'
+  ]);
+  assert.deepEqual(commands.map(command => command.args), [
+    ['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
+    ['run', 'prisma:validate'],
+    ['run', 'prisma:generate'],
+    ['run', 'migration:check'],
+    ['run', 'migration:replay'],
+    ['run', 'type-check'],
+    ['run', 'test:api'],
+    ['run', 'build'],
+    ['run', 'runtime:smoke']
+  ]);
+  assert.equal(
+    commands[1]?.env?.DATABASE_URL,
+    'postgresql://validation:secret@localhost/primary'
+  );
+  assert.equal(commands[4]?.env?.SHADOW_DATABASE_URL,
+    'postgresql://validation:secret@localhost/shadow');
+  assert.equal(commands[5]?.env?.DATABASE_URL, undefined);
+});
+
+test('project validator falls back to npm install when generated dependencies outgrow the platform lockfile', async () => {
+  const commands: RunCommandInput[] = [];
+  const packageJson = fullstackNestPrismaProfile.mergePackageJson({
+    generated: { dependencies: { zod: '^3.23.0' }, devDependencies: {} }
+  });
+  const validator = createProjectValidator({
+    workspaceRoot: '/tmp/unused',
+    validation,
+    validationDatabase,
+    dependencyCache: cacheMiss,
+    createWorkspace: async () => ({
+      path: '/tmp/workspace',
+      cleanup: async () => {}
+    }),
+    commandRunner: async input => {
+      commands.push(input);
+      return success();
+    }
+  });
+
+  const result = await validator.validate({
+    runId: 'run-fullstack-generated-dependency',
+    profile: FULLSTACK_NEST_PRISMA_PROFILE_REF,
+    files: [
+      ...fullstackNestPrismaProfile.createTemplate(),
+      {
+        path: 'package.json',
+        language: 'json',
+        content: `${JSON.stringify(packageJson, null, 2)}\n`
+      }
+    ]
+  });
+
+  assert.equal(result.status, 'passed');
+  assert.deepEqual(commands[0]?.args, [
+    'install', '--ignore-scripts', '--no-audit', '--no-fund'
+  ]);
+});
+
+test('project validator redacts validation database credentials and destroys its lease', async () => {
+  const secret = 'postgresql://validation:top-secret@localhost/primary';
+  let destroyed = 0;
+  const packageJson = fullstackNestPrismaProfile.mergePackageJson({
+    generated: { dependencies: {}, devDependencies: {} }
+  });
+  const validator = createProjectValidator({
+    workspaceRoot: '/tmp/unused',
+    validation,
+    validationDatabase: {
+      create: async () => ({
+        id: 'redaction-database',
+        expiresAt: new Date(Date.now() + 60_000),
+        connection: {
+          databaseUrl: secret,
+          shadowDatabaseUrl: `${secret}-shadow`
+        },
+        destroy: async () => {
+          destroyed += 1;
+        }
+      })
+    },
+    dependencyCache: cacheMiss,
+    createWorkspace: async () => ({
+      path: '/tmp/workspace',
+      cleanup: async () => {}
+    }),
+    commandRunner: async input => ['ci', 'install'].includes(input.args[0] ?? '')
+      ? success()
+      : {
+          exitCode: 1,
+          stdout: '',
+          stderr: `database failed: ${secret}`,
+          durationMs: 1
+        }
+  });
+
+  const result = await validator.validate({
+    runId: 'run-redaction',
+    profile: FULLSTACK_NEST_PRISMA_PROFILE_REF,
+    files: [
+      ...fullstackNestPrismaProfile.createTemplate(),
+      {
+        path: 'package.json',
+        language: 'json',
+        content: `${JSON.stringify(packageJson, null, 2)}\n`
+      }
+    ]
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(JSON.stringify(result).includes(secret), false);
+  assert.equal(result.checks.at(-1)?.stderr, 'database failed: [REDACTED]');
+  assert.equal(destroyed, 1);
 });

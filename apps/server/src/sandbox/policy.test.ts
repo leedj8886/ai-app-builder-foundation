@@ -56,6 +56,46 @@ test('SandboxPolicy builds fixed commands', () => {
     }).args,
     ['install']
   );
+  assert.deepEqual(
+    [
+      'prisma-validate',
+      'prisma-generate',
+      'migration-history',
+      'migration-replay',
+      'nest-type-check',
+      'api-test',
+      'web-api-build',
+      'runtime-smoke'
+    ].map(name => policy.buildCommand(name as Parameters<typeof policy.buildCommand>[0], {
+      hasPackageLock: false,
+      maxOutputBytes: 1_024
+    }).args),
+    [
+      ['run', 'prisma:validate'],
+      ['run', 'prisma:generate'],
+      ['run', 'migration:check'],
+      ['run', 'migration:replay'],
+      ['run', 'type-check'],
+      ['run', 'test:api'],
+      ['run', 'build'],
+      ['run', 'runtime:smoke']
+    ]
+  );
+  assert.deepEqual(
+    policy.buildCommand('migration-replay', {
+      hasPackageLock: false,
+      maxOutputBytes: 1_024,
+      environment: {
+        DATABASE_URL: 'postgresql://primary',
+        SHADOW_DATABASE_URL: 'postgresql://shadow'
+      }
+    }).env,
+    {
+      CI: 'true',
+      DATABASE_URL: 'postgresql://primary',
+      SHADOW_DATABASE_URL: 'postgresql://shadow'
+    }
+  );
 });
 
 test('SandboxPolicy rejects disallowed providers and specs', () => {
@@ -78,6 +118,14 @@ test('SandboxPolicy rejects disallowed providers and specs', () => {
       policy.assertSpecAllowed(
         buildSpec({ resources: { cpu: 0, memoryMiB: 1_024, diskMiB: 2_048 } })
       ),
+    /SANDBOX_POLICY_DENIED/
+  );
+  assert.throws(
+    () => policy.buildCommand('api-test', {
+      hasPackageLock: false,
+      maxOutputBytes: 1_024,
+      environment: { UNSAFE_SECRET: 'value' } as never
+    }),
     /SANDBOX_POLICY_DENIED/
   );
 });

@@ -10,6 +10,13 @@ import {
 } from './types';
 import { resolveProjectBaseFiles } from './projectTemplate';
 import { getArtifactService } from '../artifacts/runtime';
+import { projectArtifactProfileRef } from '../artifacts/types';
+import {
+  assertProjectProfileMatch,
+  normalizeProjectProfileRef,
+  resolveProjectProfile
+} from './profiles/registry';
+import type { ProfileRef } from './profiles/types';
 
 interface ContextBuilderInput {
   prompt: string;
@@ -17,6 +24,7 @@ interface ContextBuilderInput {
   project: {
     name: string;
     description?: string;
+    profile?: ProfileRef;
     settings: {
       framework: string;
       styling: string;
@@ -35,6 +43,11 @@ export const buildAgentContext = (
   input: ContextBuilderInput,
   contextCharLimit: number
 ): AgentContext => {
+  const profile = resolveProjectProfile(
+    normalizeProjectProfileRef(input.project.profile)
+  );
+  const generation = profile.generationDescriptor();
+  const filePolicy = profile.editablePathPolicy();
   let remaining = Math.max(0, contextCharLimit);
   const take = (value: string): string => {
     const selected = value.slice(0, remaining);
@@ -87,9 +100,11 @@ export const buildAgentContext = (
     project: {
       name: projectName,
       description: projectDescription,
-      framework: 'react',
-      styling: 'tailwind',
-      uiLibrary: input.project.settings.uiLibrary
+      profile: { ...profile.ref },
+      capabilities: [...generation.capabilities],
+      editablePaths: [...filePolicy.editablePathPatterns],
+      platformManagedPaths: [...filePolicy.platformManagedPathPatterns],
+      generationInstructions: generation.instructions
     },
     messages: selectedMessages,
     attachments,
@@ -151,6 +166,23 @@ export const loadAgentContext = async (
         kind: 'project_snapshot'
       })
     : null;
+  assertProjectProfileMatch(
+    project.profile,
+    run.profile,
+    'Project and AgentRun use different Profiles'
+  );
+  if (baseSnapshot && baseBundle) {
+    assertProjectProfileMatch(
+      run.profile,
+      baseSnapshot.profile,
+      'AgentRun and base Snapshot use different Profiles'
+    );
+    assertProjectProfileMatch(
+      baseSnapshot.profile,
+      projectArtifactProfileRef(baseBundle),
+      'Base Snapshot and Artifact use different Profiles'
+    );
+  }
 
   const contextFiles = resolveProjectBaseFiles(
     baseBundle
@@ -159,7 +191,8 @@ export const loadAgentContext = async (
           content: file.content,
           language: file.language
         }))
-      : undefined
+      : undefined,
+    run.profile
   );
 
   return buildAgentContext({
@@ -168,6 +201,7 @@ export const loadAgentContext = async (
     project: {
       name: project.name,
       description: project.description,
+      profile: normalizeProjectProfileRef(run.profile),
       settings: project.settings
     },
     messages: chat?.messages.map(message => ({

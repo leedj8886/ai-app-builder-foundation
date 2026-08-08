@@ -7,11 +7,14 @@ import {
   agentRunModes,
   agentRunStatuses
 } from '../agent/types';
+import type { ProfileRef } from '../agent/profiles/types';
+import { projectProfileRefField } from '../agent/profiles/schema';
 
 export interface IAgentRun {
   userId: Types.ObjectId;
   workspaceId?: Types.ObjectId;
   projectId: Types.ObjectId;
+  profile?: ProfileRef;
   branchId?: Types.ObjectId;
   chatId?: Types.ObjectId;
   prompt: string;
@@ -51,6 +54,7 @@ const AgentRunSchema = new Schema<IAgentRun>(
       required: true
     },
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+    profile: projectProfileRefField,
     branchId: {
       type: Schema.Types.ObjectId,
       ref: 'ProjectBranch',

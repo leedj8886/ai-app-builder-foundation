@@ -17,7 +17,7 @@ import {
   type ArtifactIntegrity,
   type EncodedArtifact,
   type PreviewArtifactBundleV1,
-  type ProjectArtifactBundleV1
+  type ProjectArtifactBundle
 } from './types';
 
 type ProjectArtifactKind = Exclude<ArtifactKind, 'preview_build'>;
@@ -33,7 +33,7 @@ interface ArtifactWriteMetadata {
 export interface WriteArtifactBundleInput
   extends Omit<ArtifactWriteMetadata, 'kind'> {
   kind: ProjectArtifactKind;
-  bundle: ProjectArtifactBundleV1;
+  bundle: ProjectArtifactBundle;
 }
 
 export interface WrittenArtifact {
@@ -176,7 +176,7 @@ export class ArtifactService {
     return { artifactId: manifest.artifactId };
   }
 
-  async readBundle(artifactId: string): Promise<ProjectArtifactBundleV1> {
+  async readBundle(artifactId: string): Promise<ProjectArtifactBundle> {
     const manifest = await ArtifactManifest.findOne({
       artifactId,
       kind: { $in: ['project_snapshot', 'validation_candidate'] }
@@ -189,7 +189,7 @@ export class ArtifactService {
     workspaceId: Types.ObjectId;
     projectId: Types.ObjectId;
     kind: ProjectArtifactKind;
-  }): Promise<ProjectArtifactBundleV1> {
+  }): Promise<ProjectArtifactBundle> {
     const manifest = await ArtifactManifest.findOne({
       artifactId: input.artifactId,
       workspaceId: input.workspaceId,
@@ -234,13 +234,13 @@ export class ArtifactService {
 
   async verifyManifestBundle(
     manifest: IArtifactManifest
-  ): Promise<ProjectArtifactBundleV1 | PreviewArtifactBundleV1> {
+  ): Promise<ProjectArtifactBundle | PreviewArtifactBundleV1> {
     return this.verifyStoredByKind(manifest);
   }
 
   private async readManifest(
     manifest: IArtifactManifest | null
-  ): Promise<ProjectArtifactBundleV1> {
+  ): Promise<ProjectArtifactBundle> {
     if (!manifest) {
       throw artifactError('ARTIFACT_NOT_FOUND', 'Artifact manifest not found');
     }
@@ -294,7 +294,7 @@ export class ArtifactService {
 
   private async verifyStored(
     manifest: IArtifactManifest
-  ): Promise<ProjectArtifactBundleV1> {
+  ): Promise<ProjectArtifactBundle> {
     const bytes = await this.store.get(manifest.storageKey);
     return decodeProjectArtifact(
       bytes,
@@ -316,7 +316,7 @@ export class ArtifactService {
 
   private verifyStoredByKind(
     manifest: IArtifactManifest
-  ): Promise<ProjectArtifactBundleV1 | PreviewArtifactBundleV1> {
+  ): Promise<ProjectArtifactBundle | PreviewArtifactBundleV1> {
     return manifest.kind === 'preview_build'
       ? this.verifyStoredPreview(manifest)
       : this.verifyStored(manifest);

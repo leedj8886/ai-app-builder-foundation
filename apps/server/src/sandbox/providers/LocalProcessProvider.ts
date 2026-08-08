@@ -467,7 +467,11 @@ export class LocalProcessProvider implements SandboxProvider {
     signal?: AbortSignal
   ): Promise<SandboxCommandResult> {
     if (
-      Object.keys(command.env).some((key) => key !== 'CI') ||
+      Object.keys(command.env).some((key) =>
+        key !== 'CI' &&
+        key !== 'DATABASE_URL' &&
+        key !== 'SHADOW_DATABASE_URL'
+      ) ||
       !Number.isSafeInteger(command.timeoutMs) ||
       command.timeoutMs <= 0 ||
       !Number.isSafeInteger(command.maxOutputBytes) ||

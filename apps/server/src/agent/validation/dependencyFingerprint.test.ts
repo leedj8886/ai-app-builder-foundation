@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { dependencyFingerprint } from './dependencyFingerprint';
+import { STATIC_REACT_PROFILE_REF } from '../profiles/staticReactProfile';
 
 const input = {
+  profile: STATIC_REACT_PROFILE_REF,
+  platformDependencies: { react: '^18.2.0' },
+  platformDevDependencies: { vite: '^5.4.0' },
   dependencies: { react: '^18', axios: '^1' },
   devDependencies: { vite: '^5' },
   lockfile: undefined,
@@ -39,5 +43,24 @@ test('dependencyFingerprint changes with dependency runtime or lockfile inputs',
   assert.notEqual(
     baseline,
     dependencyFingerprint({ ...input, arch: 'x64' })
+  );
+});
+
+test('dependencyFingerprint isolates profiles and platform baselines', () => {
+  const baseline = dependencyFingerprint(input);
+
+  assert.notEqual(
+    baseline,
+    dependencyFingerprint({
+      ...input,
+      profile: { id: 'static-react', version: 2 }
+    })
+  );
+  assert.notEqual(
+    baseline,
+    dependencyFingerprint({
+      ...input,
+      platformDependencies: { react: '^19.0.0' }
+    })
   );
 });

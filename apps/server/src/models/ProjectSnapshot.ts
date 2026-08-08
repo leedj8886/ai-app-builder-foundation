@@ -1,9 +1,13 @@
 import mongoose, { Schema, Types } from 'mongoose';
 import {
   ValidationResult,
-  validationErrorCategories
+  validationErrorCategories,
+  validationPhases,
+  validationStageIds
 } from '../agent/types';
 import type { StylingIssue } from '../agent/styling/types';
+import type { ProfileRef } from '../agent/profiles/types';
+import { projectProfileRefField } from '../agent/profiles/schema';
 
 export interface IProjectSnapshot {
   workspaceId: Types.ObjectId;
@@ -11,6 +15,7 @@ export interface IProjectSnapshot {
   userId: Types.ObjectId;
   projectId: Types.ObjectId;
   sourceRunId: Types.ObjectId;
+  profile?: ProfileRef;
   parentSnapshotId?: Types.ObjectId;
   artifactId: string;
   previewArtifactId?: string;
@@ -65,12 +70,12 @@ const ValidationSchema = new Schema<ValidationResult>(
         {
           name: {
             type: String,
-            enum: ['structure', 'install', 'type-check', 'build'],
+            enum: validationStageIds,
             required: true
           },
           phase: {
             type: String,
-            enum: ['structure', 'dependencies', 'type-check', 'build']
+            enum: validationPhases
           },
           status: {
             type: String,
@@ -116,6 +121,7 @@ const ProjectSnapshotSchema = new Schema<IProjectSnapshot>(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
     sourceRunId: { type: Schema.Types.ObjectId, ref: 'AgentRun', required: true },
+    profile: projectProfileRefField,
     parentSnapshotId: { type: Schema.Types.ObjectId, ref: 'ProjectSnapshot' },
     artifactId: { type: String, required: true, trim: true },
     previewArtifactId: { type: String, trim: true },

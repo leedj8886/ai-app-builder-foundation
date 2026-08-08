@@ -2,6 +2,8 @@ import type {
   ProjectFileLanguage,
   ProjectSnapshotPackageJson
 } from '../agent/types';
+import type { ProfileRef } from '../agent/profiles/types';
+import { defaultProjectProfileRef } from '../agent/profiles/registry';
 
 export interface ArtifactProjectFile {
   path: string;
@@ -15,6 +17,23 @@ export interface ProjectArtifactBundleV1 {
   files: ArtifactProjectFile[];
   packageJson: ProjectSnapshotPackageJson;
 }
+
+export interface ProjectArtifactBundleV2 {
+  version: 2;
+  profile: ProfileRef;
+  files: ArtifactProjectFile[];
+  packageJson: ProjectSnapshotPackageJson;
+}
+
+export type ProjectArtifactBundle =
+  | ProjectArtifactBundleV1
+  | ProjectArtifactBundleV2;
+
+export const projectArtifactProfileRef = (
+  bundle: ProjectArtifactBundle
+): ProfileRef => bundle.version === 1
+  ? defaultProjectProfileRef()
+  : { ...bundle.profile };
 
 export interface PreviewArtifactFile {
   path: string;

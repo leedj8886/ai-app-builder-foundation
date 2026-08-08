@@ -7,14 +7,17 @@ import {
   ArtifactIntegrity,
   ArtifactLimits,
   EncodedProjectArtifact,
-  ProjectArtifactBundleV1
+  ProjectArtifactBundle,
+  ProjectArtifactBundleV1,
+  ProjectArtifactBundleV2
 } from './types';
+import type { ProfileRef } from '../agent/profiles/types';
 import {
   projectFileLanguages
 } from '../agent/types';
 
 const artifactFormat = 'open-v0.bundle+json+gzip' as const;
-const supportedExtension = /\.(ts|tsx|js|cjs|mjs|css|json|html|md)$/;
+const supportedExtension = /\.(ts|tsx|js|cjs|mjs|css|json|html|md|prisma|sql)$/;
 const languageSet = new Set<string>(projectFileLanguages);
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
@@ -79,7 +82,7 @@ const canonicalMap = (input: unknown, name: string): Record<string, string> => {
 
 const canonicalPackageJson = (
   input: unknown
-): ProjectArtifactBundleV1['packageJson'] => {
+): ProjectArtifactBundle['packageJson'] => {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     fail('ARTIFACT_INVALID_BUNDLE', 'packageJson must be an object');
   }
@@ -88,6 +91,25 @@ const canonicalPackageJson = (
     dependencies: canonicalMap(value.dependencies, 'dependencies'),
     devDependencies: canonicalMap(value.devDependencies, 'devDependencies'),
     scripts: canonicalMap(value.scripts, 'scripts')
+  };
+};
+
+const canonicalProfileRef = (input: unknown): ProfileRef => {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    fail('ARTIFACT_INVALID_BUNDLE', 'profile must be an object');
+  }
+  const value = input as Record<string, unknown>;
+  if (
+    typeof value.id !== 'string' ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value.id) ||
+    !Number.isSafeInteger(value.version) ||
+    (value.version as number) < 1
+  ) {
+    fail('ARTIFACT_INVALID_BUNDLE', 'profile must contain a stable id and positive version');
+  }
+  return {
+    id: value.id as string,
+    version: value.version as number
   };
 };
 
@@ -132,12 +154,15 @@ const canonicalFile = (input: unknown): ArtifactProjectFile => {
   };
 };
 
-const canonicalizeBundle = (input: unknown): ProjectArtifactBundleV1 => {
+const canonicalizeBundle = (input: unknown): ProjectArtifactBundle => {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     fail('ARTIFACT_INVALID_BUNDLE', 'Artifact bundle must be an object');
   }
   const value = input as Record<string, unknown>;
-  if (value.version !== 1 || !Array.isArray(value.files)) {
+  if (
+    (value.version !== 1 && value.version !== 2) ||
+    !Array.isArray(value.files)
+  ) {
     fail('ARTIFACT_INVALID_BUNDLE', 'Artifact bundle version or files are invalid');
   }
 
@@ -151,11 +176,17 @@ const canonicalizeBundle = (input: unknown): ProjectArtifactBundleV1 => {
   }
   files.sort((left, right) => compareText(left.path, right.path));
 
-  return {
-    version: 1,
+  const common = {
     files,
     packageJson: canonicalPackageJson(value.packageJson)
   };
+  return value.version === 1
+    ? { version: 1, ...common } satisfies ProjectArtifactBundleV1
+    : {
+        version: 2,
+        profile: canonicalProfileRef(value.profile),
+        ...common
+      } satisfies ProjectArtifactBundleV2;
 };
 
 const digest = (bytes: Uint8Array): string =>
@@ -174,7 +205,7 @@ const enforceFileCount = (input: unknown, limits: ArtifactLimits): void => {
 };
 
 export const encodeProjectArtifact = async (
-  bundle: ProjectArtifactBundleV1,
+  bundle: ProjectArtifactBundle,
   limits: ArtifactLimits
 ): Promise<EncodedProjectArtifact> => {
   validateLimits(limits);
@@ -229,7 +260,7 @@ export const decodeProjectArtifact = async (
   compressedBytes: Uint8Array,
   manifest: ArtifactIntegrity,
   limits: ArtifactLimits
-): Promise<ProjectArtifactBundleV1> => {
+): Promise<ProjectArtifactBundle> => {
   validateLimits(limits);
   validateManifest(compressedBytes, manifest, limits);
   const compressedBuffer = Buffer.from(compressedBytes);
@@ -273,7 +304,7 @@ export const decodeProjectArtifact = async (
     fail('ARTIFACT_CORRUPT', 'Artifact JSON is corrupt', error);
   }
   enforceFileCount(parsed, limits);
-  let canonical: ProjectArtifactBundleV1;
+  let canonical: ProjectArtifactBundle;
   try {
     canonical = canonicalizeBundle(parsed);
   } catch (error) {

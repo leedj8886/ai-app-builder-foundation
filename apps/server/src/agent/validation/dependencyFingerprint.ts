@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
+import type { ProfileRef } from '../profiles/types';
+import { canonicalProfileName } from '../profiles/registry';
 
 interface DependencyFingerprintInput {
+  profile: ProfileRef;
+  platformDependencies: Record<string, string>;
+  platformDevDependencies: Record<string, string>;
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
   lockfile?: string;
@@ -19,7 +24,10 @@ const sortRecord = (
 export const dependencyFingerprint = (
   input: DependencyFingerprintInput
 ): string => createHash('sha256').update(JSON.stringify({
-  schemaVersion: 1,
+  schemaVersion: 2,
+  profile: canonicalProfileName(input.profile),
+  platformDependencies: sortRecord(input.platformDependencies),
+  platformDevDependencies: sortRecord(input.platformDevDependencies),
   dependencies: sortRecord(input.dependencies),
   devDependencies: sortRecord(input.devDependencies),
   lockfile: input.lockfile ?? null,

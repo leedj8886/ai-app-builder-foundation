@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  AgentContext,
   AgentPlan,
   GenerateInput,
   GenerationResult,
@@ -43,28 +44,49 @@ interface OpenAIModelClientOptions {
   createCompletion(request: CompletionRequest): Promise<CompletionResponse>;
 }
 
-const sharedSystemInstruction = `You are the generation engine for a React application builder.
-Only produce React functional components written in TypeScript/TSX and styled with Tailwind CSS.
-The target is a Vite browser application. Never produce Vue, Svelte, JavaScript-only, binary, or server files.
+const profileSystemInstruction = (context: AgentContext): string => {
+  const project = context.project;
+  const profile = project.profile
+    ? `${project.profile.id}/v${project.profile.version}`
+    : 'static-react/v1';
+  const guidance = project.generationInstructions ?? [
+    'Generate only React functional components written in TypeScript or TSX.',
+    'Use Tailwind CSS and target a Vite browser application.',
+    'Never produce Vue, Svelte, JavaScript-only, binary, or server files.'
+  ].join(' ');
+  const editablePaths = project.editablePaths?.join(', ') ?? '**/*';
+  const platformPaths = project.platformManagedPaths?.join(', ') || 'none';
+
+  return `You are the generation engine for an application builder.
+Project Profile: ${profile}.
+Profile guidance: ${guidance}
+Editable path patterns: ${editablePaths}.
+Platform-managed path patterns: ${platformPaths}.
+Only return operations within editable paths. Never modify platform-managed files or package scripts.
 Return one JSON object only. Do not wrap JSON in markdown.`;
+};
 
-const planSystemInstruction = `${sharedSystemInstruction}
-Plan the smallest coherent implementation. Return:
-{"summary":"...","steps":[{"title":"...","intent":"...","filesLikelyTouched":["src/App.tsx"]}],"assumptions":["..."]}`;
+const planSystemInstruction = (context: AgentContext): string =>
+  `${profileSystemInstruction(context)}
+Plan the smallest coherent implementation using only Profile-editable files. Return:
+{"summary":"...","steps":[{"title":"...","intent":"...","filesLikelyTouched":["..."]}],"assumptions":["..."]}`;
 
-const generationSystemInstruction = `${sharedSystemInstruction}
-Generate complete file contents using relative project paths with extensions ts, tsx, js, cjs, or mjs for JavaScript configuration, plus css, json, html, or md.
+const generationSystemInstruction = (context: AgentContext): string =>
+  `${profileSystemInstruction(context)}
+Generate complete text file contents using relative project paths and Profile-supported extensions.
 Do not return scripts or shell commands. Return:
-{"message":"...","operations":[{"type":"create|update","path":"src/App.tsx","content":"..."}],"dependencies":{},"devDependencies":{}}`;
+{"message":"...","operations":[{"type":"create|update|delete","path":"...","content":"..."}],"dependencies":{},"devDependencies":{}}`;
 
-const repairSystemInstruction = `${sharedSystemInstruction}
+const repairSystemInstruction = (context: AgentContext): string =>
+  `${profileSystemInstruction(context)}
 Repair the provided validation failures with the smallest set of complete-file operations.
 Use the diagnostics as evidence. Do not return commands or change server-owned scripts. Return:
-{"message":"...","operations":[{"type":"update","path":"src/App.tsx","content":"..."}],"dependencies":{},"devDependencies":{}}`;
+{"message":"...","operations":[{"type":"update","path":"...","content":"..."}],"dependencies":{},"devDependencies":{}}`;
 
-const dependencyRepairSystemInstruction = `${sharedSystemInstruction}
+const dependencyRepairSystemInstruction = (context: AgentContext): string =>
+  `${profileSystemInstruction(context)}
 Repair dependency declaration failures with the smallest possible dependency changes.
-Prefer dependency and devDependency updates. Only change source files when an import must
+Prefer Profile-allowed dependency and devDependency updates. Only change source files when an import must
 match the corrected dependency. Do not return commands or change server-owned scripts. Return:
 {"message":"...","operations":[],"dependencies":{},"devDependencies":{}}`;
 
@@ -137,15 +159,19 @@ export const createOpenAIModelClient = (
 
   return {
     generatePlan: (input: PlanInput): Promise<ModelResult<AgentPlan>> =>
-      request(planSystemInstruction, input, agentPlanSchema),
+      request(planSystemInstruction(input.context), input, agentPlanSchema),
     generateFiles: (input: GenerateInput): Promise<ModelResult<GenerationResult>> =>
-      request(generationSystemInstruction, input, generationResultSchema),
+      request(generationSystemInstruction(input.context), input, generationResultSchema),
     repairFiles: (input: RepairInput): Promise<ModelResult<GenerationResult>> =>
-      request(repairSystemInstruction, input, generationResultSchema),
+      request(repairSystemInstruction(input.context), input, generationResultSchema),
     repairDependencies: (
       input: RepairInput
     ): Promise<ModelResult<GenerationResult>> =>
-      request(dependencyRepairSystemInstruction, input, generationResultSchema)
+      request(
+        dependencyRepairSystemInstruction(input.context),
+        input,
+        generationResultSchema
+      )
   };
 };
 

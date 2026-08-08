@@ -234,6 +234,8 @@ test('ProjectSnapshot stores artifact references without source content', () => 
   assert.ok(ProjectSnapshot.schema.path('previewArtifactId'));
   assert.equal(ProjectSnapshot.schema.path('files'), undefined);
   assert.equal(ProjectSnapshot.schema.path('packageJson'), undefined);
+  assert.equal(ProjectSnapshot.schema.path('validationDatabase'), undefined);
+  assert.equal(ProjectSnapshot.schema.path('databaseUrl'), undefined);
   assert.ok(ProjectSnapshot.schema.path('validation'));
   assert.ok(ProjectSnapshot.schema.path('summary'));
 
@@ -292,6 +294,51 @@ test('ProjectSnapshot accepts successful validation checks with empty output str
       }]
     },
     summary: 'Validated snapshot'
+  });
+
+  assert.equal(snapshot.validateSync(), undefined);
+});
+
+test('ProjectSnapshot accepts Profile-driven full-stack validation stages', () => {
+  const names = [
+    'prisma-validate',
+    'prisma-generate',
+    'migration-history',
+    'migration-replay',
+    'nest-type-check',
+    'api-test',
+    'web-api-build',
+    'runtime-smoke'
+  ] as const;
+  const phases = [
+    'prisma',
+    'prisma',
+    'migration',
+    'migration',
+    'type-check',
+    'api-test',
+    'build',
+    'runtime-smoke'
+  ] as const;
+  const snapshot = new ProjectSnapshot({
+    workspaceId: new Types.ObjectId(),
+    branchId: new Types.ObjectId(),
+    userId: new Types.ObjectId(),
+    projectId: new Types.ObjectId(),
+    sourceRunId: new Types.ObjectId(),
+    artifactId: 'b'.repeat(32),
+    validation: {
+      status: 'passed',
+      checks: names.map((name, index) => ({
+        name,
+        phase: phases[index],
+        status: 'passed',
+        stdout: '',
+        stderr: '',
+        durationMs: 1
+      }))
+    },
+    summary: 'Validated full-stack snapshot'
   });
 
   assert.equal(snapshot.validateSync(), undefined);

@@ -26,6 +26,7 @@ import {
   startSandboxReconcilerLoop,
   type SandboxReconcilerLoop
 } from './sandbox/reconcilerLoop';
+import { TestcontainersValidationDatabase } from './agent/validation/testcontainersDatabase';
 
 dotenv.config();
 
@@ -64,13 +65,18 @@ const startWorker = async () => {
     return client;
   };
   const modelClient = modelClientFor(modelCatalog.defaultModelId);
+  const validationDatabase = new TestcontainersValidationDatabase({
+    hostOverride: process.env.VALIDATION_DATABASE_HOST,
+    image: process.env.VALIDATION_DATABASE_IMAGE
+  });
   let reconcilerLoop: SandboxReconcilerLoop | undefined;
   let validator: ProjectValidator;
   if (config.validationExecutor === 'legacy') {
     validator = createProjectValidator({
       workspaceRoot: config.workspaceRoot,
       validation: config.validation,
-      artifactService: getArtifactService()
+      artifactService: getArtifactService(),
+      validationDatabase
     });
   } else {
     const runtime = await createSandboxRuntime({ redis: connection });
@@ -100,7 +106,8 @@ const startWorker = async () => {
       provider: runtime.provider,
       image: runtime.image,
       resources: { cpu: 1, memoryMiB: 1_024, diskMiB: 2_048 },
-      verification: runtime.verification
+      verification: runtime.verification,
+      validationDatabase
     });
   }
   const worker = createAgentWorker({
@@ -159,6 +166,11 @@ const startWorker = async () => {
     6 * 60 * 60 * 1_000
   );
   cleanupTimer.unref();
+  const databaseReconcileTimer = setInterval(
+    () => void validationDatabase.reconcile(),
+    60_000
+  );
+  databaseReconcileTimer.unref();
 
   worker.on('completed', job => {
     console.log(`Agent run job completed: ${job.id}`);
@@ -170,8 +182,10 @@ const startWorker = async () => {
 
   const shutdown = async () => {
     clearInterval(cleanupTimer);
+    clearInterval(databaseReconcileTimer);
     await worker.close();
     await reconcilerLoop?.close();
+    await validationDatabase.shutdown();
     await connection.quit();
     await disconnectDB();
     process.exit(0);

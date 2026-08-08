@@ -11,7 +11,9 @@ import {
   ArtifactError,
   ArtifactIntegrity,
   ArtifactLimits,
-  ProjectArtifactBundleV1
+  ProjectArtifactBundleV1,
+  ProjectArtifactBundleV2,
+  projectArtifactProfileRef
 } from './types';
 
 const limits: ArtifactLimits = {
@@ -31,6 +33,12 @@ const bundle = (): ProjectArtifactBundleV1 => ({
     devDependencies: { typescript: '^5.0.0', tsx: '^4.0.0' },
     scripts: { test: 'node --test', build: 'tsc' }
   }
+});
+
+const bundleV2 = (): ProjectArtifactBundleV2 => ({
+  ...bundle(),
+  version: 2,
+  profile: { id: 'static-react', version: 1 }
 });
 
 const expectCode = async (
@@ -77,6 +85,50 @@ test('encoding is asynchronous and canonical across input order', async () => {
   assert.equal(first.sha256, second.sha256);
   assert.deepEqual(first.compressedBytes, second.compressedBytes);
   assert.deepEqual(first.manifest, second.manifest);
+});
+
+test('Bundle V2 round-trips its canonical Profile reference', async () => {
+  const encoded = await encodeProjectArtifact(bundleV2(), limits);
+  const decoded = await decodeProjectArtifact(
+    encoded.compressedBytes,
+    encoded.manifest,
+    limits
+  );
+
+  assert.deepEqual(decoded, {
+    ...bundleV2(),
+    files: [...bundleV2().files].sort((left, right) =>
+      left.path.localeCompare(right.path)
+    ),
+    packageJson: {
+      dependencies: { axios: '^1.0.0', zod: '^3.0.0' },
+      devDependencies: { tsx: '^4.0.0', typescript: '^5.0.0' },
+      scripts: { build: 'tsc', test: 'node --test' }
+    }
+  });
+  assert.deepEqual(projectArtifactProfileRef(decoded), {
+    id: 'static-react',
+    version: 1
+  });
+  assert.deepEqual(projectArtifactProfileRef(bundle()), {
+    id: 'static-react',
+    version: 1
+  });
+});
+
+test('Bundle V2 rejects malformed Profile references', async () => {
+  await expectCode('ARTIFACT_INVALID_BUNDLE', () =>
+    encodeProjectArtifact({
+      ...bundleV2(),
+      profile: { id: 'static-react/v1', version: 1 }
+    }, limits)
+  );
+  await expectCode('ARTIFACT_INVALID_BUNDLE', () =>
+    encodeProjectArtifact({
+      ...bundleV2(),
+      profile: { id: 'static-react', version: 0 }
+    }, limits)
+  );
 });
 
 test('decoding roundtrips from Uint8Array to the canonical bundle', async () => {
@@ -126,6 +178,30 @@ test('accepts JavaScript project configuration files', async () => {
       'tailwind.config.js'
     ]
   );
+});
+
+test('accepts Profile-owned Prisma schema and SQL migration files', async () => {
+  const input = bundle();
+  input.files = [
+    {
+      path: 'prisma/schema.prisma',
+      content: 'model Todo { id Int @id }',
+      language: 'prisma'
+    },
+    {
+      path: 'prisma/migrations/20260808_init/migration.sql',
+      content: 'CREATE TABLE "Todo" (id integer PRIMARY KEY);',
+      language: 'sql'
+    }
+  ];
+
+  const encoded = await encodeProjectArtifact(input, limits);
+  const decoded = await decodeProjectArtifact(
+    encoded.compressedBytes,
+    encoded.manifest,
+    limits
+  );
+  assert.deepEqual(decoded.files.map(file => file.language), ['sql', 'prisma']);
 });
 
 test('rejects unsafe paths, unsupported extensions, and duplicate normalized paths', async () => {

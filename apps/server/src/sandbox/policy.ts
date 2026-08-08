@@ -2,7 +2,23 @@ import type { SandboxConfig } from './config';
 import { SandboxError } from './errors';
 import type { SandboxCommand, SandboxSpec } from './types';
 
-export type BuildCommandName = 'install' | 'type-check' | 'build';
+export type BuildCommandName =
+  | 'install'
+  | 'prisma-validate'
+  | 'prisma-generate'
+  | 'migration-history'
+  | 'migration-replay'
+  | 'type-check'
+  | 'nest-type-check'
+  | 'api-test'
+  | 'build'
+  | 'web-api-build'
+  | 'runtime-smoke';
+
+export type ValidationCommandEnvironment = Partial<Record<
+  'DATABASE_URL' | 'SHADOW_DATABASE_URL',
+  string
+>>;
 
 export interface SandboxPolicy {
   assertProviderAllowed(
@@ -13,7 +29,11 @@ export interface SandboxPolicy {
   requiredCapabilities(spec: SandboxSpec): string[];
   buildCommand(
     name: BuildCommandName,
-    input: { hasPackageLock: boolean; maxOutputBytes: number }
+    input: {
+      hasPackageLock: boolean;
+      maxOutputBytes: number;
+      environment?: ValidationCommandEnvironment;
+    }
   ): SandboxCommand;
 }
 
@@ -80,17 +100,36 @@ export const createSandboxPolicy = (
     ) {
       deny('Command output limit must be a positive safe integer');
     }
+    const environment = input.environment ?? {};
+    if (
+      Object.keys(environment).some(key =>
+        key !== 'DATABASE_URL' && key !== 'SHADOW_DATABASE_URL'
+      ) ||
+      Object.values(environment).some(value =>
+        typeof value !== 'string' || value.length === 0
+      )
+    ) {
+      deny('Validation command environment is not allowed');
+    }
 
-    const args =
-      name === 'install'
-        ? [input.hasPackageLock ? 'ci' : 'install']
-        : name === 'build'
-          ? ['run', 'build', '--', '--base=./']
-          : ['run', name];
+    const argsByName: Record<BuildCommandName, string[]> = {
+      install: [input.hasPackageLock ? 'ci' : 'install'],
+      'prisma-validate': ['run', 'prisma:validate'],
+      'prisma-generate': ['run', 'prisma:generate'],
+      'migration-history': ['run', 'migration:check'],
+      'migration-replay': ['run', 'migration:replay'],
+      'type-check': ['run', 'type-check'],
+      'nest-type-check': ['run', 'type-check'],
+      'api-test': ['run', 'test:api'],
+      build: ['run', 'build', '--', '--base=./'],
+      'web-api-build': ['run', 'build'],
+      'runtime-smoke': ['run', 'runtime:smoke']
+    };
+    const args = argsByName[name];
     const timeoutMs =
       name === 'install'
         ? config.commandTimeouts.install
-        : name === 'type-check'
+        : name === 'type-check' || name === 'nest-type-check'
           ? config.commandTimeouts.typeCheck
           : config.commandTimeouts.build;
 
@@ -98,7 +137,7 @@ export const createSandboxPolicy = (
       executable: 'npm',
       args,
       cwd: '/workspace',
-      env: { CI: 'true' },
+      env: { CI: 'true', ...environment },
       timeoutMs,
       maxOutputBytes: Math.min(
         input.maxOutputBytes,

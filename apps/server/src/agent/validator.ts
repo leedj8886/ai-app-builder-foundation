@@ -26,7 +26,7 @@ import {
 } from './validation/dependencyCache';
 import { dependencyFingerprint } from './validation/dependencyFingerprint';
 import { runWithInfrastructureRetry } from './validation/retry';
-import { validateProjectStructure } from './validation/structure';
+import { resolveValidationStages } from './validation/stages';
 import { resolveStylingCapabilities } from './styling/resolveCapabilities';
 import { adaptersFor } from './styling/registry';
 import { readCssBuildEvidence } from './styling/buildEvidence';
@@ -34,6 +34,19 @@ import type { StylingIssue } from './styling/types';
 import type { ArtifactService } from '../artifacts/artifactService';
 import { readPreviewDirectory } from '../artifacts/readPreviewDirectory';
 import { throwIfAborted } from './runCancellation';
+import type { ProfileRef } from './profiles/types';
+import {
+  normalizeProjectProfileRef,
+  resolveProjectProfile
+} from './profiles/registry';
+import type {
+  ValidationDatabase,
+  ValidationDatabaseLease
+} from './validation/database';
+import {
+  redactValidationSecrets,
+  validationDatabaseEnvironment
+} from './validation/database';
 
 export interface ValidationProgressEvent {
   phase: ValidationPhase;
@@ -49,6 +62,7 @@ export interface ValidationProgressEvent {
 export interface ValidateProjectInput {
   runId: string;
   files: ProjectFile[];
+  profile?: ProfileRef;
   signal?: AbortSignal;
   sandboxScope?: {
     workspaceId: Types.ObjectId;
@@ -57,6 +71,7 @@ export interface ValidateProjectInput {
     requestedByUserId: Types.ObjectId;
     runId: Types.ObjectId;
     attempt: number;
+    profile?: ProfileRef;
   };
   onProgress?: (
     event: ValidationProgressEvent
@@ -81,6 +96,7 @@ interface CreateProjectValidatorOptions {
   env?: NodeJS.ProcessEnv;
   cssEvidenceReader?: typeof readCssBuildEvidence;
   artifactService?: ArtifactService;
+  validationDatabase?: ValidationDatabase;
 }
 
 interface InstallationError extends Error {
@@ -149,6 +165,36 @@ const packageData = (files: ProjectFile[]): {
   };
 };
 
+const recordsEqual = (
+  left: Record<string, string>,
+  right: Record<string, string>
+): boolean => {
+  const leftEntries = Object.entries(left);
+  return leftEntries.length === Object.keys(right).length
+    && leftEntries.every(([name, version]) => right[name] === version);
+};
+
+const hasCompatiblePackageLock = (
+  packageJson: ReturnType<typeof packageData>
+): boolean => {
+  if (!packageJson.lockfile) return false;
+  try {
+    const parsed = JSON.parse(packageJson.lockfile.content) as {
+      packages?: Record<string, {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      }>;
+    };
+    const root = parsed.packages?.[''];
+    if (!root) return true;
+    return recordsEqual(root.dependencies ?? {}, packageJson.dependencies)
+      && recordsEqual(root.devDependencies ?? {}, packageJson.devDependencies);
+  } catch {
+    // Let npm ci report malformed lockfiles instead of silently replacing them.
+    return true;
+  }
+};
+
 const npmVersionFromEnvironment = (env: NodeJS.ProcessEnv): string =>
   env.npm_config_user_agent?.match(/npm\/([^\s]+)/)?.[1] ?? 'unknown';
 
@@ -174,9 +220,20 @@ export const createProjectValidator = (
   return {
     validate: async input => {
       throwIfAborted(input.signal);
+      const profile = resolveProjectProfile(normalizeProjectProfileRef(
+        input.profile ?? input.sandboxScope?.profile
+      ));
+      const stages = resolveValidationStages(profile.validationPipeline());
+      const structureStage = stages.find(stage => stage.kind === 'structure');
+      const installStage = stages.find(stage => stage.kind === 'install');
+      if (!structureStage || !installStage) {
+        throw new Error(
+          'Project Profile validation pipeline requires structure and install stages'
+        );
+      }
       const checks: ValidationCheckResult[] = [];
       const structureStartedAt = Date.now();
-      const structure = validateProjectStructure(input.files);
+      const structure = profile.validateStructure(input.files);
       const structureCheck: ValidationCheckResult = {
         name: 'structure',
         phase: 'structure',
@@ -257,20 +314,29 @@ export const createProjectValidator = (
       const execute = (
         args: string[],
         cwd: string,
-        timeoutMs: number
+        timeoutMs: number,
+        environment?: Record<string, string>
       ) => commandRunner({
         executable: npmExecutable,
         args,
         cwd,
         timeoutMs,
         maxOutputChars: validation.maxOutputChars,
-        env: commandEnvironment,
+        env: { ...commandEnvironment, ...environment },
         signal: input.signal
       });
 
+      let databaseLease: ValidationDatabaseLease | undefined;
       try {
         const packageJson = packageData(input.files);
+        const usePackageLock = hasCompatiblePackageLock(packageJson);
+        const platformPackageJson = profile.mergePackageJson({
+          generated: { dependencies: {}, devDependencies: {} }
+        });
         const fingerprint = dependencyFingerprint({
+          profile: profile.ref,
+          platformDependencies: platformPackageJson.dependencies,
+          platformDevDependencies: platformPackageJson.devDependencies,
           dependencies: packageJson.dependencies,
           devDependencies: packageJson.devDependencies,
           lockfile: packageJson.lockfile?.content,
@@ -328,7 +394,7 @@ export const createProjectValidator = (
                     );
                   }
                   const args = [
-                    packageJson.lockfile ? 'ci' : 'install',
+                    usePackageLock ? 'ci' : 'install',
                     '--ignore-scripts',
                     '--no-audit',
                     '--no-fund'
@@ -422,47 +488,69 @@ export const createProjectValidator = (
         });
         throwIfAborted(input.signal);
 
-        const codeChecks = await Promise.all([
-          {
-            name: 'type-check' as const,
-            phase: 'type-check' as const,
-            args: ['run', 'type-check'],
-            timeoutMs: validation.typeCheckTimeoutMs
-          },
-          {
-            name: 'build' as const,
-            phase: 'build' as const,
-            args: ['run', 'build', '--', '--base=./'],
-            timeoutMs: validation.buildTimeoutMs
+        if (profile.runtimeDescriptor().kind === 'server') {
+          if (!options.validationDatabase) {
+            throw new Error('Server Profile validation database is unavailable');
           }
-        ].map(async check => {
-          const result = await execute(check.args, workspace.path, check.timeoutMs);
+          databaseLease = await options.validationDatabase.create({
+            runId: input.runId,
+            signal: input.signal
+          });
+        }
+
+        const codeChecks: ValidationCheckResult[] = [];
+        for (const stage of stages.filter(candidate => candidate.kind === 'command')) {
+          if (!stage.localArgs) {
+            throw new Error(`Validation stage ${stage.id} has no local command`);
+          }
+          const timeoutMs = stage.timeout === 'type-check'
+            ? validation.typeCheckTimeoutMs
+            : validation.buildTimeoutMs;
+          const databaseEnvironment = databaseLease && stage.database
+            ? validationDatabaseEnvironment(databaseLease)
+            : undefined;
+          const rawResult = await execute(
+            [...stage.localArgs],
+            workspace.path,
+            timeoutMs,
+            databaseEnvironment && stage.database === 'primary'
+              ? { DATABASE_URL: databaseEnvironment.DATABASE_URL }
+              : databaseEnvironment
+          );
+          const result = {
+            ...rawResult,
+            stdout: redactValidationSecrets(rawResult.stdout, databaseLease),
+            stderr: redactValidationSecrets(rawResult.stderr, databaseLease)
+          };
           const category = result.exitCode === 0
             ? undefined
             : classifyValidationFailure({
-              phase: check.phase,
+              phase: stage.phase,
               exitCode: result.exitCode,
               stdout: result.stdout,
               stderr: result.stderr
             });
           const mapped = toCheck({
-            ...check,
+            name: stage.id,
+            phase: stage.phase,
+            args: [...stage.localArgs],
             status: result.exitCode === 0 ? 'passed' : 'failed',
             result,
             category
           });
           await input.onProgress?.({
-            phase: check.phase,
+            phase: stage.phase,
             status: mapped.status,
             category,
             attempt: 0,
             cache: 'not-applicable',
             message: result.exitCode === 0
-              ? `${check.name} passed`
-              : result.stderr || `${check.name} failed`
+              ? `${stage.id} passed`
+              : result.stderr || `${stage.id} failed`
           });
-          return mapped;
-        }));
+          codeChecks.push(mapped);
+          if (category && !stage.continueOnFailure) break;
+        }
         checks.push(...codeChecks);
         const failed = codeChecks.find(check => check.status === 'failed');
 
@@ -520,7 +608,11 @@ export const createProjectValidator = (
         }
 
         let previewArtifactId: string | undefined;
-        if (options.artifactService && input.sandboxScope) {
+        if (
+          options.artifactService &&
+          input.sandboxScope &&
+          profile.runtimeDescriptor().kind === 'static-artifact'
+        ) {
           throwIfAborted(input.signal);
           try {
             const bundle = await readPreviewDirectory(workspace.path);
@@ -572,6 +664,14 @@ export const createProjectValidator = (
           checks
         };
       } finally {
+        if (databaseLease) {
+          try {
+            await databaseLease.destroy();
+          } catch {
+            void options.validationDatabase?.reconcile?.()
+              .catch(() => undefined);
+          }
+        }
         await workspace.cleanup();
       }
     }

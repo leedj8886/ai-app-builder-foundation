@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import type { ArtifactService } from '../artifacts/artifactService';
-import type { ProjectArtifactBundleV1 } from '../artifacts/types';
+import type { ProjectArtifactBundle } from '../artifacts/types';
 import { createPreviewArtifactBundle } from '../artifacts/previewBundle';
 import type { PreviewArtifactBundleV1 } from '../artifacts/types';
 import type { SandboxLeaseDocument } from '../models/SandboxLease';
@@ -13,6 +13,10 @@ import {
 import type { SandboxPolicy } from './policy';
 import type { SandboxProvider } from './provider/SandboxProvider';
 import type { SandboxConfig } from './config';
+import type {
+  BuildCommandName,
+  ValidationCommandEnvironment
+} from './policy';
 import { startSandboxHeartbeatLoop } from './heartbeatLoop';
 import {
   abortReason,
@@ -224,7 +228,8 @@ export class SandboxService {
   async runBuildCommand(input: {
     leaseId: Types.ObjectId;
     expectedOwnership: SandboxOwnership;
-    command: 'install' | 'type-check' | 'build';
+    command: BuildCommandName;
+    environment?: ValidationCommandEnvironment;
     signal?: AbortSignal;
   }): Promise<SandboxCommandResult> {
     throwIfAborted(input.signal);
@@ -275,7 +280,8 @@ export class SandboxService {
     }
     const command = this.options.policy.buildCommand(input.command, {
       hasPackageLock: await handle.files.exists('package-lock.json'),
-      maxOutputBytes: workspace.executionLimits.maxLogBytesPerCommand
+      maxOutputBytes: workspace.executionLimits.maxLogBytesPerCommand,
+      environment: input.environment
     });
     if (lease.state === 'ready') {
       lease =
@@ -516,7 +522,7 @@ export class SandboxService {
 
   private readOwnedBundle(
     input: CreateBuildSandboxInput
-  ): Promise<ProjectArtifactBundleV1> {
+  ): Promise<ProjectArtifactBundle> {
     return this.options.artifactService.readOwnedBundle({
       artifactId: input.sourceArtifact.artifactId,
       workspaceId: input.workspaceId,
@@ -552,7 +558,7 @@ export class SandboxService {
   }
 
   private uploadFiles(
-    bundle: ProjectArtifactBundleV1
+    bundle: ProjectArtifactBundle
   ): Array<{ path: string; content: Uint8Array }> {
     const encoder = new TextEncoder();
     const files = new Map(

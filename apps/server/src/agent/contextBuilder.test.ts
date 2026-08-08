@@ -39,8 +39,9 @@ test('buildAgentContext includes project chat and small snapshot contents', () =
 
   assert.equal(context.prompt, 'Add a task filter');
   assert.equal(context.project.name, 'Tasks');
-  assert.equal(context.project.framework, 'react');
-  assert.equal(context.project.styling, 'tailwind');
+  assert.deepEqual(context.project.profile, { id: 'static-react', version: 1 });
+  assert.ok(context.project.capabilities?.some(capability => capability.includes('React')));
+  assert.deepEqual(context.project.editablePaths, ['**/*']);
   assert.deepEqual(context.messages, input.messages);
   assert.equal(context.files[0].content, input.files[0].content);
 });
@@ -92,9 +93,29 @@ test('buildAgentContext applies the character limit to oversized chat content', 
     messages: [{ role: 'user', content: 'x'.repeat(10_000) }]
   }, 200);
 
-  assert.ok(JSON.stringify(context).length < 500);
+  assert.ok(JSON.stringify(context).length < 1_200);
   assert.ok((context.messages[0]?.content.length ?? 0) < 200);
   assert.equal(context.files.every(file => file.content === undefined), true);
+});
+
+test('buildAgentContext derives full-stack capabilities and paths from Profile', () => {
+  const context = buildAgentContext({
+    ...input,
+    project: {
+      ...input.project,
+      profile: { id: 'fullstack-nestjs-prisma-postgres', version: 1 }
+    },
+    files: []
+  }, 10_000);
+
+  assert.deepEqual(context.project.profile, {
+    id: 'fullstack-nestjs-prisma-postgres',
+    version: 1
+  });
+  assert.ok(context.project.capabilities?.some(capability => capability.includes('NestJS')));
+  assert.ok(context.project.editablePaths?.includes('prisma/schema.prisma'));
+  assert.ok(context.project.platformManagedPaths?.includes('apps/api/src/main.ts'));
+  assert.match(context.project.generationInstructions ?? '', /PrismaService/);
 });
 
 test('buildAgentContext includes the Create template file contents', () => {

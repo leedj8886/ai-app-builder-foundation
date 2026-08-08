@@ -114,6 +114,46 @@ test('Project creation creates one main Branch', async () => {
   assert.equal(branches[0]?.name, 'main');
   assert.equal(branches[0]?.headVersion, 0);
   assert.equal(response.body.project.settings.agentModelId, 'deepseek-default');
+  assert.deepEqual(response.body.project.profile, {
+    id: 'static-react',
+    version: 1
+  });
+});
+
+test('Project creation accepts the registered full-stack Profile', async () => {
+  const user = await User.create({
+    email: 'fullstack-owner@example.test',
+    password: 'password',
+    name: 'Full-stack owner'
+  });
+  const token = generateToken(user._id.toString());
+
+  const response = await request(app)
+    .post('/api/projects')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: 'Full-stack Todos',
+      profile: { id: 'fullstack-nestjs-prisma-postgres', version: 1 }
+    })
+    .expect(201);
+
+  assert.deepEqual(response.body.project.profile, {
+    id: 'fullstack-nestjs-prisma-postgres',
+    version: 1
+  });
+  assert.equal(
+    await ProjectBranch.countDocuments({ projectId: response.body.project._id }),
+    1
+  );
+
+  await request(app)
+    .post('/api/projects')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: 'Unknown stack',
+      profile: { id: 'fullstack-nestjs-prisma-postgres', version: 2 }
+    })
+    .expect(400);
 });
 
 test('model catalog is public and does not expose credentials or endpoints', async () => {
@@ -283,6 +323,10 @@ test('authenticated run creation persists its event and BullMQ job', async () =>
   assert.equal(response.body.run.modelId, 'deepseek-default');
   assert.equal(response.body.run.modelProvider, 'deepseek');
   assert.equal(response.body.run.model, 'deepseek-v4-flash');
+  assert.deepEqual(response.body.run.profile, {
+    id: 'static-react',
+    version: 1
+  });
   assert.equal(await AgentRun.countDocuments({ _id: response.body.run._id }), 1);
   assert.equal(await AgentEvent.countDocuments({
     runId: response.body.run._id,

@@ -49,6 +49,8 @@ test('inferProjectFileLanguage maps supported extensions', () => {
   assert.equal(inferProjectFileLanguage('package.json'), 'json');
   assert.equal(inferProjectFileLanguage('index.html'), 'html');
   assert.equal(inferProjectFileLanguage('README.md'), 'md');
+  assert.equal(inferProjectFileLanguage('prisma/schema.prisma'), 'prisma');
+  assert.equal(inferProjectFileLanguage('prisma/migrations/init/migration.sql'), 'sql');
 });
 
 test('inferProjectFileLanguage maps JavaScript configuration extensions', () => {
@@ -64,6 +66,10 @@ test('applyFileOperations rejects unsafe paths and unsupported files', () => {
   );
   assert.throws(
     () => applyFileOperations([], [{ type: 'create', path: '../App.tsx', content: '' }]),
+    /escape/
+  );
+  assert.throws(
+    () => applyFileOperations([], [{ type: 'create', path: 'src/../App.tsx', content: '' }]),
     /escape/
   );
   assert.throws(

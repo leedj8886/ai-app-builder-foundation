@@ -2,9 +2,9 @@
 
 ## 文档状态
 
-- 状态：参考设计
+- 状态：参考设计（阶段 1 实现中）
 - 范围：生成项目的数据持久化、动态运行时和资源操作边界
-- 非目标：本阶段不修改现有运行代码，不替换 Builder 控制面的 Express API
+- 非目标：不替换 Builder 控制面的 Express API，不在阶段 1 创建持久业务数据库
 
 本设计参考 ChatGPT Sites 的产品边界：托管平台自动采集基础访问分析，不要求生成
 应用集成分析 SDK；版本保存与正式部署分离；部署访问范围与应用内身份认证分离；
@@ -12,7 +12,7 @@
 [ChatGPT Sites 官方文档](https://learn.chatgpt.com/docs/sites?surface=app#review-site-analytics)。
 这里借鉴的是产品和架构原则，不表示本项目与 Sites 的运行时或资源协议兼容。
 
-本文定义后续实现必须遵守的架构边界。首个正式全栈 Profile 为：
+本文定义后续实现必须遵守的架构边界。首个正式全栈 Profile 的规范名称为：
 
 ```text
 fullstack-nestjs-prisma-postgres/v1
@@ -28,7 +28,7 @@ ArtifactStore 继续构成 Builder 的“平台控制面”。两者不得共用
 1. 生成项目可以包含 API、关系数据库模型和持久化业务数据。
 2. Preview Runtime 重启、代码重新部署后，业务数据继续存在。
 3. 模型只生成业务代码和声明式资源意图，不能直接操作云厂商 SDK 或生产凭据。
-4. 数据库迁移、Secret 注入和部署经过平台受控、可恢复、可审计的流程。
+4. 数据库迁移、Secret 注入和部署经过平台受控、可配置、可审计的流程。
 5. 核心协议保持 Provider-neutral，Supabase、CloudBase、Neon、Kubernetes、
    Daytona 等只作为边缘 Adapter 接入。
 6. 现有 `static-react/v1` 行为保持兼容；全栈能力通过显式 Profile 启用。
@@ -100,6 +100,10 @@ interface ProjectProfile {
   runtimeDescriptor(): RuntimeDescriptor;
 }
 ```
+
+Profile ID 不包含版本，例如 `fullstack-nestjs-prisma-postgres`；规范名称由
+`${id}/v${version}` 组成。这样 Registry 可以精确解析版本，同时避免在 ID 和
+`version` 字段中重复编码版本信息。
 
 Snapshot Manifest 必须保存 Profile ID 和版本。Profile 升级由平台提供显式迁移，
 不能让模型通过重写基础设施文件隐式完成升级。
@@ -388,7 +392,7 @@ structure
 -> install
 -> prisma validate
 -> prisma generate
--> migration policy check
+-> migration history and checksum check
 -> 在一次性 PostgreSQL 和 Shadow Database 上重放迁移
 -> NestJS type-check
 -> API integration test
@@ -398,6 +402,19 @@ structure
 
 验证数据库必须是一次性资源。验证阶段不能连接持久 Preview、Staging 或
 Production 数据库。
+
+阶段 1 使用 `ValidationDatabase` 控制面接口管理短期连接引用。本地和测试实现为
+每轮验证启动独立的 Testcontainers PostgreSQL，同时创建 `validation_primary` 和
+`validation_shadow` 两个干净数据库。连接串只在需要数据库的固定平台注册阶段中
+通过 `DATABASE_URL` / `SHADOW_DATABASE_URL` 注入 Sandbox 命令环境，不进入
+Artifact、Snapshot、ValidationResult 或 Agent Event。
+
+本地 Worker 默认使用 `postgres:16-alpine`；私有镜像或镜像代理通过
+`VALIDATION_DATABASE_IMAGE` 指定。远端 Sandbox 需要把
+`VALIDATION_DATABASE_HOST` 配置为该 Sandbox 可达且受限的 Worker 地址，后续托管
+部署应替换为实现同一接口的远端短期数据库 Adapter。验证结束、失败或取消都会调用
+`destroy`；失败的清理由 `reconcile` 重试，进程异常则由 Testcontainers 的资源回收
+机制兜底。
 
 ### 部署
 
@@ -426,6 +443,11 @@ sequenceDiagram
 迁移与 Runtime 启动必须分离。应用进程启动时不得自动运行
 `prisma migrate dev`；Preview、Staging 和 Production 只应用已经验证并保存的
 Migration Artifact。
+
+首版不要求部署必须通过 expand/contract、历史数据兼容性或按环境区分的迁移
+保护门禁。部署时采用保留现有数据并应用迁移、重置目标数据库后部署，还是取消
+本次部署，由具备权限的平台用户明确选择；平台记录选择和执行结果，但不替用户
+统一决定业务数据的保留策略。
 
 ### 版本保存与发布
 
@@ -505,16 +527,22 @@ owner_admins | selected_members | workspace | public
 - Controller/Service 的授权决策只能基于服务端验证后的身份上下文。
 - Analytics 权限独立于访问权限；能访问站点不代表能查看站点分析。
 
-## 迁移安全策略
+## 迁移执行与用户决策
 
 1. `prisma/schema.prisma` 是声明式目标，`prisma/migrations/**` 是可审查的执行历史。
 2. 生成阶段可以创建迁移，但不能应用到持久环境。
 3. `validate` 检查语法、历史连续性、校验和和 Profile 兼容性。
-4. `plan` 识别删除表/列、类型收窄、唯一约束、非空列和大表重写等风险。
-5. 破坏性迁移默认拒绝；后续通过显式审批策略单独开放。
-6. `apply` 使用数据库级迁移锁、操作幂等键和条件状态更新。
-7. 生产默认使用向前修复，不假设所有 DDL 都可安全回滚。
-8. 代码回滚不自动回滚数据库；部署必须保持至少一个版本的前后兼容窗口。
+4. 候选迁移必须能在一次性 PostgreSQL 和 Shadow Database 上完整重放；验证资源
+   不包含持久环境的历史业务数据，因此该结果不等同于历史数据兼容性保证。
+5. `plan` 可以报告删除表/列、类型收窄、唯一约束、非空列和大表重写等风险，但
+   首版不将统一的风险等级作为强制部署门禁。
+6. 对持久环境执行前，平台用户明确选择保留数据并迁移、重置后部署或取消操作；
+   平台不得把重置或数据丢弃隐藏在自动修复流程中。
+7. `apply` 使用数据库级迁移锁、操作幂等键和条件状态更新。
+8. 代码回滚不自动回滚数据库。首版是否保留数据以及是否接受不可逆变化由平台
+   用户决定，平台负责展示迁移计划、目标资源和审计结果。
+9. expand/contract、历史数据兼容性门禁、按环境区分的保护策略和生产迁移审批，
+   作为后续远端及生产部署优化，不是首版实现的前置条件。
 
 ## Branch 与数据语义
 
@@ -604,12 +632,15 @@ Adapter 负责认证、重试、限流、Provider 状态映射和外部资源 ID
 - 实现模型路径 Allowlist 和平台文件完整性检查。
 - 生成 NestJS + Prisma 模板。
 - 在一次性 PostgreSQL 上完成 Prisma 迁移验证。
+- 具体兼容策略、任务拆分和测试门槛见
+  [阶段 1 实施计划](superpowers/plans/2026-08-08-fullstack-persistence-phase-1.md)。
 
 ### 阶段 2：持久 Preview
 
 - 实现 ProjectEnvironment、DatabaseResource 和 AppDeployment。
 - 实现本地 Database、Secret、Deployment、Runtime Log 和 Analytics Adapter。
 - Preview 重启和重新部署后保留业务数据。
+- 部署前允许平台用户选择保留数据并迁移、重置数据库或取消操作。
 - 实现健康检查、停止、恢复和 Reconcile。
 - 在 Hosting Ingress 自动采集唯一访客和页面浏览量，并提供基础 Analytics 页面。
 
@@ -617,7 +648,7 @@ Adapter 负责认证、重试、限流、Provider 状态映射和外部资源 ID
 
 - ProjectBranch 与数据库分支绑定。
 - 接入至少一个托管 Database Adapter 和一个生产 Deployment Adapter。
-- 实现迁移风险策略、资源配额、延迟删除和备份边界。
+- 实现资源配额、延迟删除和备份边界。
 
 ### 阶段 4：生产发布
 
@@ -632,7 +663,8 @@ Adapter 负责认证、重试、限流、Provider 状态映射和外部资源 ID
 2. 模型无法修改平台维护文件；Generation 和 Repair 都受到相同策略约束。
 3. Preview Runtime 重启、停止后恢复或重新部署后，业务数据保持不变。
 4. 不同 Workspace、Project 和 Branch 的数据及日志互相隔离。
-5. 无效或危险迁移不会触达持久数据库。
+5. 未经一次性数据库验证或超出平台用户明确选择范围的迁移操作不会触达持久
+   数据库。
 6. 同一个迁移或部署操作重复执行不会产生重复资源或重复应用。
 7. Snapshot、Artifact、Agent Context、Event 和日志中不存在 Secret 明文。
 8. Provider SDK 和专有类型不会出现在 Orchestrator、Run、Snapshot 核心接口中。
@@ -648,7 +680,7 @@ Adapter 负责认证、重试、限流、Provider 状态映射和外部资源 ID
 - 首个生产 Database Adapter 和 Deployment Adapter 的选择；
 - Preview 空闲停止后的冷启动目标和数据资源保留期限；
 - 数据库分支不受 Provider 原生支持时的成本与容量策略；
-- 破坏性迁移的审批角色和交互方式；
+- 后续生产部署中破坏性迁移的审批角色和交互方式；
 - Production 数据脱敏副本是否进入首个正式版本；
 - Analytics 原始事件和聚合数据的默认保留期；
 - 唯一访客在严格隐私模式下采用精确去重还是近似去重；

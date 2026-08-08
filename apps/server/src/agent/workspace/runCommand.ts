@@ -28,7 +28,9 @@ export const pickValidationEnvironment = (
     'NO_PROXY',
     'NODE_EXTRA_CA_CERTS',
     'NPM_CONFIG_REGISTRY',
-    'npm_config_registry'
+    'npm_config_registry',
+    'NPM_CONFIG_PREFER_OFFLINE',
+    'npm_config_prefer_offline'
   ];
   return Object.fromEntries(
     allowed.flatMap(key => env[key] === undefined ? [] : [[key, env[key]]])

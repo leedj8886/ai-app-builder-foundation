@@ -24,12 +24,17 @@ import { streamAgentRunEvents } from '../agent/sseStream';
 import { findOwnedWorkspaceProject } from '../workspaces/projectAccess';
 import { resolveProjectBranch } from '../branches/branchService';
 import { getArtifactService } from '../artifacts/runtime';
+import { projectArtifactProfileRef } from '../artifacts/types';
 import type { Types } from 'mongoose';
 import { verifiedPreviewDescriptor } from '../preview/descriptor';
 import {
   getModelCatalog,
   requireModelDefinition
 } from '../services/modelCatalog';
+import {
+  assertProjectProfileMatch,
+  normalizeProjectProfileRef
+} from '../agent/profiles/registry';
 
 const snapshotDetail = async (
   snapshot: InstanceType<typeof ProjectSnapshot>,
@@ -44,8 +49,14 @@ const snapshotDetail = async (
     projectId: expected.projectId,
     kind: 'project_snapshot'
   });
+  assertProjectProfileMatch(
+    snapshot.profile,
+    projectArtifactProfileRef(bundle),
+    'Snapshot and Artifact use different Profiles'
+  );
   return {
     ...snapshot.toObject(),
+    profile: normalizeProjectProfileRef(snapshot.profile),
     files: bundle.files,
     packageJson: bundle.packageJson,
     preview: verifiedPreviewDescriptor(snapshot)
@@ -89,7 +100,7 @@ router.get('/runs', async (req: AuthRequest, res, next) => {
     }
 
     const runs = await AgentRun.find({ projectId, userId })
-      .select('workspaceId projectId branchId prompt status mode modelId modelProvider model baseSnapshotId baseHeadVersion resultSnapshotId attempt maxRepairAttempts error startedAt completedAt createdAt updatedAt')
+      .select('workspaceId projectId branchId profile prompt status mode modelId modelProvider model baseSnapshotId baseHeadVersion resultSnapshotId attempt maxRepairAttempts error startedAt completedAt createdAt updatedAt')
       .sort({ createdAt: -1 })
       .limit(limit);
 
@@ -147,6 +158,14 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       res.status(400).json({ error: 'Edit mode requires an existing project snapshot' });
       return;
     }
+    const profile = normalizeProjectProfileRef(project.profile);
+    if (baseSnapshot) {
+      assertProjectProfileMatch(
+        profile,
+        baseSnapshot.profile,
+        'Project and base Snapshot use different Profiles'
+      );
+    }
 
     const config = getAgentConfig();
     const modelCatalog = getModelCatalog();
@@ -158,6 +177,7 @@ router.post('/runs', async (req: AuthRequest, res, next) => {
       userId,
       workspaceId: project.workspaceId,
       projectId: body.projectId,
+      profile,
       branchId: branch._id,
       chatId: body.chatId,
       prompt: body.prompt,
@@ -233,6 +253,11 @@ router.post(
         res.status(409).json({ error: 'Validation candidate has expired' });
         return;
       }
+      const profile = assertProjectProfileMatch(
+        source.profile,
+        candidate.profile,
+        'Validation retry Profile does not match its source Candidate'
+      );
       const existing = await AgentRun.findOne({
         retryOfRunId: source._id,
         userId,
@@ -260,6 +285,7 @@ router.post(
           userId,
           workspaceId: source.workspaceId,
           projectId: source.projectId,
+          profile,
           branchId: source.branchId,
           chatId: source.chatId,
           prompt: source.prompt,

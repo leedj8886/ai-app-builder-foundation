@@ -80,6 +80,7 @@ const createQueuedRun = async () => {
     userId: user._id,
     workspaceId: workspace._id,
     projectId: project._id,
+    profile: project.profile,
     branchId: branch._id,
     prompt: 'Build a dashboard',
     status: 'queued',
@@ -318,10 +319,19 @@ test('stale Run keeps its Snapshot and completes with conflict', async () => {
   assert.ok(run?.resultSnapshotId);
   assert.ok(resultSnapshot);
   assert.ok(resultSnapshot.artifactId);
+  assert.deepEqual(JSON.parse(JSON.stringify(resultSnapshot.profile)), {
+    id: 'static-react',
+    version: 1
+  });
   assert.equal('files' in resultSnapshot.toObject(), false);
   assert.equal('packageJson' in resultSnapshot.toObject(), false);
   const resultBundle = await getArtifactService().readBundle(
     resultSnapshot.artifactId
+  );
+  assert.equal(resultBundle.version, 2);
+  assert.deepEqual(
+    resultBundle.version === 2 ? resultBundle.profile : undefined,
+    { id: 'static-react', version: 1 }
   );
   assert.ok(resultBundle.files.some(file => file.path === 'src/App.tsx'));
   assert.equal(

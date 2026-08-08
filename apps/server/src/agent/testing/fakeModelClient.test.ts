@@ -57,3 +57,42 @@ test('fake model produces an effective App update for Edit mode', async () => {
   assert.ok(editedApp);
   assert.notEqual(editedApp.content, createdApp.content);
 });
+
+test('fake model produces a bounded full-stack Todo candidate', async () => {
+  const client = createFakeModelClient();
+  const fullstackContext: AgentContext = {
+    ...context('create'),
+    project: {
+      name: 'Todos',
+      profile: { id: 'fullstack-nestjs-prisma-postgres', version: 1 }
+    }
+  };
+  const planned = await client.generatePlan({ context: fullstackContext });
+  const generated = await client.generateFiles({
+    context: fullstackContext,
+    plan: planned.value
+  });
+
+  assert.ok(generated.value.operations.some(operation =>
+    operation.path === 'apps/api/src/modules/todo/todo.controller.ts'
+  ));
+  assert.ok(generated.value.operations.some(operation =>
+    operation.path === 'apps/api/src/modules/todo/todo.controller.ts'
+      && hasFileContent(operation)
+      && operation.content.includes('@Inject(TodoService)')
+  ));
+  assert.ok(generated.value.operations.some(operation =>
+    operation.path === 'apps/api/src/modules/todo/todo.service.ts'
+      && hasFileContent(operation)
+      && operation.content.includes('@Inject(PrismaService)')
+  ));
+  assert.ok(generated.value.operations.some(operation =>
+    operation.path === 'prisma/schema.prisma'
+  ));
+  assert.ok(generated.value.operations.some(operation =>
+    operation.path.endsWith('/migration.sql')
+  ));
+  assert.equal(generated.value.operations.some(operation =>
+    operation.path === 'apps/api/src/main.ts'
+  ), false);
+});

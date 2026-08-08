@@ -157,6 +157,30 @@ test('generationResultSchema accepts supported JavaScript configuration files', 
   );
 });
 
+test('generationResultSchema accepts Profile-owned Prisma and SQL files', () => {
+  const parsed = generationResultSchema.parse({
+    message: 'Added persistence',
+    operations: [
+      { type: 'update', path: 'prisma/schema.prisma', content: 'model Todo {}' },
+      {
+        type: 'create',
+        path: 'prisma/migrations/20260808_init/migration.sql',
+        content: 'CREATE TABLE "Todo" ();'
+      }
+    ],
+    dependencies: {},
+    devDependencies: {}
+  });
+
+  assert.deepEqual(
+    parsed.operations.map(operation => operation.path),
+    [
+      'prisma/schema.prisma',
+      'prisma/migrations/20260808_init/migration.sql'
+    ]
+  );
+});
+
 test('generationResultSchema rejects unsafe or incomplete operations', () => {
   const base = {
     message: 'Created the app',
@@ -167,6 +191,10 @@ test('generationResultSchema rejects unsafe or incomplete operations', () => {
   assert.throws(() => generationResultSchema.parse({
     ...base,
     operations: [{ type: 'create', path: '/tmp/App.tsx', content: '' }]
+  }));
+  assert.throws(() => generationResultSchema.parse({
+    ...base,
+    operations: [{ type: 'create', path: 'src/../App.tsx', content: '' }]
   }));
   assert.throws(() => generationResultSchema.parse({
     ...base,
