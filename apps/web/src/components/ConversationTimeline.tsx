@@ -82,7 +82,7 @@ const eventLabel = (
     && typeof event.payload?.attempt === 'number'
   ) {
     return validationEventLabel(event.payload as {
-      phase: 'structure' | 'dependencies' | 'type-check' | 'build'
+      phase: 'structure' | 'dependencies' | 'prisma' | 'migration' | 'type-check' | 'api-test' | 'build' | 'runtime-smoke' | string
       status: 'passed' | 'failed' | 'retrying' | 'skipped'
       category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR'
       attempt: number

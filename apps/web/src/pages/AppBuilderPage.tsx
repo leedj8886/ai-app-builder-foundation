@@ -56,6 +56,7 @@ import {
   modelApi,
   projectApi,
   type ModelDefinition,
+  type ProjectProfileRef,
 } from '@/services/api'
 import { monitorAgentRun } from '@/services/agentRunMonitor'
 import {
@@ -173,7 +174,11 @@ const getErrorMessage = (error: unknown) => {
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError'
 
-const createDemoProject = async (prompt: string, agentModelId?: string) => {
+const createDemoProject = async (
+  prompt: string,
+  agentModelId?: string,
+  profile?: ProjectProfileRef,
+) => {
   if (!localStorage.getItem('token')) {
     const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     const authResponse = await authApi.register(
@@ -187,6 +192,7 @@ const createDemoProject = async (prompt: string, agentModelId?: string) => {
   const projectResponse = await projectApi.create({
     name: `AI App ${new Date().toLocaleTimeString()}`,
     description: prompt,
+    ...(profile ? { profile } : {}),
     settings: {
       framework: 'react',
       styling: 'tailwind',
@@ -212,6 +218,10 @@ export function AppBuilderPage() {
   const [models, setModels] = useState<ModelDefinition[]>([])
   const [defaultModelId, setDefaultModelId] = useState('')
   const [selectedModelId, setSelectedModelId] = useState('')
+  const [selectedProfile, setSelectedProfile] = useState<ProjectProfileRef>({
+    id: 'static-react',
+    version: 1,
+  })
   const [modelManagerOpen, setModelManagerOpen] = useState(false)
   const [modelAssignmentPending, setModelAssignmentPending] = useState(false)
   const [modelManagementError, setModelManagementError] = useState<string>()
@@ -223,6 +233,9 @@ export function AppBuilderPage() {
   const [timeline, setTimeline] = useState(createTimelineState)
   const [chatHistory, setChatHistory] = useState(createChatHistoryState)
   const [projectId, setProjectId] = useState('')
+  const [fullstackPreviewUrl, setFullstackPreviewUrl] = useState<string>()
+  const [fullstackPreviewPending, setFullstackPreviewPending] = useState(false)
+  const [fullstackPreviewError, setFullstackPreviewError] = useState<string>()
   const [retryingValidationRunId, setRetryingValidationRunId] = useState<string>()
   const refreshRequestRef = useRef(0)
   const routeRequestRef = useRef(0)
@@ -280,6 +293,25 @@ export function AppBuilderPage() {
       ),
     )
     return snapshotsResponse.data.snapshots
+  }
+
+  const startFullstackPreview = async (id: string, profile: ProjectProfileRef) => {
+    if (profile.id !== 'fullstack-nestjs-prisma-postgres') {
+      setFullstackPreviewUrl(undefined)
+      setFullstackPreviewError(undefined)
+      return
+    }
+    setFullstackPreviewPending(true)
+    setFullstackPreviewError(undefined)
+    try {
+      const response = await projectApi.startFullstackPreview(id)
+      setFullstackPreviewUrl(response.data.preview.url)
+    } catch (error) {
+      setFullstackPreviewUrl(undefined)
+      setFullstackPreviewError(getErrorMessage(error))
+    } finally {
+      setFullstackPreviewPending(false)
+    }
   }
 
   const loadTimeline = async (
@@ -354,6 +386,8 @@ export function AppBuilderPage() {
       monitorControllerRef.current?.abort()
       monitorControllerRef.current = null
       setProjectId('')
+      setFullstackPreviewUrl(undefined)
+      setFullstackPreviewError(undefined)
       setTimeline((state) => resetTimeline(state))
       setWorkspace(createInitialWorkspaceState())
       return
@@ -396,8 +430,11 @@ export function AppBuilderPage() {
         if (projectResponse.data.project.settings.agentModelId) {
           setSelectedModelId(projectResponse.data.project.settings.agentModelId)
         }
+        setSelectedProfile(projectResponse.data.project.profile)
         const activeSnapshotId = snapshots?.find((snapshot) => snapshot.isActive)?.id
         if (!activeSnapshotId) return
+
+        void startFullstackPreview(routedProjectId, projectResponse.data.project.profile)
 
         const snapshotResponse = await projectApi.getSnapshot(
           routedProjectId,
@@ -446,7 +483,11 @@ export function AppBuilderPage() {
       let runRequest: Parameters<typeof agentApi.createRun>[0]
 
       if (!activeChatId) {
-        activeProjectId = await createDemoProject(prompt, selectedModelId || undefined)
+        activeProjectId = await createDemoProject(
+          prompt,
+          selectedModelId || undefined,
+          selectedProfile,
+        )
         const chatResponse = await chatApi.create(prompt, activeProjectId)
         activeChatId = chatResponse.data.chat._id
         runRequest = {
@@ -503,6 +544,9 @@ export function AppBuilderPage() {
       })
       setWorkspace((state) => applyAgentRunDetail(state, detail))
       await refreshProjectData(activeProjectId)
+      if (selectedProfile.id === 'fullstack-nestjs-prisma-postgres') {
+        await startFullstackPreview(activeProjectId, selectedProfile)
+      }
       await loadTimeline(activeChatId)
       if (
         chatId
@@ -569,6 +613,8 @@ export function AppBuilderPage() {
     setWorkspaceSidebarPreviewVisible(false)
     monitorControllerRef.current?.abort()
     monitorControllerRef.current = null
+    if (projectId) void projectApi.stopFullstackPreview(projectId).catch(() => undefined)
+    setFullstackPreviewUrl(undefined)
     navigate('/')
   }
 
@@ -727,6 +773,24 @@ export function AppBuilderPage() {
                 </div>
               ) : null}
               <div className="flex items-center justify-between px-3 pb-3">
+                <label className="inline-flex items-center gap-2 text-xs text-neutral-500">
+                  <span className="sr-only">Application type</span>
+                  <select
+                    value={`${selectedProfile.id}/v${selectedProfile.version}`}
+                    disabled={submissionPending}
+                    aria-label="Application type"
+                    className="h-8 max-w-[180px] rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-600 outline-none hover:border-neutral-300 focus:border-neutral-500"
+                    onChange={(event) => {
+                      const profile: ProjectProfileRef = event.target.value === 'fullstack-nestjs-prisma-postgres/v1'
+                        ? { id: 'fullstack-nestjs-prisma-postgres', version: 1 }
+                        : { id: 'static-react', version: 1 }
+                      setSelectedProfile(profile)
+                    }}
+                  >
+                    <option value="static-react/v1">Static React</option>
+                    <option value="fullstack-nestjs-prisma-postgres/v1">Full-stack + PostgreSQL</option>
+                  </select>
+                </label>
                 <ModelPicker
                   models={models}
                   selectedModelId={selectedModelId}
@@ -888,6 +952,9 @@ export function AppBuilderPage() {
             editAttachments,
           )}
           modelLabel={selectedModel?.label ?? t('home.configuredModel')}
+          fullstackPreviewUrl={fullstackPreviewUrl}
+          fullstackPreviewPending={fullstackPreviewPending}
+          fullstackPreviewError={fullstackPreviewError}
           onManageModel={() => setModelManagerOpen(true)}
           timeline={timeline}
           onToggleTimelineTurn={(runId) =>
@@ -1060,6 +1127,9 @@ function WorkspaceScreen({
   onEditAttachmentsChange,
   onSubmitEdit,
   modelLabel,
+  fullstackPreviewUrl,
+  fullstackPreviewPending,
+  fullstackPreviewError,
   onManageModel,
   timeline,
   onToggleTimelineTurn,
@@ -1097,6 +1167,9 @@ function WorkspaceScreen({
   onEditAttachmentsChange: (attachments: PendingAttachment[]) => void
   onSubmitEdit: () => void
   modelLabel: string
+  fullstackPreviewUrl?: string
+  fullstackPreviewPending: boolean
+  fullstackPreviewError?: string
   onManageModel: () => void
   timeline: ChatTimelineState
   onToggleTimelineTurn: (runId: string) => void
@@ -1265,6 +1338,9 @@ function WorkspaceScreen({
                 <PreviewPanel
                   snapshot={state.snapshot}
                   generationStatus={state.generation.status}
+                  fullstackPreviewUrl={fullstackPreviewUrl}
+                  fullstackPreviewPending={fullstackPreviewPending}
+                  fullstackPreviewError={fullstackPreviewError}
                 />
               ) : null}
               {state.activePanel === 'code' ? (
@@ -1361,11 +1437,46 @@ function WorkspaceSidebar({
 function PreviewPanel({
   snapshot,
   generationStatus,
+  fullstackPreviewUrl,
+  fullstackPreviewPending,
+  fullstackPreviewError,
 }: {
   snapshot: WorkspaceState['snapshot']
   generationStatus: WorkspaceState['generation']['status']
+  fullstackPreviewUrl?: string
+  fullstackPreviewPending: boolean
+  fullstackPreviewError?: string
 }) {
   const { t } = useI18n()
+
+  if (fullstackPreviewPending) {
+    return (
+      <div className="flex min-h-[620px] items-center justify-center rounded-lg border border-neutral-200 bg-white text-sm text-neutral-500">
+        Starting local full-stack preview…
+      </div>
+    )
+  }
+
+  if (fullstackPreviewError) {
+    return (
+      <div className="mx-auto max-w-5xl rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950">
+        <p className="font-medium">Local full-stack preview is unavailable</p>
+        <p className="mt-2">{fullstackPreviewError}</p>
+      </div>
+    )
+  }
+
+  if (fullstackPreviewUrl) {
+    return (
+      <div className="mx-auto h-[min(760px,calc(100vh-180px))] min-h-[620px] max-w-5xl overflow-hidden rounded-lg border border-neutral-200 bg-white">
+        <iframe
+          title="Local full-stack application preview"
+          src={fullstackPreviewUrl}
+          className="h-full w-full border-0"
+        />
+      </div>
+    )
+  }
 
   if (snapshot?.preview?.kind === 'verified-build') {
     return (

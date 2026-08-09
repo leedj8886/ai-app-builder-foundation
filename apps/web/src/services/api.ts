@@ -183,10 +183,16 @@ export interface ProjectSettings {
   agentModelId?: string;
 }
 
+export interface ProjectProfileRef {
+  id: 'static-react' | 'fullstack-nestjs-prisma-postgres' | string;
+  version: number;
+}
+
 export interface ProjectResponse {
   _id: string;
   name: string;
   description?: string;
+  profile: ProjectProfileRef;
   settings: ProjectSettings;
 }
 
@@ -335,6 +341,7 @@ export const projectApi = {
   create: (data: {
     name: string;
     description?: string;
+    profile?: ProjectProfileRef;
     settings?: {
       framework?: 'react' | 'vue' | 'svelte';
       styling?: 'tailwind' | 'css-modules' | 'styled-components';
@@ -362,4 +369,8 @@ export const projectApi = {
       `/api/projects/${id}/snapshots/${snapshotId}/rollback`,
     ),
   delete: (id: string) => api.delete(`/api/projects/${id}`),
+  startFullstackPreview: (id: string) =>
+    api.post<{ preview: { url: string } }>(`/api/projects/${id}/fullstack-preview`),
+  stopFullstackPreview: (id: string) =>
+    api.delete(`/api/projects/${id}/fullstack-preview`),
 };

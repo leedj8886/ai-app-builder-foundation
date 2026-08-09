@@ -37,6 +37,7 @@ import {
   assertProjectProfileMatch,
   normalizeProjectProfileRef
 } from '../agent/profiles/registry';
+import { localPersistentDatabase, localFullstackPreview } from '../local/fullstackPreviewRuntime';
 
 const router = Router();
 
@@ -344,6 +345,68 @@ router.post('/', async (req: AuthRequest, res, next) => {
     await ensureMainBranch(project);
 
     res.status(201).json({ project });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/fullstack-preview', async (req: AuthRequest, res, next) => {
+  try {
+    if (
+      process.env.NODE_ENV === 'production' ||
+      process.env.LOCAL_FULLSTACK_PREVIEW_ENABLED !== 'true'
+    ) {
+      res.status(409).json({ error: 'Local full-stack preview is disabled' });
+      return;
+    }
+    const project = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    if (project.profile.id !== 'fullstack-nestjs-prisma-postgres') {
+      res.status(409).json({ error: 'Project does not use the full-stack Profile' });
+      return;
+    }
+    const snapshot = await ProjectSnapshot.findOne({
+      _id: project.activeSnapshotId,
+      projectId: project._id,
+      workspaceId: project.workspaceId,
+      'validation.status': 'passed'
+    });
+    if (!snapshot) {
+      res.status(409).json({ error: 'Project has no passing full-stack Snapshot' });
+      return;
+    }
+    const bundle = await readSnapshotBundle(snapshot);
+    const database = await localPersistentDatabase.ensure(project._id.toString());
+    const preview = await localFullstackPreview.start({
+      projectId: project._id.toString(),
+      snapshotId: snapshot._id.toString(),
+      files: bundle.files,
+      database
+    });
+    res.json({ preview });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:id/fullstack-preview', async (req: AuthRequest, res, next) => {
+  try {
+    const project = await findOwnedWorkspaceProject({
+      projectId: req.params.id,
+      userId: req.userId!
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    await localFullstackPreview.stop(project._id.toString());
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

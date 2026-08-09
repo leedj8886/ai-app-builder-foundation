@@ -377,7 +377,24 @@ export default defineConfig({
   root: 'apps/web',
   plugins: [react()],
   build: { outDir: '../../dist/apps/web', emptyOutDir: true },
-  server: { proxy: { '/api': 'http://localhost:3000' } }
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.FULLSTACK_API_URL || 'http://localhost:3000',
+        changeOrigin: true,
+        configure: proxy => {
+          proxy.on('proxyReq', proxyReq => {
+            if (!proxyReq.getHeader('x-platform-user-id')) {
+              proxyReq.setHeader(
+                'x-platform-user-id',
+                process.env.FULLSTACK_PREVIEW_USER_ID || 'preview-user'
+              );
+            }
+          });
+        }
+      }
+    }
+  }
 });
 `),
   file('apps/web/src/main.tsx', 'tsx', `import React from 'react';

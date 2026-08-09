@@ -73,7 +73,7 @@ export const showsUserMessage = (turn: ChatTimelineTurn): boolean =>
   turn.retryOfRunId === undefined
 
 export interface ValidationEventPayload {
-  phase: 'structure' | 'dependencies' | 'type-check' | 'build'
+  phase: 'structure' | 'dependencies' | 'prisma' | 'migration' | 'type-check' | 'api-test' | 'build' | 'runtime-smoke' | string
   status: 'passed' | 'failed' | 'retrying' | 'skipped'
   category?: 'CODE_ERROR' | 'DEPENDENCY_ERROR' | 'INFRA_ERROR' | 'STYLING_CONFIGURATION_ERROR'
   attempt: number
@@ -129,13 +129,21 @@ export const validationEventLabel = (
   const phaseLabel = (language === 'zh-CN' ? {
     structure: '项目结构检查',
     dependencies: '依赖准备',
+    prisma: 'Prisma 检查',
+    migration: '迁移检查',
     'type-check': 'TypeScript 检查',
+    'api-test': 'API 测试',
     build: '生产构建',
+    'runtime-smoke': '运行冒烟',
   } : {
     structure: 'Project structure check',
     dependencies: 'Dependency preparation',
+    prisma: 'Prisma checks',
+    migration: 'Migration checks',
     'type-check': 'TypeScript check',
+    'api-test': 'API tests',
     build: 'Production build',
+    'runtime-smoke': 'Runtime smoke test',
   })[payload.phase]
   const statusLabel = (language === 'zh-CN' ? {
     passed: '通过',
@@ -148,9 +156,11 @@ export const validationEventLabel = (
     retrying: 'retrying',
     skipped: 'skipped',
   })[payload.status]
+  const resolvedPhaseLabel = phaseLabel ?? payload.phase
+  const resolvedStatusLabel = statusLabel ?? payload.status
   return language === 'zh-CN'
-    ? `${phaseLabel}${statusLabel}`
-    : `${phaseLabel} ${statusLabel}`
+    ? `${resolvedPhaseLabel}${resolvedStatusLabel}`
+    : `${resolvedPhaseLabel} ${resolvedStatusLabel}`
 }
 
 export const canRetryValidation = (turn: ChatTimelineTurn): boolean =>

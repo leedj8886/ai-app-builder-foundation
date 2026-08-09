@@ -172,6 +172,18 @@ test('formats timeline summaries in English when requested', () => {
   }, 'en-US'), 'Dependency cache hit')
 })
 
+test('labels every validation phase without leaking undefined', () => {
+  for (const phase of ['prisma', 'migration', 'api-test', 'runtime-smoke']) {
+    const label = validationEventLabel({
+      phase,
+      status: 'passed',
+      attempt: 0,
+    })
+    assert.equal(label.includes('undefined'), false)
+    assert.match(label, /通过$/)
+  }
+})
+
 test('only terminal turns can be manually toggled', () => {
   assert.equal(canToggleTurn(turn('active', 'generating')), false)
   assert.equal(canToggleTurn(turn('completed', 'completed')), true)
